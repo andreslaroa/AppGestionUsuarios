@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.Management.Automation;
+using Microsoft.AspNetCore.Mvc;
+using System.DirectoryServices.AccountManagement;
 
-namespace AppGestionUsuarios.Controllers
+namespace LoginApp.Controllers
 {
     public class AccountController : Controller
     {
@@ -14,39 +14,51 @@ namespace AppGestionUsuarios.Controllers
         [HttpPost]
         public IActionResult Login(string username, string password)
         {
-            if (CheckUserExistsInAD(username))
-            {
-                ViewBag.Message = "El usuario existe en el Directorio Activo.";
-            }
-            else
-            {
-                ViewBag.Message = "El usuario no existe en el Directorio Activo.";
-            }
-
-            return View();
-        }
-
-        private bool CheckUserExistsInAD(string username)
-        {
             try
             {
-                using (PowerShell ps = PowerShell.Create())
+                // Valida las credenciales del usuario en el Directorio Activo
+                bool isAuthenticated = ValidateUserCredentials("aytosa.inet", username, password); // Reemplaza "miDominio" con tu dominio real
+
+                if (isAuthenticated)
                 {
-                    ps.AddCommand("Get-ADUser")
-                      .AddParameter("Identity", username);
-
-                    var results = ps.Invoke();
-
-                    // Si se encuentra un resultado, el usuario existe
-                    return results.Count > 0;
+                    ViewBag.Message = "Credenciales correctas.";
+                    return View();
+                }
+                else
+                {
+                    ViewBag.Message = "Credenciales incorrectas. Intente nuevamente.";
+                    return View();
                 }
             }
             catch
             {
-                // Si hay algún error (p.ej., falta de permisos o el comando falla), manejamos esto devolviendo falso
+                ViewBag.Message = "Ha ocurrido un error al intentar validar las credenciales.";
+                return View();
+            }
+        }
+
+        // Método para validar las credenciales contra el Directorio Activo
+        private bool ValidateUserCredentials(string domain, string username, string password)
+        {
+            try
+            {
+                using (var context = new PrincipalContext(ContextType.Domain, domain))
+                {
+                    // Validar las credenciales
+                    return context.ValidateCredentials(username, password);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Manejo de errores (registro opcional)
+                Console.WriteLine($"Error al validar las credenciales: {ex.Message}");
                 return false;
             }
         }
+
+        public IActionResult LoginSuccess()
+        {
+            return View();
+        }
     }
 }
-
