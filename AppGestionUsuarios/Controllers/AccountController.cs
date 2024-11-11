@@ -65,4 +65,4 @@ namespace LoginApp.Controllers
         }
 
     }
-}
+}  puedes hacerme este código pero quitando el controlador de dominio, y utilizando unicamente el nombre de dominio?
