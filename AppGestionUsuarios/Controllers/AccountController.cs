@@ -65,10 +65,5 @@ namespace LoginApp.Controllers
             }
         }
 
-        public IActionResult LoginSuccess()
-        {
-            return View();
-        }
-
     }
 }
