@@ -1,5 +1,6 @@
 
 using Microsoft.AspNetCore.Mvc;
+using System;
 using System.DirectoryServices.AccountManagement;
 
 namespace LoginApp.Controllers
@@ -12,40 +13,47 @@ namespace LoginApp.Controllers
             return View();
         }
 
+        //Las redirecciones de estos métodos de IActionResult se consiguen gracias al nombre del método que coincide con la vista de la carpeta Account
+        public IActionResult LoginSuccess()
+        {
+            return View();
+        }
+
+
         [HttpPost]
         public IActionResult Login(string username, string password)
         {
-            try
-            {
-                // Valida las credenciales del usuario en el Directorio Activo
-                bool isAuthenticated = ValidateUserCredentials("aytosa.inet", username, password); // Reemplaza "miDominio" con tu dominio real
+            // Nombre del dominio de tu organización
+            string domainName = "aytosa.inet"; // Cambia esto por tu dominio real
+            string domainController = "leonardo"; // Cambia esto por el nombre de tu controlador de dominio si es necesario
 
-                if (isAuthenticated)
-                {
-                    ViewBag.Message = "Credenciales correctas.";
-                    return View();
-                }
-                else
-                {
-                    ViewBag.Message = "Credenciales incorrectas. Intente nuevamente.";
-                    return View();
-                }
-            }
-            catch
+            // Validar las credenciales ingresadas por el usuario contra el dominio especificado
+            bool isAuthenticated = ValidateUserCredentials(domainController, domainController, username, password);
+
+            if (isAuthenticated)
             {
-                ViewBag.Message = "Ha ocurrido un error al intentar validar las credenciales.";
+                ViewBag.Message = "Credenciales correctas.";
+                return RedirectToAction("LoginSuccess");
+            }
+            else
+            {
+                ViewBag.Message = "Credenciales incorrectas. Intente nuevamente.";
                 return View();
             }
         }
 
-        // Método para validar las credenciales contra el Directorio Activo
-        private bool ValidateUserCredentials(string domain, string username, string password)
+        // Método para validar las credenciales del usuario contra el dominio especificado usando credenciales explícitas
+        private bool ValidateUserCredentials(string domainController, string domain, string username, string password)
         {
             try
             {
-                using (var context = new PrincipalContext(ContextType.Domain, domain))
+                // Credenciales explícitas para el contexto (si es necesario)
+                string serviceAccountUser = "dominio\\usuarioServicio"; // Cambia esto por tu usuario de servicio
+                string serviceAccountPassword = "contraseña"; // Cambia esto por la contraseña del usuario de servicio
+
+                using (var context = new PrincipalContext(ContextType.Domain, domainController, domain, ContextOptions.Negotiate, serviceAccountUser, serviceAccountPassword))
                 {
-                    // Validar las credenciales
+                    // Validar las credenciales del usuario
                     return context.ValidateCredentials(username, password);
                 }
             }
@@ -59,7 +67,6 @@ namespace LoginApp.Controllers
 
         public IActionResult LoginSuccess()
         {
-            return View();
         }
     }
 }

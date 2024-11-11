@@ -11,12 +11,18 @@
     </div>
     <div>
         <label for="password">Contraseña</label>
-        <input type="password" id="password" name="password" />
+        <input type="password" id="password" name="password" required />
     </div>
     <button type="submit">Iniciar Sesión</button>
 </form>
 
 @if (!string.IsNullOrEmpty(ViewBag.Message))
 {
-    <div style="color:blue;">@ViewBag.Message</div>
+    <div style="color:red;">@ViewBag.Message</div>
+}
+
+@if (!string.IsNullOrEmpty(ViewBag.DomainCheckResult))
+{
+    <div style="color:green;">@ViewBag.DomainCheckResult</div>
+
 }
