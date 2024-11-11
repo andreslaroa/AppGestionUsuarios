@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+
+using Microsoft.AspNetCore.Mvc;
 using System.DirectoryServices.AccountManagement;
 
 namespace LoginApp.Controllers
