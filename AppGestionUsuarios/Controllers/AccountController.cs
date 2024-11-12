@@ -12,22 +12,20 @@ namespace LoginApp.Controllers
             return View();
         }
 
-        //Las redirecciones de estos métodos de IActionResult se consiguen gracias al nombre del método que coincide con la vista de la carpeta Account
+        // Redirección a una página de éxito si las credenciales son correctas
         public IActionResult LoginSuccess()
         {
             return View();
         }
 
-
         [HttpPost]
         public IActionResult Login(string username, string password)
         {
-            // Nombre del dominio de tu organización
-            string domainName = "aytosa.inet"; // Cambia esto por tu dominio real
-            string domainController = "leonardo"; // Cambia esto por el nombre de tu controlador de dominio si es necesario
+            
+            string domainName = "aytosa.inet"; 
 
             // Validar las credenciales ingresadas por el usuario contra el dominio especificado
-            bool isAuthenticated = ValidateUserCredentials(domainController, domainController, username, password);
+            bool isAuthenticated = ValidateUserCredentials(domainName, username, password);
 
             if (isAuthenticated)
             {
@@ -41,16 +39,13 @@ namespace LoginApp.Controllers
             }
         }
 
-        // Método para validar las credenciales del usuario contra el dominio especificado usando credenciales explícitas
-        private bool ValidateUserCredentials(string domainController, string domain, string username, string password)
+        // Método para validar las credenciales del usuario contra el dominio especificado
+        private bool ValidateUserCredentials(string domain, string username, string password)
         {
             try
             {
-                // Credenciales explícitas para el contexto (si es necesario)
-                string serviceAccountUser = "dominio\\usuarioServicio"; // Cambia esto por tu usuario de servicio
-                string serviceAccountPassword = "contraseña"; // Cambia esto por la contraseña del usuario de servicio
-
-                using (var context = new PrincipalContext(ContextType.Domain, domainController, domain, ContextOptions.Negotiate, serviceAccountUser, serviceAccountPassword))
+                // Crear un contexto del dominio usando solo el nombre del dominio proporcionado
+                using (var context = new PrincipalContext(ContextType.Domain, domain))
                 {
                     // Validar las credenciales del usuario
                     return context.ValidateCredentials(username, password);
@@ -63,6 +58,5 @@ namespace LoginApp.Controllers
                 return false;
             }
         }
-
     }
-}  
+}
