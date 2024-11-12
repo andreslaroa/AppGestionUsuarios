@@ -12,6 +12,8 @@ namespace LoginApp.Controllers
             return View();
         }
 
+        string hola = "hola mundo";
+
         // Redirección a una página de éxito si las credenciales son correctas
         public IActionResult LoginSuccess()
         {
