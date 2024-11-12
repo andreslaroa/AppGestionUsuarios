@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
-namespace AppGestionUsuarios.Views.Account
+namespace AppGestionUsuarios.Views.UserManagement
 {
     public class LoginSuccessModel : PageModel
     {
