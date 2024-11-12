@@ -2,17 +2,31 @@
     ViewData["Title"] = "Gestión de Usuarios";
 }
 
-<h2>Gestión de Usuarios</h2>
+<h2>Página de Gestión de Usuarios</h2>
 
+<p>Esta es una página de prueba para verificar que la vista se carga correctamente.</p>
 
-<form method="post" action="/UserManagement/CreateUser">
+<form id="ouForm">
     <div>
         <label for="ouPrincipal">OU Principal:</label>
-        <input type="text" id="ouPrincipal" name="ouPrincipal" required />
+        <select id="ouPrincipal" name="ouPrincipal">
+            <option value="">Seleccione una OU Principal</option>
+            <!-- Opciones de prueba -->
+            <option value="OU1">OU 1</option>
+            <option value="OU2">OU 2</option>
+            <option value="OU3">OU 3</option>
+        </select>
     </div>
+
     <div>
         <label for="ouSecundaria">OU Secundaria:</label>
-        <input type="text" id="ouSecundaria" name="ouSecundaria" required />
+        <select id="ouSecundaria" name="ouSecundaria">
+            <option value="">Seleccione una OU Secundaria</option>
+            <!-- Opciones de prueba -->
+            <option value="OU-Secundaria1">OU Secundaria 1</option>
+            <option value="OU-Secundaria2">OU Secundaria 2</option>
+        </select>
     </div>
+
     <button type="submit">Enviar</button>
 </form>

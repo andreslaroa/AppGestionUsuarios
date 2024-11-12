@@ -2,18 +2,13 @@
 
 namespace AppGestionUsuarios.Controllers
 {
-
     public class UserManagementController : Controller
     {
-
         [HttpGet]
         public IActionResult LoginSuccess()
         {
-            // Lógica para inicializar datos o manejar el formulario en la vista
+            // No cargar datos ni utilizar OUService; simplemente devolver la vista
             return View();
         }
-
-
-
     }
 }
