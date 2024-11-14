@@ -20,7 +20,6 @@ public class OUService
 
         using (var package = new ExcelPackage(new FileInfo(_filePath)))
         {
-            // Leer la primera hoja
             var worksheet = package.Workbook.Worksheets[0]; // Primera hoja
             int rowCount = worksheet.Dimension.Rows;
 
@@ -46,7 +45,6 @@ public class OUService
 
         using (var package = new ExcelPackage(new FileInfo(_filePath)))
         {
-            // Leer la segunda hoja
             var worksheet = package.Workbook.Worksheets[1]; // Segunda hoja
             int rowCount = worksheet.Dimension.Rows;
 
