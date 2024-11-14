@@ -1,17 +1,9 @@
-﻿@{
-    ViewData["Title"] = "Gestión de Usuarios";
-    var ouPrincipales = ViewBag.OUPrincipales as List<string>;
-    var ouSecundarias = ViewBag.OUSecundarias as Dictionary<string, List<string>>;
-}
-
-<h2>Gestión de Usuarios</h2>
-
-<form id="ouForm">
+﻿<form id="ouForm">
     <div>
         <label for="ouPrincipal">OU Principal:</label>
-        <select id="ouPrincipal" name="ouPrincipal" onchange="updateOUs()">
+        <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias()">
             <option value="">Seleccione una OU Principal</option>
-            @foreach (var ou in ouPrincipales)
+            @foreach (var ou in ViewBag.OUPrincipales as List<string>)
             {
                 <option value="@ou">@ou</option>
             }
@@ -24,28 +16,39 @@
             <option value="">Seleccione una OU Secundaria</option>
         </select>
     </div>
-
-    <button type="submit">Enviar</button>
 </form>
 
 <script>
-    // JavaScript para manejar la lógica de las listas dependientes
-    const ouSecundariasData = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(ouSecundarias));
-
-    function updateOUs() {
+    function fetchOUSecundarias() {
         const ouPrincipal = document.getElementById('ouPrincipal').value;
         const ouSecundaria = document.getElementById('ouSecundaria');
-
-        // Limpiar el segundo dropdown
         ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria</option>';
 
-        if (ouPrincipal && ouSecundariasData[ouPrincipal]) {
-            ouSecundariasData[ouPrincipal].forEach(ou => {
-                const option = document.createElement('option');
-                option.value = ou;
-                option.textContent = ou;
-                ouSecundaria.appendChild(option);
-            });
+        if (ouPrincipal) {
+            console.log('OU Principal seleccionada:', ouPrincipal); 
+            fetch('/UserManagement/GetOUSecundarias', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ ouPrincipal })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Error en la respuesta de la red');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    data.forEach(ou => {
+                        const option = document.createElement('option');
+                        option.value = ou;
+                        option.textContent = ou;
+                        ouSecundaria.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error al obtener las OUs secundarias:', error));
         }
     }
+
 </script>
