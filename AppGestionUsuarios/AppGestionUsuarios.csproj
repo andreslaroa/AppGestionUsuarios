@@ -8,9 +8,16 @@
 
   <ItemGroup>
     <PackageReference Include="CredentialManagement" Version="1.0.2" />
-    <PackageReference Include="System.DirectoryServices" Version="8.0.0" />
-    <PackageReference Include="System.DirectoryServices.AccountManagement" Version="8.0.1" />
+    <PackageReference Include="EPPlus" Version="7.4.2" />
+    <PackageReference Include="System.DirectoryServices" Version="9.0.0" />
+    <PackageReference Include="System.DirectoryServices.AccountManagement" Version="9.0.0" />
     <PackageReference Include="System.Management.Automation" Version="7.4.6" />
   </ItemGroup>
+
+    <ItemGroup>
+	    <Content Include="Resources\ArchivoDePruebasOU.xlsx">
+		    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    </Content>
+    </ItemGroup>
 
 </Project>

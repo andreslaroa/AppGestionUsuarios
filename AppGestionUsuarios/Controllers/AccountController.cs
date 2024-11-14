@@ -12,6 +12,7 @@ namespace LoginApp.Controllers
             return View();
         }
 
+
         // Redirección a una página de éxito si las credenciales son correctas
         public IActionResult LoginSuccess()
         {
@@ -30,7 +31,7 @@ namespace LoginApp.Controllers
             if (isAuthenticated)
             {
                 ViewBag.Message = "Credenciales correctas.";
-                return RedirectToAction("LoginSuccess");
+                return RedirectToAction("LoginSuccess", "UserManagement");
             }
             else
             {
