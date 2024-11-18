@@ -191,7 +191,7 @@ public class OUService
 
         using (var package = new ExcelPackage(new FileInfo(_filePath)))
         {
-            var worksheet = package.Workbook.Worksheets["PORTAL_EMPLEADO"]; // Primera hoja
+            var worksheet = package.Workbook.Worksheets["PORTAL_EMPLEADO"]; 
             int rowCount = worksheet.Dimension.Rows;
 
             for (int row = 2; row <= rowCount; row++) // Asume que la primera fila es el encabezado
@@ -205,6 +205,31 @@ public class OUService
         }
 
         return portalEmpleado;
+    }
+
+    public List<string> GetCuota()
+    {
+        var cuota = new List<string>();
+
+        // Configurar la licencia de EPPlus
+        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+        using (var package = new ExcelPackage(new FileInfo(_filePath)))
+        {
+            var worksheet = package.Workbook.Worksheets["CUOTA"]; 
+            int rowCount = worksheet.Dimension.Rows;
+
+            for (int row = 2; row <= rowCount; row++) // Asume que la primera fila es el encabezado
+            {
+                string cuotaVar = worksheet.Cells[row, 1].Text; // Columna 1
+                if (!string.IsNullOrEmpty(cuotaVar) && !cuota.Contains(cuotaVar))
+                {
+                    cuota.Add(cuotaVar);
+                }
+            }
+        }
+
+        return cuota;
     }
 
 }

@@ -35,12 +35,24 @@
         <label for="portalEmpleado">Portal Empleado:</label>
         <select id="portalEmpleado" name="portalEmpleado">
             <option value="">Seleccione si desea crear un portal del empleado</option>
-            @foreach (var ou in ViewBag.portalEmpleado as List<string>)
+            @foreach (var portal in ViewBag.portalEmpleado as List<string>)
             {
-                <option value="@ou">@ou</option>
+                <option value="@portal">@portal</option>
             }
         </select>
     </div>
+
+    <div>
+        <label for="cuota">Cuota del usuario:</label>
+        <select id="cuota" name="cuota">
+            <option value="">Seleccione la cuota para el usuario</option>
+            @foreach (var cuota in ViewBag.cuota as List<string>)
+            {
+                <option value="@cuota">@cuota</option>
+            }
+        </select>
+    </div>
+
 </form>
 
 <script>
