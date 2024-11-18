@@ -1,143 +1,166 @@
-﻿<form id="ouForm">
-    <div>
-        <label for="ouPrincipal">OU Principal:</label>
-        <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamentos();">
-            <option value="">Seleccione una OU Principal</option>
-            @foreach (var ou in ViewBag.OUPrincipales as List<string>)
-            {
-                <option value="@ou">@ou</option>
-            }
-        </select>
-    </div>
+﻿<!DOCTYPE html>
+<html lang="es">
+<body>
+    <form id="ouForm">
+        <div>
+            <label for="ouPrincipal">OU Principal:</label>
+            <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamentos();">
+                <option value="">Seleccione una OU Principal</option>
+                @foreach (var ou in ViewBag.OUPrincipales as List<string>)
+                {
+                    <option value="@ou">@ou</option>
+                }
+            </select>
+        </div>
 
-    <div>
-        <label for="ouSecundaria">OU Secundaria:</label>
-        <select id="ouSecundaria" name="ouSecundaria">
-            <option value="">Seleccione una OU Secundaria</option>
-        </select>
-    </div>
+        <div>
+            <label for="nFuncionario">Nº Funcionario:</label>
+            <input type="text" id="nFuncionario" name="nFuncionario" />
+        </div>
 
-    <div>
-        <label for="departamento">Departamento:</label>
-        <select id="departamento" name="departamento" onchange="fetchLugarEnvio()">
-            <option value="">Seleccione un departamento</option>
-        </select>
-    </div>
+        <div>
+            <label for="nombre">Nombre:</label>
+            <input type="text" id="nombre" name="nombre" />
+        </div>
 
-    <div>
-        <label for="lugarEnvio">Lugar de Envío:</label>
-        <select id="lugarEnvio" name="lugarEnvio">
-            <option value="">Seleccione un lugar de envío</option>
-        </select>
-    </div>
+        <div>
+            <label for="apellido1">Apellido 1:</label>
+            <input type="text" id="apellido1" name="apellido1" />
+        </div>
 
-    <div>
-        <label for="portalEmpleado">Portal Empleado:</label>
-        <select id="portalEmpleado" name="portalEmpleado">
-            <option value="">Seleccione si desea crear un portal del empleado</option>
-            @foreach (var portal in ViewBag.portalEmpleado as List<string>)
-            {
-                <option value="@portal">@portal</option>
-            }
-        </select>
-    </div>
+        <div>
+            <label for="apellido2">Apellido 2:</label>
+            <input type="text" id="apellido2" name="apellido2" />
+        </div>
 
-    <div>
-        <label for="cuota">Cuota del usuario:</label>
-        <select id="cuota" name="cuota">
-            <option value="">Seleccione la cuota para el usuario</option>
-            @foreach (var cuota in ViewBag.cuota as List<string>)
-            {
-                <option value="@cuota">@cuota</option>
-            }
-        </select>
-    </div>
+        <div>
+            <label for="ouSecundaria">OU Secundaria:</label>
+            <select id="ouSecundaria" name="ouSecundaria">
+                <option value="">Seleccione una OU Secundaria</option>
+            </select>
+        </div>
 
-</form>
+        <div>
+            <label for="departamento">Departamento:</label>
+            <select id="departamento" name="departamento" onchange="fetchLugarEnvio()">
+                <option value="">Seleccione un departamento</option>
+            </select>
+        </div>
 
-<script>
-    function fetchOUSecundarias() {
-        const ouPrincipal = document.getElementById('ouPrincipal').value;
-        const ouSecundaria = document.getElementById('ouSecundaria');
-        ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria</option>';
+        <div>
+            <label for="lugarEnvio">Lugar de Envío:</label>
+            <select id="lugarEnvio" name="lugarEnvio">
+                <option value="">Seleccione un lugar de envío</option>
+            </select>
+        </div>
 
-        if (ouPrincipal) {
-            fetch('/UserManagement/GetOUSecundarias', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ ouPrincipal })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    data.forEach(ou => {
-                        const option = document.createElement('option');
-                        option.value = ou;
-                        option.textContent = ou;
-                        ouSecundaria.appendChild(option);
-                    });
+        <div>
+            <label for="portalEmpleado">Portal Empleado:</label>
+            <select id="portalEmpleado" name="portalEmpleado">
+                <option value="">Seleccione si desea crear un portal del empleado</option>
+                @foreach (var portal in ViewBag.portalEmpleado as List<string>)
+                {
+                    <option value="@portal">@portal</option>
+                }
+            </select>
+        </div>
+
+        <div>
+            <label for="cuota">Cuota del usuario:</label>
+            <select id="cuota" name="cuota">
+                <option value="">Seleccione la cuota para el usuario</option>
+                @foreach (var cuota in ViewBag.cuota as List<string>)
+                {
+                    <option value="@cuota">@cuota</option>
+                }
+            </select>
+        </div>
+    </form>
+
+    <script>
+        function fetchOUSecundarias() {
+            const ouPrincipal = document.getElementById('ouPrincipal').value;
+            const ouSecundaria = document.getElementById('ouSecundaria');
+            ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria</option>';
+
+            if (ouPrincipal) {
+                fetch('/UserManagement/GetOUSecundarias', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ouPrincipal })
                 })
-                .catch(error => console.error('Error al obtener las OUs secundarias:', error));
-        }
-    }
-
-    function fetchDepartamentos() {
-        const ouPrincipal = document.getElementById('ouPrincipal').value;
-        const departamento = document.getElementById('departamento');
-        departamento.innerHTML = '<option value="">Seleccione un departamento</option>';
-
-        if (ouPrincipal) {
-            fetch('/UserManagement/GetDepartamentos', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ ouPrincipal })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    data.forEach(dep => {
-                        const option = document.createElement('option');
-                        option.value = dep;
-                        option.textContent = dep;
-                        departamento.appendChild(option);
-                    });
-                })
-                .catch(error => console.error('Error al obtener los departamentos:', error));
-        }
-    }
-
-    function fetchLugarEnvio() {
-        const departamento = document.getElementById('departamento').value;
-        const lugarEnvio = document.getElementById('lugarEnvio');
-        lugarEnvio.innerHTML = '<option value="">Seleccione un lugar de envío</option>';
-
-        if (departamento) {
-            fetch('/UserManagement/GetLugarEnvio', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ departamento })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.length === 1) {
-                        // Si hay un solo valor, agregarlo como opción seleccionada automáticamente
-                        lugarEnvio.innerHTML = '<option value="' + data[0] + '">' + data[0] + '</option>';
-                    } else {
-                        // Si hay múltiples valores, agregarlos como opciones desplegables
-                        data.forEach(lugar => {
+                    .then(response => response.json())
+                    .then(data => {
+                        data.forEach(ou => {
                             const option = document.createElement('option');
-                            option.value = lugar;
-                            option.textContent = lugar;
-                            lugarEnvio.appendChild(option);
+                            option.value = ou;
+                            option.textContent = ou;
+                            ouSecundaria.appendChild(option);
                         });
-                    }
-                })
-                .catch(error => console.error('Error al obtener el lugar de envío:', error));
+                    })
+                    .catch(error => console.error('Error al obtener las OUs secundarias:', error));
+            }
         }
-    }
 
-</script>
+        function fetchDepartamentos() {
+            const ouPrincipal = document.getElementById('ouPrincipal').value;
+            const departamento = document.getElementById('departamento');
+            departamento.innerHTML = '<option value="">Seleccione un departamento</option>';
+
+            if (ouPrincipal) {
+                fetch('/UserManagement/GetDepartamentos', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ouPrincipal })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        data.forEach(dep => {
+                            const option = document.createElement('option');
+                            option.value = dep;
+                            option.textContent = dep;
+                            departamento.appendChild(option);
+                        });
+                    })
+                    .catch(error => console.error('Error al obtener los departamentos:', error));
+            }
+        }
+
+        function fetchLugarEnvio() {
+            const departamento = document.getElementById('departamento').value;
+            const lugarEnvio = document.getElementById('lugarEnvio');
+            lugarEnvio.innerHTML = '<option value="">Seleccione un lugar de envío</option>';
+
+            if (departamento) {
+                fetch('/UserManagement/GetLugarEnvio', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ departamento })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length === 1) {
+                            // Si hay un solo valor, agregarlo como opción seleccionada automáticamente
+                            lugarEnvio.innerHTML = '<option value="' + data[0] + '">' + data[0] + '</option>';
+                        } else {
+                            // Si hay múltiples valores, agregarlos como opciones desplegables
+                            data.forEach(lugar => {
+                                const option = document.createElement('option');
+                                option.value = lugar;
+                                option.textContent = lugar;
+                                lugarEnvio.appendChild(option);
+                            });
+                        }
+                    })
+                    .catch(error => console.error('Error al obtener el lugar de envío:', error));
+            }
+        }
+    </script>
+</body>
+</html>
