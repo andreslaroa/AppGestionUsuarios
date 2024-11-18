@@ -17,6 +17,10 @@ public class UserManagementController : Controller
     {
         var ouPrincipales = _ouService.GetOUPrincipales();
         ViewBag.OUPrincipales = ouPrincipales;
+        var portalEmpleado = _ouService.GetPortalEmpleado();
+        ViewBag.portalEmpleado = portalEmpleado;
+        var cuota = _ouService.GetCuota();
+        ViewBag.cuota = cuota;
         return View();
     }
 
@@ -33,7 +37,6 @@ public class UserManagementController : Controller
         return Json(new List<string>());
     }
 
-    // Nuevo método para manejar la solicitud de departamentos
     [HttpPost]
     public IActionResult GetDepartamentos([FromBody] Dictionary<string, string> requestData)
     {
@@ -42,6 +45,20 @@ public class UserManagementController : Controller
             string ouPrincipal = requestData["ouPrincipal"];
             var departamentos = _ouService.GetDepartamentos(ouPrincipal);
             return Json(departamentos);
+        }
+
+        return Json(new List<string>());
+    }
+
+    // Nuevo método para obtener el lugar de envío
+    [HttpPost]
+    public IActionResult GetLugarEnvio([FromBody] Dictionary<string, string> requestData)
+    {
+        if (requestData != null && requestData.ContainsKey("departamento"))
+        {
+            string departamento = requestData["departamento"];
+            var lugaresEnvio = _ouService.GetLugarEnvio(departamento);
+            return Json(lugaresEnvio);
         }
 
         return Json(new List<string>());
