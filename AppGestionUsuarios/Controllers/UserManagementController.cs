@@ -17,6 +17,8 @@ public class UserManagementController : Controller
     {
         var ouPrincipales = _ouService.GetOUPrincipales();
         ViewBag.OUPrincipales = ouPrincipales;
+        var portalEmpleado = _ouService.GetPortalEmpleado();
+        ViewBag.portalEmpleado = portalEmpleado;
         return View();
     }
 

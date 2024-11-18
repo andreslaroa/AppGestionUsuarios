@@ -182,6 +182,29 @@ public class OUService
         return lugaresEnvio;
     }
 
+    public List<string> GetPortalEmpleado()
+    {
+        var portalEmpleado = new List<string>();
 
+        // Configurar la licencia de EPPlus
+        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+        using (var package = new ExcelPackage(new FileInfo(_filePath)))
+        {
+            var worksheet = package.Workbook.Worksheets["PORTAL_EMPLEADO"]; // Primera hoja
+            int rowCount = worksheet.Dimension.Rows;
+
+            for (int row = 2; row <= rowCount; row++) // Asume que la primera fila es el encabezado
+            {
+                string portalEmpleadoVar = worksheet.Cells[row, 1].Text; // Columna 1
+                if (!string.IsNullOrEmpty(portalEmpleadoVar) && !portalEmpleado.Contains(portalEmpleadoVar))
+                {
+                    portalEmpleado.Add(portalEmpleadoVar);
+                }
+            }
+        }
+
+        return portalEmpleado;
+    }
 
 }
