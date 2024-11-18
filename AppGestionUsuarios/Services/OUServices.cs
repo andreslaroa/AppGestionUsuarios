@@ -130,4 +130,58 @@ public class OUService
     }
 
 
+    public List<string> GetLugarEnvio(string departamento)
+    {
+        var lugaresEnvio = new List<string>();
+
+        // Configurar la licencia de EPPlus
+        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+        using (var package = new ExcelPackage(new FileInfo(_filePath)))
+        {
+            var worksheet = package.Workbook.Worksheets["LUGAR_ENVIO"]; // Hoja llamada "LUGAR_ENVIO"
+            if (worksheet == null)
+                return lugaresEnvio;
+
+            int rowCount = worksheet.Dimension.Rows;
+            int columnCount = worksheet.Dimension.Columns;
+
+            for (int row = 2; row <= rowCount; row++) // Comienza desde la fila 2 para omitir el encabezado
+            {
+                string valorDepartamento = worksheet.Cells[row, 1].Text; // Columna A
+
+                // Si el departamento coincide, procesar
+                if (valorDepartamento.Equals(departamento, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Si el departamento es "CEAS", agregar valores de columnas B en adelante como lista desplegable
+                    if (departamento.Equals("BS:BS_CEAS", StringComparison.OrdinalIgnoreCase))
+                    {
+                        for (int col = 2; col <= columnCount; col++) // Columnas B, C, D...
+                        {
+                            string lugar = worksheet.Cells[row, col].Text;
+                            if (!string.IsNullOrEmpty(lugar))
+                            {
+                                lugaresEnvio.Add(lugar);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Si no es "CEAS", agregar solo el valor de la columna B
+                        string lugar = worksheet.Cells[row, 2].Text; // Columna B
+                        if (!string.IsNullOrEmpty(lugar))
+                        {
+                            lugaresEnvio.Add(lugar);
+                        }
+                    }
+                    break; // Detener la búsqueda ya que encontramos el valor
+                }
+            }
+        }
+
+        return lugaresEnvio;
+    }
+
+
+
 }

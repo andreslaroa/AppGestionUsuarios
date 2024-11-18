@@ -18,22 +18,27 @@
     </div>
 
     <div>
-        <label for="departamento">DEPARTAMENTO :</label>
-        <select id="departamento" name="departamento">
+        <label for="departamento">Departamento:</label>
+        <select id="departamento" name="departamento" onchange="fetchLugarEnvio()">
             <option value="">Seleccione un departamento</option>
+        </select>
+    </div>
+
+    <div>
+        <label for="lugarEnvio">Lugar de Envío:</label>
+        <select id="lugarEnvio" name="lugarEnvio">
+            <option value="">Seleccione un lugar de envío</option>
         </select>
     </div>
 </form>
 
 <script>
-    // Función para obtener las OUs Secundarias
     function fetchOUSecundarias() {
         const ouPrincipal = document.getElementById('ouPrincipal').value;
         const ouSecundaria = document.getElementById('ouSecundaria');
         ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria</option>';
 
         if (ouPrincipal) {
-            console.log('OU Principal seleccionada:', ouPrincipal);
             fetch('/UserManagement/GetOUSecundarias', {
                 method: 'POST',
                 headers: {
@@ -41,12 +46,7 @@
                 },
                 body: JSON.stringify({ ouPrincipal })
             })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Error en la respuesta de la red');
-                    }
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
                     data.forEach(ou => {
                         const option = document.createElement('option');
@@ -59,14 +59,12 @@
         }
     }
 
-    // Nueva función para obtener los Departamentos
     function fetchDepartamentos() {
         const ouPrincipal = document.getElementById('ouPrincipal').value;
         const departamento = document.getElementById('departamento');
         departamento.innerHTML = '<option value="">Seleccione un departamento</option>';
 
         if (ouPrincipal) {
-            console.log('OU Principal seleccionada para departamentos:', ouPrincipal);
             fetch('/UserManagement/GetDepartamentos', {
                 method: 'POST',
                 headers: {
@@ -74,12 +72,7 @@
                 },
                 body: JSON.stringify({ ouPrincipal })
             })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Error en la respuesta de la red');
-                    }
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
                     data.forEach(dep => {
                         const option = document.createElement('option');
@@ -89,6 +82,38 @@
                     });
                 })
                 .catch(error => console.error('Error al obtener los departamentos:', error));
+        }
+    }
+
+    function fetchLugarEnvio() {
+        const departamento = document.getElementById('departamento').value;
+        const lugarEnvio = document.getElementById('lugarEnvio');
+        lugarEnvio.innerHTML = '<option value="">Seleccione un lugar de envío</option>';
+
+        if (departamento) {
+            fetch('/UserManagement/GetLugarEnvio', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ departamento })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length === 1) {
+                        // Si hay un solo valor, agregarlo como opción seleccionada automáticamente
+                        lugarEnvio.innerHTML = '<option value="' + data[0] + '">' + data[0] + '</option>';
+                    } else {
+                        // Si hay múltiples valores, agregarlos como opciones desplegables
+                        data.forEach(lugar => {
+                            const option = document.createElement('option');
+                            option.value = lugar;
+                            option.textContent = lugar;
+                            lugarEnvio.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => console.error('Error al obtener el lugar de envío:', error));
         }
     }
 </script>
