@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
+using System.IO;
 
 public class UserManagementController : Controller
 {
@@ -29,7 +30,20 @@ public class UserManagementController : Controller
             return Json(ouSecundarias);
         }
 
-        return Json(new List<string>()); 
+        return Json(new List<string>());
     }
 
+    // Nuevo método para manejar la solicitud de departamentos
+    [HttpPost]
+    public IActionResult GetDepartamentos([FromBody] Dictionary<string, string> requestData)
+    {
+        if (requestData != null && requestData.ContainsKey("ouPrincipal"))
+        {
+            string ouPrincipal = requestData["ouPrincipal"];
+            var departamentos = _ouService.GetDepartamentos(ouPrincipal);
+            return Json(departamentos);
+        }
+
+        return Json(new List<string>());
+    }
 }
