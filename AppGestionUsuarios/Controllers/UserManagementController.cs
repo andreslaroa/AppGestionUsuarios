@@ -1,31 +1,49 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
+using System.IO;
 
-namespace AppGestionUsuarios.Controllers
+public class UserManagementController : Controller
 {
-    public class UserManagementController : Controller
+    private readonly OUService _ouService;
+
+    public UserManagementController()
     {
-        private readonly OUService _ouService;
+        string filePath = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "ArchivoDePruebasOU.xlsx");
+        _ouService = new OUService(filePath);
+    }
 
-        public UserManagementController()
+    [HttpGet]
+    public IActionResult LoginSuccess()
+    {
+        var ouPrincipales = _ouService.GetOUPrincipales();
+        ViewBag.OUPrincipales = ouPrincipales;
+        return View();
+    }
+
+    [HttpPost]
+    public IActionResult GetOUSecundarias([FromBody] Dictionary<string, string> requestData)
+    {
+        if (requestData != null && requestData.ContainsKey("ouPrincipal"))
         {
-            // Ruta al archivo Excel
-            string filePath = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "ArchivoDePruebasOU.xlsx");
-            _ouService = new OUService(filePath);
+            string ouPrincipal = requestData["ouPrincipal"];
+            var ouSecundarias = _ouService.GetOUSecundarias(ouPrincipal);
+            return Json(ouSecundarias);
         }
 
-        [HttpGet]
-        public IActionResult LoginSuccess()
+        return Json(new List<string>());
+    }
+
+    // Nuevo método para manejar la solicitud de departamentos
+    [HttpPost]
+    public IActionResult GetDepartamentos([FromBody] Dictionary<string, string> requestData)
+    {
+        if (requestData != null && requestData.ContainsKey("ouPrincipal"))
         {
-            // Obtener OUs principales y secundarias
-            var ouPrincipales = _ouService.GetOUPrincipales();
-            var ouSecundarias = _ouService.GetOUSecundarias();
-
-            // Pasar los datos a la vista usando ViewBag
-            ViewBag.OUPrincipales = ouPrincipales;
-            ViewBag.OUSecundarias = ouSecundarias;
-
-            return View();
+            string ouPrincipal = requestData["ouPrincipal"];
+            var departamentos = _ouService.GetDepartamentos(ouPrincipal);
+            return Json(departamentos);
         }
+
+        return Json(new List<string>());
     }
 }
