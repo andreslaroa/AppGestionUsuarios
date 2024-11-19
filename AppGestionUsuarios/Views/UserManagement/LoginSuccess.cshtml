@@ -1,5 +1,57 @@
 ﻿<!DOCTYPE html>
 <html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulario de Usuario</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Cambiado de center a flex-start para mostrar contenido largo */
+            min-height: 100vh; /* Ajustado a min-height */
+            background-color: #f5f5f5;
+        }
+
+        form {
+            background: #ffffff;
+            padding: 20px;
+            margin: 20px; /* Añadido margen para mayor separación */
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 450px; /* Ampliado el max-width */
+        }
+
+            form div {
+                margin-bottom: 15px;
+            }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: bold;
+        }
+
+        select, input[type="text"] {
+            width: 100%;
+            padding: 10px; /* Ajustado el padding */
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+
+            select:focus, input[type="text"]:focus {
+                outline: none;
+                border-color: #007bff;
+                box-shadow: 0 0 4px rgba(0, 123, 255, 0.25);
+            }
+    </style>
+</head>
 <body>
     <form id="ouForm">
         <div>
@@ -20,17 +72,22 @@
 
         <div>
             <label for="nombre">Nombre:</label>
-            <input type="text" id="nombre" name="nombre" />
+            <input type="text" id="nombre" name="nombre" oninput="generateUsername()" />
         </div>
 
         <div>
             <label for="apellido1">Apellido 1:</label>
-            <input type="text" id="apellido1" name="apellido1" />
+            <input type="text" id="apellido1" name="apellido1" oninput="generateUsername()" />
         </div>
 
         <div>
             <label for="apellido2">Apellido 2:</label>
-            <input type="text" id="apellido2" name="apellido2" />
+            <input type="text" id="apellido2" name="apellido2" oninput="generateUsername()" />
+        </div>
+
+        <div>
+            <label for="username">Nombre de Usuario:</label>
+            <input type="text" id="username" name="username" readonly />
         </div>
 
         <div>
@@ -146,10 +203,8 @@
                     .then(response => response.json())
                     .then(data => {
                         if (data.length === 1) {
-                            // Si hay un solo valor, agregarlo como opción seleccionada automáticamente
                             lugarEnvio.innerHTML = '<option value="' + data[0] + '">' + data[0] + '</option>';
                         } else {
-                            // Si hay múltiples valores, agregarlos como opciones desplegables
                             data.forEach(lugar => {
                                 const option = document.createElement('option');
                                 option.value = lugar;
@@ -161,6 +216,59 @@
                     .catch(error => console.error('Error al obtener el lugar de envío:', error));
             }
         }
+
+        async function generateUsername() {
+            const nombre = document.getElementById('nombre').value.trim();
+            const apellido1 = document.getElementById('apellido1').value.trim();
+            const apellido2 = document.getElementById('apellido2').value.trim();
+            const usernameField = document.getElementById('username');
+
+            if (!nombre || !apellido1) {
+                usernameField.value = '';
+                return;
+            }
+
+            let candidatos = [];
+            candidatos.push((nombre[0] + apellido1).substring(0, 12).toLowerCase());
+            if (apellido2) {
+                candidatos.push((nombre[0] + apellido1 + apellido2[0]).substring(0, 12).toLowerCase());
+            }
+            candidatos.push((nombre + apellido1.substring(0, 2) + (apellido2 ? apellido2.substring(0, 2) : '')).substring(0, 12).toLowerCase());
+
+            for (const candidato of candidatos) {
+                const existe = await checkUsernameExists(candidato);
+                if (!existe) {
+                    usernameField.value = candidato;
+                    usernameField.readOnly = true;
+                    return;
+                }
+            }
+
+            usernameField.readOnly = false;
+            usernameField.placeholder = "Elija un nombre de usuario";
+        }
+
+        async function checkUsernameExists(username) {
+            try {
+                const response = await fetch('/UserManagement/CheckUsernameExists', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username })
+                });
+
+                if (response.ok) {
+                    const exists = await response.json();
+                    return exists;
+                } else {
+                    console.error('Error al verificar el nombre de usuario');
+                    return true;
+                }
+            } catch (error) {
+                console.error('Error al verificar el nombre de usuario:', error);
+                return true;
+            }
+        }
     </script>
 </body>
-</html>
