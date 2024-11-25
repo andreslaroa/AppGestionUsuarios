@@ -9,13 +9,16 @@ using System.Linq;
 using System.Text;
 using System.DirectoryServices.ActiveDirectory;
 using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
+using Microsoft.AspNetCore.Authorization;
 
-public class UserManagementController : Controller
+
+[Authorize]
+public class GestionUsuariosController : Controller
 {
     private readonly OUService _ouService;
-    private readonly ILogger<UserManagementController> _logger;
+    private readonly ILogger<GestionUsuariosController> _logger;
 
-    public class UserModel
+    public class UserModelAltaUsuario
     {
         public string Nombre { get; set; }
         public string Apellido1 { get; set; }
@@ -28,14 +31,15 @@ public class UserManagementController : Controller
     }
 
 
-    public UserManagementController()
+    public GestionUsuariosController()
     {
         string filePath = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "ArchivoDePruebasOU.xlsx");
         _ouService = new OUService(filePath);
-    }
+    }  
+    
 
     [HttpGet]
-    public IActionResult LoginSuccess()
+    public IActionResult AltaUsuario()
     {
         var ouPrincipales = _ouService.GetOUPrincipales();
         ViewBag.OUPrincipales = ouPrincipales;
@@ -118,7 +122,7 @@ public class UserManagementController : Controller
     }
 
     [HttpPost]
-    public IActionResult CreateUser([FromBody] UserModel user)
+    public IActionResult CreateUser([FromBody] UserModelAltaUsuario user)
     {
         // Validar si los datos se recibieron correctamente
         if (user == null)
@@ -163,10 +167,12 @@ public class UserManagementController : Controller
                     newUser = ouEntry.Children.Add($"CN={displayName}", "user");
 
                     // Establecer atributos básicos del usuario
+                    newUser.Properties["givenName"].Value = user.Nombre;
+                    newUser.Properties["sn"].Value = user.Apellido1 + user.Apellido2;
                     newUser.Properties["sAMAccountName"].Value = user.Username; // Nombre de usuario corto
                     newUser.Properties["userPrincipalName"].Value = $"{user.Username}@aytosa.inet"; // Dominio
                     newUser.Properties["displayName"].Value = displayName; // Nombre completo
-                    newUser.Properties["description"].Value = $"Nº Funcionario: {user.NFuncionario}"; // Descripción
+                    newUser.Properties["description"].Value = user.NFuncionario; // Descripción
 
                     // Guardar cambios iniciales
                     newUser.CommitChanges();

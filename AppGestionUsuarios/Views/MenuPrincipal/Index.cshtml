@@ -1,0 +1,17 @@
+﻿@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="container mt-5">
+    <h1>@ViewData["Title"]</h1>
+    <p>@ViewBag.Message</p>
+
+    <div class="mt-4">
+        <h2>Opciones disponibles</h2>
+        <ul>
+            <li><a asp-controller="GestionUsuarios" asp-action="AltaUsuario">Crear Usuario</a></li>
+            <li><a asp-controller="GestionUsuarios" asp-action="Edit">Modificar Usuario</a></li>
+            <li><a asp-controller="GestionUsuarios" asp-action="Delete">Eliminar Usuario</a></li>
+        </ul>
+    </div>
+</div>
