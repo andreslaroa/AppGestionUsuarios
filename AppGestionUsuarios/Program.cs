@@ -24,5 +24,8 @@ internal class Program
             pattern: "{controller=Account}/{action=Login}/{id?}");
 
         app.Run();
+
+        builder.Logging.AddEventLog(); //Registro del proveedor del visor de eventos
+
     }
 }
