@@ -23,6 +23,7 @@ public class GestionUsuariosController : Controller
         public string Nombre { get; set; }
         public string Apellido1 { get; set; }
         public string Apellido2 { get; set; }
+        public string NTelefono { get; set; }
         public string Username { get; set; }
         public string NFuncionario { get; set; }
         public string OUPrincipal { get; set; }
@@ -121,6 +122,52 @@ public class GestionUsuariosController : Controller
         }
     }
 
+    private bool CheckNumberIdExists(string numberId)
+    {
+        try
+        {
+            //Atributo a buscar
+            string attributeName = "description";
+
+            //Dominio
+            string domain = "aytosa.inet";
+
+            // Ruta LDAP al dominio
+            string ldapPath = $"LDAP://{domain}";
+
+            // Crear la conexión al Directorio Activo
+            using (DirectoryEntry entry = new DirectoryEntry(ldapPath))
+            {
+                // Crear un buscador para realizar la consulta
+                using (DirectorySearcher searcher = new DirectorySearcher(entry))
+                {
+                    // Configurar el filtro para buscar el atributo específico con el valor proporcionado
+                    searcher.Filter = $"({attributeName}={numberId})";
+                    searcher.SearchScope = SearchScope.Subtree;
+
+                    // Ejecutar la búsqueda
+                    SearchResult result = searcher.FindOne();
+
+                    // Si el resultado no es nulo, el identificador existe
+                    if (result != null)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Manejo de errores
+            return false;
+        }
+    }
+
+
     [HttpPost]
     public IActionResult CreateUser([FromBody] UserModelAltaUsuario user)
     {
@@ -131,7 +178,7 @@ public class GestionUsuariosController : Controller
         }
 
         // Validar los campos obligatorios
-        if (string.IsNullOrEmpty(user.Nombre) || string.IsNullOrEmpty(user.Apellido1) || string.IsNullOrEmpty(user.Username) ||
+        if (string.IsNullOrEmpty(user.Nombre) || string.IsNullOrEmpty(user.Apellido1) || string.IsNullOrEmpty(user.NTelefono) || string.IsNullOrEmpty(user.Username) ||
             string.IsNullOrEmpty(user.OUPrincipal) || string.IsNullOrEmpty(user.OUSecundaria) || string.IsNullOrEmpty(user.Departamento))
         {
             return Json(new { success = false, message = "Faltan campos obligatorios." });
@@ -173,6 +220,9 @@ public class GestionUsuariosController : Controller
                     newUser.Properties["userPrincipalName"].Value = $"{user.Username}@aytosa.inet"; // Dominio
                     newUser.Properties["displayName"].Value = displayName; // Nombre completo
                     newUser.Properties["description"].Value = user.NFuncionario; // Descripción
+                    newUser.Properties["telephoneNumber"].Value = user.NTelefono; //Extenión de teléfono
+                    newUser.Properties["physicalDeliveryOfficeName"].Value = user.Departamento; //Departamento del usuario
+
 
                     // Guardar cambios iniciales
                     newUser.CommitChanges();
