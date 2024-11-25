@@ -96,6 +96,8 @@
             <input type="text" id="apellido2" name="apellido2" oninput="generateUsername()" />
         </div>
 
+
+
         <div>
             <label for="username">Nombre de Usuario:</label>
             <input type="text" id="username" name="username" readonly />
@@ -158,7 +160,7 @@
             ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria</option>';
 
             if (ouPrincipal) {
-                fetch('/UserManagement/GetOUSecundarias', {
+                fetch('/GestionUsuarios/GetOUSecundarias', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -184,7 +186,7 @@
             departamento.innerHTML = '<option value="">Seleccione un departamento</option>';
 
             if (ouPrincipal) {
-                fetch('/UserManagement/GetDepartamentos', {
+                fetch('/GestionUsuarios/GetDepartamentos', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -210,7 +212,7 @@
             lugarEnvio.innerHTML = '<option value="">Seleccione un lugar de envío</option>';
 
             if (departamento) {
-                fetch('/UserManagement/GetLugarEnvio', {
+                fetch('/GestionUsuarios/GetLugarEnvio', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -268,7 +270,7 @@
 
         async function checkUsernameExists(username) {
             try {
-                const response = await fetch('/UserManagement/CheckUsernameExists', {
+                const response = await fetch('/GestionUsuarios/CheckUsernameExists', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -307,7 +309,7 @@
             }
 
             // Enviar la solicitud
-            fetch('/UserManagement/CreateUser', {
+            fetch('/GestionUsuarios/CreateUser', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
