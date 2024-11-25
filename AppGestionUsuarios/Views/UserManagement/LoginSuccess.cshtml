@@ -11,19 +11,19 @@
             padding: 0;
             display: flex;
             justify-content: center;
-            align-items: flex-start; /* Cambiado de center a flex-start para mostrar contenido largo */
-            min-height: 100vh; /* Ajustado a min-height */
+            align-items: flex-start;
+            min-height: 100vh;
             background-color: #f5f5f5;
         }
 
         form {
             background: #ffffff;
             padding: 20px;
-            margin: 20px; /* Añadido margen para mayor separación */
+            margin: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 450px; /* Ampliado el max-width */
+            max-width: 450px;
         }
 
             form div {
@@ -37,18 +37,29 @@
             font-weight: bold;
         }
 
-        select, input[type="text"] {
+        select, input[type="text"], button {
             width: 100%;
-            padding: 10px; /* Ajustado el padding */
+            padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
             background: #f9f9f9;
+            cursor: pointer;
         }
 
             select:focus, input[type="text"]:focus {
                 outline: none;
                 border-color: #007bff;
                 box-shadow: 0 0 4px rgba(0, 123, 255, 0.25);
+            }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+        }
+
+            button:hover {
+                background-color: #0056b3;
             }
     </style>
 </head>
@@ -132,6 +143,12 @@
                 }
             </select>
         </div>
+
+        <div>
+            <button type="button" onclick="createUser()">Crear Usuario</button>
+        </div>
+        
+
     </form>
 
     <script>
@@ -245,7 +262,8 @@
             }
 
             usernameField.readOnly = false;
-            usernameField.placeholder = "Elija un nombre de usuario";
+            usernameField.placeholder =
+                usernameField.placeholder = "Elija un nombre de usuario";
         }
 
         async function checkUsernameExists(username) {
@@ -270,5 +288,57 @@
                 return true;
             }
         }
+
+        function createUser() {
+            // Recoger los valores del formulario
+            const nombre = document.getElementById('nombre').value.trim();
+            const apellido1 = document.getElementById('apellido1').value.trim();
+            const apellido2 = document.getElementById('apellido2').value.trim();
+            const username = document.getElementById('username').value.trim();
+            const nFuncionario = document.getElementById('nFuncionario').value.trim();
+            const ouPrincipal = document.getElementById('ouPrincipal').value;
+            const ouSecundaria = document.getElementById('ouSecundaria').value;
+            const departamento = document.getElementById('departamento').value;
+
+            // Validar campos antes de enviar
+            if (!nombre || !apellido1 || !username || !ouPrincipal || !ouSecundaria || !departamento) {
+                alert('Por favor, complete todos los campos obligatorios.');
+                return;
+            }
+
+            // Enviar la solicitud
+            fetch('/UserManagement/CreateUser', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    nombre: nombre,
+                    apellido1: apellido1,
+                    apellido2: apellido2,
+                    username: username,
+                    nFuncionario: nFuncionario,
+                    ouPrincipal: ouPrincipal,
+                    ouSecundaria: ouSecundaria,
+                    departamento: departamento
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Usuario creado exitosamente.');
+                    } else {
+                        alert('Error al crear el usuario: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error al crear el usuario:', error);
+                    alert('Ocurrió un error al crear el usuario.');
+                });
+        }
+
+        
+
     </script>
 </body>
+</html>

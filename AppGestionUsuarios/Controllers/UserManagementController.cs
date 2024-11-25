@@ -7,10 +7,26 @@ using System.DirectoryServices;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.DirectoryServices.ActiveDirectory;
+using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 
 public class UserManagementController : Controller
 {
     private readonly OUService _ouService;
+    private readonly ILogger<UserManagementController> _logger;
+
+    public class UserModel
+    {
+        public string Nombre { get; set; }
+        public string Apellido1 { get; set; }
+        public string Apellido2 { get; set; }
+        public string Username { get; set; }
+        public string NFuncionario { get; set; }
+        public string OUPrincipal { get; set; }
+        public string OUSecundaria { get; set; }
+        public string Departamento { get; set; }
+    }
+
 
     public UserManagementController()
     {
@@ -69,7 +85,6 @@ public class UserManagementController : Controller
         return Json(new List<string>());
     }
 
-    // Nuevo método para verificar la existencia de un nombre de usuario en el Directorio Activo
     [HttpPost]
     public IActionResult CheckUsernameExists([FromBody] Dictionary<string, string> requestData)
     {
@@ -97,46 +112,70 @@ public class UserManagementController : Controller
         }
         catch
         {
-            // Manejo de errores (opcional)
+            // Manejo de errores
             return true; // Asumir que el usuario existe si hay un error
         }
     }
 
     [HttpPost]
-    public IActionResult CreateUser(string nombre, string apellido1, string apellido2, string username, string nFuncionario, string ouPrincipal, string ouSecundaria, string departamento)
+    public IActionResult CreateUser([FromBody] UserModel user)
     {
+        // Validar si los datos se recibieron correctamente
+        if (user == null)
+        {
+            return Json(new { success = false, message = "No se recibieron datos válidos." });
+        }
+
+        // Validar los campos obligatorios
+        if (string.IsNullOrEmpty(user.Nombre) || string.IsNullOrEmpty(user.Apellido1) || string.IsNullOrEmpty(user.Username) ||
+            string.IsNullOrEmpty(user.OUPrincipal) || string.IsNullOrEmpty(user.OUSecundaria) || string.IsNullOrEmpty(user.Departamento))
+        {
+            return Json(new { success = false, message = "Faltan campos obligatorios." });
+        }
+
         try
         {
             // Convertir nombre y apellidos a mayúsculas y eliminar acentos
-            string nombreUpper = RemoveAccents(nombre).ToUpperInvariant();
-            string apellido1Upper = RemoveAccents(apellido1).ToUpperInvariant();
-            string apellido2Upper = RemoveAccents(apellido2).ToUpperInvariant();
+            string nombreUpper = RemoveAccents(user.Nombre).ToUpperInvariant();
+            string apellido1Upper = RemoveAccents(user.Apellido1).ToUpperInvariant();
+            string apellido2Upper = string.IsNullOrEmpty(user.Apellido2) ? "" : RemoveAccents(user.Apellido2).ToUpperInvariant();
 
             // Conformar el nombre completo
             string displayName = $"{nombreUpper} {apellido1Upper} {apellido2Upper}".Trim();
 
-            // Ruta a la OU en el directorio activo
-            string ldapPath = $"LDAP://OU={ouSecundaria},OU={ouPrincipal},DC=midominio,DC=local"; // Ajusta 'midominio' y 'local' según tu entorno
+            // Construir el path LDAP
+            string ldapPath = $"LDAP://OU={user.OUSecundaria},OU=Usuarios y Grupos,OU={user.OUPrincipal},DC=aytosa,DC=inet";
+            Console.WriteLine($"Intentando conectar a: {ldapPath}");
 
             using (DirectoryEntry ouEntry = new DirectoryEntry(ldapPath))
             {
-                using (DirectoryEntry newUser = ouEntry.Children.Add($"CN={displayName}", "user"))
+                if (ouEntry == null)
                 {
-                    // Establecer atributos del usuario
-                    newUser.Properties["sAMAccountName"].Value = username;
-                    newUser.Properties["userPrincipalName"].Value = $"{username}@midominio.local"; // Ajusta el dominio
-                    newUser.Properties["displayName"].Value = displayName;
-                    newUser.Properties["description"].Value = $"Nº Funcionario: {nFuncionario}";
-                    newUser.Properties["physicalDeliveryOfficeName"].Value = departamento; // Atributo oficina (departamento)
+                    return Json(new { success = false, message = "No se pudo conectar a la OU especificada." });
+                }
 
-                    // Commit de los cambios
+
+                // Crear un nuevo usuario
+                DirectoryEntry newUser = null;
+
+                try
+                {
+                    newUser = ouEntry.Children.Add($"CN={displayName}", "user");
+
+                    // Establecer atributos básicos del usuario
+                    newUser.Properties["sAMAccountName"].Value = user.Username; // Nombre de usuario corto
+                    newUser.Properties["userPrincipalName"].Value = $"{user.Username}@aytosa.inet"; // Dominio
+                    newUser.Properties["displayName"].Value = displayName; // Nombre completo
+                    newUser.Properties["description"].Value = $"Nº Funcionario: {user.NFuncionario}"; // Descripción
+
+                    // Guardar cambios iniciales
                     newUser.CommitChanges();
 
                     // Establecer la contraseña
                     newUser.Invoke("SetPassword", new object[] { "Temporal2024" });
 
-                    // Habilitar al usuario
-                    newUser.Properties["userAccountControl"].Value = 0x200; // Habilitar cuenta
+                    // Activar la cuenta
+                    newUser.Properties["userAccountControl"].Value = 0x200;
 
                     // Forzar el cambio de contraseña al primer inicio de sesión
                     newUser.Properties["pwdLastSet"].Value = 0;
@@ -144,16 +183,29 @@ public class UserManagementController : Controller
                     // Guardar cambios finales
                     newUser.CommitChanges();
                 }
-            }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error al crear el usuario: {ex.Message}");
+                    return Json(new { success = false, message = $"Error al crear el usuario: {ex.Message}" });
+                }
+                finally
+                {
+                    if (newUser != null)
+                    {
+                        newUser.Dispose();
+                    }
+                }
 
-            return Json(new { success = true, message = "Usuario creado exitosamente." });
+                return Json(new { success = true, message = "Usuario creado exitosamente." });
+            }
         }
         catch (Exception ex)
         {
-            // Manejo de errores
+            Console.WriteLine($"Error: {ex.Message}\nStackTrace: {ex.StackTrace}");
             return Json(new { success = false, message = $"Error al crear el usuario: {ex.Message}" });
         }
     }
+
 
     // Método para eliminar acentos de una cadena
     private static string RemoveAccents(string text)
@@ -168,4 +220,7 @@ public class UserManagementController : Controller
 
         return new string(chars).Normalize(NormalizationForm.FormC);
     }
+
+
+
 }
