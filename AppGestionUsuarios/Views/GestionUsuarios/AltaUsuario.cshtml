@@ -295,9 +295,14 @@
         }
 
         async function checkNumberIdExists(nFuncionario) {
-            if(nFuncionario != 99999){
-                try {
-                const response = await fetch('/GestionUsuarios/CheckUsernameExists', {
+            if (!nFuncionario) {
+                console.error("El número de funcionario está vacío.");
+                alert("Por favor, ingrese un número de funcionario.");
+                return true; // Asumimos que existe para evitar errores
+            }
+
+            try {
+                const response = await fetch('/GestionUsuarios/CheckNumberIdExists', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -306,19 +311,30 @@
                 });
 
                 if (response.ok) {
-                    const exists = await response.json();
-                    return exists;
+                    const data = await response.json();
+
+                    if (data.success) {
+                        if (data.exists) {
+                            alert("El número de funcionario ya existe en el Directorio Activo.");
+                            return true; // Existe en el Directorio Activo
+                        } else {
+                            return false; // No existe en el Directorio Activo
+                        }
+                    } else {
+                        console.error("Error en la respuesta del servidor: " + data.message);
+                        return true; // Asumimos que existe si hay un error en el servidor
+                    }
                 } else {
-                    console.error('Error al verificar el nombre de usuario');
-                    return true;
+                    console.error("Error al verificar el número de funcionario: " + response.statusText);
+                    return true; // Asumimos que existe si no hay una respuesta válida
                 }
             } catch (error) {
-                console.error('Error al verificar el nombre de usuario:', error);
-                return true;
+                console.error("Error al verificar el número de funcionario:", error);
+                alert("Ocurrió un error al verificar el número de funcionario.");
+                return true; // Asumimos que existe si hay un error
             }
-            }
-            return true;
         }
+
 
         function createUser() {
             // Recoger los valores del formulario

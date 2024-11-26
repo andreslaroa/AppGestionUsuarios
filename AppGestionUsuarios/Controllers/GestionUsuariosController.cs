@@ -122,50 +122,61 @@ public class GestionUsuariosController : Controller
         }
     }
 
-    private bool CheckNumberIdExists(string numberId)
+    [HttpPost]
+    public IActionResult CheckNumberIdExists([FromBody] Dictionary<string, string> requestData)
     {
-        try
+        // Validar si se recibió el campo nFuncionario
+        if (requestData != null && requestData.ContainsKey("nFuncionario"))
         {
-            //Atributo a buscar
-            string attributeName = "description";
+            string numberId = requestData["nFuncionario"];
 
-            //Dominio
-            string domain = "aytosa.inet";
-
-            // Ruta LDAP al dominio
-            string ldapPath = $"LDAP://{domain}";
-
-            // Crear la conexión al Directorio Activo
-            using (DirectoryEntry entry = new DirectoryEntry(ldapPath))
+            // Validar si el identificador es nulo o vacío
+            if (string.IsNullOrEmpty(numberId))
             {
-                // Crear un buscador para realizar la consulta
-                using (DirectorySearcher searcher = new DirectorySearcher(entry))
+                return Json(new { success = false, exists = false, message = "El identificador está vacío." });
+            }
+
+            try
+            {
+                // Configurar dominio y atributo a buscar
+                string domain = "aytosa.inet"; // Ajusta al dominio de tu entorno
+                string attributeName = "description"; // Atributo del Directorio Activo para el número de funcionario
+
+                // Ruta LDAP al dominio
+                string ldapPath = $"LDAP://{domain}";
+
+                using (DirectoryEntry entry = new DirectoryEntry(ldapPath))
                 {
-                    // Configurar el filtro para buscar el atributo específico con el valor proporcionado
-                    searcher.Filter = $"({attributeName}={numberId})";
-                    searcher.SearchScope = SearchScope.Subtree;
-
-                    // Ejecutar la búsqueda
-                    SearchResult result = searcher.FindOne();
-
-                    // Si el resultado no es nulo, el identificador existe
-                    if (result != null)
+                    using (DirectorySearcher searcher = new DirectorySearcher(entry))
                     {
-                        return true;
-                    }
-                    else
-                    {
-                        return false;
+                        // Filtro LDAP para buscar el identificador
+                        searcher.Filter = $"({attributeName}={numberId})";
+                        searcher.SearchScope = SearchScope.Subtree;
+
+                        // Buscar el identificador en el Directorio Activo
+                        SearchResult result = searcher.FindOne();
+
+                        if (result != null)
+                        {
+                            return Json(new { success = true, exists = true, message = "El identificador ya existe." });
+                        }
+                        else
+                        {
+                            return Json(new { success = true, exists = false, message = "El identificador no existe." });
+                        }
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                // Manejo de errores
+                return Json(new { success = false, exists = false, message = $"Error al buscar el identificador: {ex.Message}" });
+            }
         }
-        catch (Exception ex)
-        {
-            // Manejo de errores
-            return false;
-        }
+
+        return Json(new { success = false, exists = false, message = "No se recibió el identificador." });
     }
+
 
 
     [HttpPost]
