@@ -23,6 +23,7 @@ public class GestionUsuariosController : Controller
         public string Nombre { get; set; }
         public string Apellido1 { get; set; }
         public string Apellido2 { get; set; }
+        public string NTelefono { get; set; }
         public string Username { get; set; }
         public string NFuncionario { get; set; }
         public string OUPrincipal { get; set; }
@@ -122,6 +123,63 @@ public class GestionUsuariosController : Controller
     }
 
     [HttpPost]
+    public IActionResult CheckNumberIdExists([FromBody] Dictionary<string, string> requestData)
+    {
+        // Validar si se recibió el campo nFuncionario
+        if (requestData != null && requestData.ContainsKey("nFuncionario"))
+        {
+            string numberId = requestData["nFuncionario"];
+
+            // Validar si el identificador es nulo o vacío
+            if (string.IsNullOrEmpty(numberId))
+            {
+                return Json(new { success = false, exists = false, message = "El identificador está vacío." });
+            }
+
+            try
+            {
+                // Configurar dominio y atributo a buscar
+                string domain = "aytosa.inet"; // Ajusta al dominio de tu entorno
+                string attributeName = "description"; // Atributo del Directorio Activo para el número de funcionario
+
+                // Ruta LDAP al dominio
+                string ldapPath = $"LDAP://{domain}";
+
+                using (DirectoryEntry entry = new DirectoryEntry(ldapPath))
+                {
+                    using (DirectorySearcher searcher = new DirectorySearcher(entry))
+                    {
+                        // Filtro LDAP para buscar el identificador
+                        searcher.Filter = $"({attributeName}={numberId})";
+                        searcher.SearchScope = SearchScope.Subtree;
+
+                        // Buscar el identificador en el Directorio Activo
+                        SearchResult result = searcher.FindOne();
+
+                        if (result != null)
+                        {
+                            return Json(new { success = true, exists = true, message = "El identificador ya existe." });
+                        }
+                        else
+                        {
+                            return Json(new { success = true, exists = false, message = "El identificador no existe." });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Manejo de errores
+                return Json(new { success = false, exists = false, message = $"Error al buscar el identificador: {ex.Message}" });
+            }
+        }
+
+        return Json(new { success = false, exists = false, message = "No se recibió el identificador." });
+    }
+
+
+
+    [HttpPost]
     public IActionResult CreateUser([FromBody] UserModelAltaUsuario user)
     {
         // Validar si los datos se recibieron correctamente
@@ -131,7 +189,7 @@ public class GestionUsuariosController : Controller
         }
 
         // Validar los campos obligatorios
-        if (string.IsNullOrEmpty(user.Nombre) || string.IsNullOrEmpty(user.Apellido1) || string.IsNullOrEmpty(user.Username) ||
+        if (string.IsNullOrEmpty(user.Nombre) || string.IsNullOrEmpty(user.Apellido1) || string.IsNullOrEmpty(user.NTelefono) || string.IsNullOrEmpty(user.Username) ||
             string.IsNullOrEmpty(user.OUPrincipal) || string.IsNullOrEmpty(user.OUSecundaria) || string.IsNullOrEmpty(user.Departamento))
         {
             return Json(new { success = false, message = "Faltan campos obligatorios." });
@@ -173,6 +231,9 @@ public class GestionUsuariosController : Controller
                     newUser.Properties["userPrincipalName"].Value = $"{user.Username}@aytosa.inet"; // Dominio
                     newUser.Properties["displayName"].Value = displayName; // Nombre completo
                     newUser.Properties["description"].Value = user.NFuncionario; // Descripción
+                    newUser.Properties["telephoneNumber"].Value = user.NTelefono; //Extenión de teléfono
+                    newUser.Properties["physicalDeliveryOfficeName"].Value = user.Departamento; //Departamento del usuario
+
 
                     // Guardar cambios iniciales
                     newUser.CommitChanges();
