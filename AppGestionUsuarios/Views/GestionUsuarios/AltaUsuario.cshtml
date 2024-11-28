@@ -78,7 +78,7 @@
 
         <div>
             <label for="nFuncionario">Nº Funcionario:</label>
-            <input type="text" id="nFuncionario" name="nFuncionario" />
+            <input type="text" id="nFuncionario" name="nFuncionario" onchange="checkNumberIdExists()" />
         </div>
 
         <div>
@@ -98,7 +98,7 @@
 
         <div>
             <label for="nTelefono">Extension de telefono:</label>
-            <input type="number" id="nTelefono" name="nTelefono" onchange="checkNumberIdExists" />
+            <input type="text" id="nTelefono" name="nTelefono"  />
         </div>
 
         <div>
@@ -152,11 +152,14 @@
         <div>
             <button type="button" onclick="createUser()">Crear Usuario</button>
         </div>
+
         
 
     </form>
 
     <script>
+
+        // Función para obtener las OUs Secundarias
         function fetchOUSecundarias() {
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria');
@@ -182,6 +185,7 @@
                     .catch(error => console.error('Error al obtener las OUs secundarias:', error));
             }
         }
+
 
         function fetchDepartamentos() {
             const ouPrincipal = document.getElementById('ouPrincipal').value;
@@ -294,7 +298,8 @@
             }
         }
 
-        async function checkNumberIdExists(nFuncionario) {
+        async function checkNumberIdExists() {
+            const nFuncionario = document.getElementById('nFuncionario').value.trim();
             if (!nFuncionario) {
                 console.error("El número de funcionario está vacío.");
                 alert("Por favor, ingrese un número de funcionario.");
@@ -316,12 +321,15 @@
                     if (data.success) {
                         if (data.exists) {
                             alert("El número de funcionario ya existe en el Directorio Activo.");
+                            document.getElementById('nFuncionario').value = "";
                             return true; // Existe en el Directorio Activo
                         } else {
                             return false; // No existe en el Directorio Activo
                         }
                     } else {
                         console.error("Error en la respuesta del servidor: " + data.message);
+                        alert("Error en la respuesta del servidor");
+                        document.getElementById('nFuncionario').value = "";
                         return true; // Asumimos que existe si hay un error en el servidor
                     }
                 } else {
@@ -364,7 +372,7 @@
                     nombre: nombre,
                     apellido1: apellido1,
                     apellido2: apellido2,
-                    nTelefono: nTelefono
+                    nTelefono: nTelefono,
                     username: username,
                     nFuncionario: nFuncionario,
                     ouPrincipal: ouPrincipal,
