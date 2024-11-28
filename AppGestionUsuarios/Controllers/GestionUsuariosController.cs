@@ -51,6 +51,7 @@ public class GestionUsuariosController : Controller
         return View();
     }
 
+
     [HttpPost]
     public IActionResult GetOUSecundarias([FromBody] Dictionary<string, string> requestData)
     {
@@ -63,6 +64,7 @@ public class GestionUsuariosController : Controller
 
         return Json(new List<string>());
     }
+
 
     [HttpPost]
     public IActionResult GetDepartamentos([FromBody] Dictionary<string, string> requestData)
