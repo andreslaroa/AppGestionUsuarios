@@ -414,11 +414,12 @@
             const departamento = document.getElementById('departamento').value;
             const fechaCaducidadOp = document.getElementById('fechaCaducidadOp').value;
             const fechaCaducidad = document.getElementById('fechaCaducidad').value;
+            const cuota = document.getElementById('cuota').value;
 
 
 
             // Validar campos antes de enviar
-            if (!nombre || !apellido1 || !nTelefono || !username || !ouPrincipal || !ouSecundaria || !departamento || !fechaCaducidadOp || !fechaCaducidad) {
+            if (!nombre || !apellido1 || !nTelefono || !username || !ouPrincipal || !ouSecundaria || !departamento || !fechaCaducidadOp || !fechaCaducidad || !cuota) {
                 alert('Por favor, complete todos los campos obligatorios.');
                 return;
             }
@@ -441,7 +442,8 @@
                     ouSecundaria: ouSecundaria,
                     departamento: departamento,
                     fechaCaducidadOp: fechaCaducidadOp,
-                    fechaCaducidad : fechaCaducidad
+                    fechaCaducidad : fechaCaducidad,
+                    cuota : cuota
                 })
             })
                 .then(response => response.json())

@@ -33,6 +33,7 @@ public class GestionUsuariosController : Controller
         public string Departamento { get; set; }
         public string FechaCaducidadOp {  get; set; }
         public DateTime FechaCaducidad { get; set; }
+        public string Cuota { get; set; }
     }
 
 
@@ -297,6 +298,10 @@ public class GestionUsuariosController : Controller
                     newUser.Properties["telephoneNumber"].Value = user.NTelefono; //Extenión de teléfono
                     newUser.Properties["physicalDeliveryOfficeName"].Value = user.Departamento; //Departamento del usuario
 
+                    //Comando para meter el nombre del correo en el directorio activo
+                    //newUser.Properties["email"].Value = $"{user.Username}@aytosalamanca.es";
+
+                    
                     if (user.FechaCaducidadOp == "si")
                     {
                         
@@ -311,7 +316,6 @@ public class GestionUsuariosController : Controller
                             // Convertir la fecha a Windows File Time (Int64)
                             long accountExpires = user.FechaCaducidad.ToFileTime();
 
-                            // Establecer el valor en el usuario
                             newUser.Properties["accountExpires"].Value = accountExpires.ToString();
                         }
                         catch (ArgumentOutOfRangeException ex)
@@ -319,12 +323,39 @@ public class GestionUsuariosController : Controller
                             return Json(new { success = false, message = $"Error al convertir la fecha. {ex.Message}" });
                         }
                     }
+                    //Si decimos que no queremos fecha de caducidad, la creación de usuario por defecto pone a nunca la fecha de expiración
 
-                    
-                    // Guardar cambios iniciales
+
+
+                    //El texto comentado se usa para crear un directorio al usuario
+                    //string directorioRaiz = @"C:\Users\";
+
+                    //int cuotaMB = ObtenerCuotaEnMB(user.Cuota);
+
+                    //try
+                    //{
+                    //    string rutaUsuario = Path.Combine(directorioRaiz, user.Username);
+
+                    //    if (!Directory.Exists(rutaUsuario))
+                    //    {
+                    //        Directory.CreateDirectory(rutaUsuario);
+                    //    }
+                    //    else
+                    //    {
+                    //        return Json(new { success = false, message = $"Error al crear el directorio propio del usuario porque ya existe" });
+                    //    }
+
+                    //    ConfigurarCuota(rutaUsuario, cuotaMB);
+                    //}
+                    //catch (Exception ex)
+                    //{
+                    //    return Json(new { success = false, message = $"Error al crear el directorio propio del usuario: {ex.Message}" });
+                    //}
+
+
+
                     newUser.CommitChanges();
 
-                    // Establecer la contraseña
                     newUser.Invoke("SetPassword", new object[] { "Temporal2024" });
 
                     // Activar la cuenta
@@ -333,7 +364,6 @@ public class GestionUsuariosController : Controller
                     // Forzar el cambio de contraseña al primer inicio de sesión
                     newUser.Properties["pwdLastSet"].Value = 0;
 
-                    // Guardar cambios finales
                     newUser.CommitChanges();
                 }
                 catch (Exception ex)
@@ -357,6 +387,70 @@ public class GestionUsuariosController : Controller
         {
             Console.WriteLine($"Error: {ex.Message}\nStackTrace: {ex.StackTrace}");
             return Json(new { success = false, message = $"Error al crear el usuario: {ex.Message}" });
+        }
+    }
+
+    private void ConfigurarCuota(string rutaUsuario, int cuotaEnMB)
+    {
+        try
+        {
+            // Convertir la cuota de MB a bytes
+            long cuotaEnBytes = cuotaEnMB * 1024L * 1024L;
+
+            // Configurar la cuota usando fsutil
+            var proceso = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "fsutil",
+                    Arguments = $"quota enforce G: && quota modify {rutaUsuario} {cuotaEnBytes}",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            proceso.Start();
+            string output = proceso.StandardOutput.ReadToEnd();
+            string error = proceso.StandardError.ReadToEnd();
+            proceso.WaitForExit();
+
+            if (proceso.ExitCode != 0)
+            {
+                throw new Exception($"Error al configurar la cuota: {error}");
+            }
+
+            Console.WriteLine($"Cuota de {cuotaEnMB} MB configurada exitosamente para el directorio: {rutaUsuario}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al configurar la cuota: {ex.Message}");
+        }
+    }
+
+    //Método para convertir el valor de la cuota a numérico
+    private int ObtenerCuotaEnMB(string cuotaEnMB)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(cuotaEnMB))
+            {
+                throw new ArgumentException("La cuota no puede estar vacía.");
+            }
+
+            // Extraer el número antes del espacio
+            string[] partes = cuotaEnMB.Split(' ');
+            if (partes.Length == 0 || !int.TryParse(partes[0], out int cuota))
+            {
+                throw new FormatException("El formato de la cuota es inválido.");
+            }
+
+            return cuota; // Devuelve el número en MB
+        }
+        catch (Exception ex)
+        {
+            throw new ArgumentException($"Error al procesar la cuota: {ex.Message}");
         }
     }
 
