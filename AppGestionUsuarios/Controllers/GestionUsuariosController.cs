@@ -10,6 +10,8 @@ using System.Text;
 using System.DirectoryServices.ActiveDirectory;
 using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.Extensions.Logging.Abstractions;
 
 
 [Authorize]
@@ -29,6 +31,8 @@ public class GestionUsuariosController : Controller
         public string OUPrincipal { get; set; }
         public string OUSecundaria { get; set; }
         public string Departamento { get; set; }
+        public string FechaCaducidadOp {  get; set; }
+        public DateTime FechaCaducidad { get; set; }
     }
 
 
@@ -180,6 +184,62 @@ public class GestionUsuariosController : Controller
     }
 
 
+    [HttpPost]
+    public IActionResult CheckTelephoneExists([FromBody] Dictionary<string, string> requestData)
+    {
+        // Validar si se recibió el campo nFuncionario
+        if (requestData != null && requestData.ContainsKey("nTelefono"))
+        {
+            string telefono = requestData["nTelefono"];
+
+            // Validar si el identificador es nulo o vacío
+            if (string.IsNullOrEmpty(telefono))
+            {
+                return Json(new { success = false, exists = false, message = "El campo teléfono está vacío." });
+            }
+
+            try
+            {
+                // Configurar dominio y atributo a buscar
+                string domain = "aytosa.inet"; // Ajusta al dominio de tu entorno
+                string attributeName = "telephoneNumber"; // Atributo del Directorio Activo para el número de funcionario
+
+                // Ruta LDAP al dominio
+                string ldapPath = $"LDAP://{domain}";
+
+                using (DirectoryEntry entry = new DirectoryEntry(ldapPath))
+                {
+                    using (DirectorySearcher searcher = new DirectorySearcher(entry))
+                    {
+                        // Filtro LDAP para buscar el identificador
+                        searcher.Filter = $"({attributeName}={telefono})";
+                        searcher.SearchScope = SearchScope.Subtree;
+
+                        // Buscar el identificador en el Directorio Activo
+                        SearchResult result = searcher.FindOne();
+
+                        if (result != null)
+                        {
+                            return Json(new { success = true, exists = true, message = "El teléfono ya existe." });
+                        }
+                        else
+                        {
+                            return Json(new { success = true, exists = false, message = "El teléfono no existe." });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Manejo de errores
+                return Json(new { success = false, exists = false, message = $"Error al buscar el identificador: {ex.Message}" });
+            }
+        }
+
+        return Json(new { success = false, exists = false, message = "No se recibió el identificador." });
+    }
+
+
 
     [HttpPost]
     public IActionResult CreateUser([FromBody] UserModelAltaUsuario user)
@@ -192,7 +252,7 @@ public class GestionUsuariosController : Controller
 
         // Validar los campos obligatorios
         if (string.IsNullOrEmpty(user.Nombre) || string.IsNullOrEmpty(user.Apellido1) || string.IsNullOrEmpty(user.NTelefono) || string.IsNullOrEmpty(user.Username) ||
-            string.IsNullOrEmpty(user.OUPrincipal) || string.IsNullOrEmpty(user.OUSecundaria) || string.IsNullOrEmpty(user.Departamento))
+            string.IsNullOrEmpty(user.OUPrincipal) || string.IsNullOrEmpty(user.OUSecundaria) || string.IsNullOrEmpty(user.Departamento) || string.IsNullOrEmpty(user.FechaCaducidadOp))           
         {
             return Json(new { success = false, message = "Faltan campos obligatorios." });
         }
@@ -222,6 +282,7 @@ public class GestionUsuariosController : Controller
                 // Crear un nuevo usuario
                 DirectoryEntry newUser = null;
 
+
                 try
                 {
                     newUser = ouEntry.Children.Add($"CN={displayName}", "user");
@@ -236,7 +297,30 @@ public class GestionUsuariosController : Controller
                     newUser.Properties["telephoneNumber"].Value = user.NTelefono; //Extenión de teléfono
                     newUser.Properties["physicalDeliveryOfficeName"].Value = user.Departamento; //Departamento del usuario
 
+                    if (user.FechaCaducidadOp == "si")
+                    {
+                        
+                        // Validar que la fecha no sea anterior al momento actual
+                        if (user.FechaCaducidad <= DateTime.Now)
+                        {
+                            return Json(new { success = false, message = "La fecha de caducidad debe ser una fecha futura." });
+                        }
 
+                        try
+                        {
+                            // Convertir la fecha a Windows File Time (Int64)
+                            long accountExpires = user.FechaCaducidad.ToFileTime();
+
+                            // Establecer el valor en el usuario
+                            newUser.Properties["accountExpires"].Value = accountExpires.ToString();
+                        }
+                        catch (ArgumentOutOfRangeException ex)
+                        {
+                            return Json(new { success = false, message = $"Error al convertir la fecha. {ex.Message}" });
+                        }
+                    }
+
+                    
                     // Guardar cambios iniciales
                     newUser.CommitChanges();
 
@@ -254,7 +338,6 @@ public class GestionUsuariosController : Controller
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error al crear el usuario: {ex.Message}");
                     return Json(new { success = false, message = $"Error al crear el usuario: {ex.Message}" });
                 }
                 finally
@@ -265,7 +348,9 @@ public class GestionUsuariosController : Controller
                     }
                 }
 
-                return Json(new { success = true, message = "Usuario creado exitosamente." });
+                
+                return Json(new { success = true, message = "Usuario creado exitosamente con fecha de expiración: ." });
+                
             }
         }
         catch (Exception ex)

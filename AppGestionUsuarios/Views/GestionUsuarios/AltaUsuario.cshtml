@@ -98,7 +98,7 @@
 
         <div>
             <label for="nTelefono">Extension de telefono:</label>
-            <input type="text" id="nTelefono" name="nTelefono"  />
+            <input type="text" id="nTelefono" name="nTelefono"  oninput="checkTelephoneExists()"/>
         </div>
 
         <div>
@@ -125,6 +125,20 @@
             <select id="lugarEnvio" name="lugarEnvio">
                 <option value="">Seleccione un lugar de envío</option>
             </select>
+        </div>
+
+
+        <div>
+            <label for="fechaCaducidadOp">Fecha de Caducidad:</label>
+            <select id="fechaCaducidadOp"  name="fechaCaducidadOp">
+                <option value="si">Sí</option>
+                <option value="no">No</option>
+            </select>
+        </div>
+
+        <div >
+            <label for="fechaCaducidad">Fecha de Caducidad:</label>
+            <input type="date" id="fechaCaducidad" name="fechaCaducidad" />
         </div>
 
         <div>
@@ -306,13 +320,55 @@
                 return true; // Asumimos que existe para evitar errores
             }
 
+            if (nFuncionario != "999999") {
+
+                try {
+                    const response = await fetch('/GestionUsuarios/CheckNumberIdExists', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ nFuncionario })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+
+                        if (data.success) {
+                            if (data.exists) {
+                                alert("El número de funcionario ya existe en el Directorio Activo.");
+                                document.getElementById('nFuncionario').value = "";
+                                return true; // Existe en el Directorio Activo
+                            } else {
+                                return false; // No existe en el Directorio Activo
+                            }
+                        } else {
+                            console.error("Error en la respuesta del servidor: " + data.message);
+                            alert("Error en la respuesta del servidor");
+                            document.getElementById('nFuncionario').value = "";
+                            return true; // Asumimos que existe si hay un error en el servidor
+                        }
+                    } else {
+                        console.error("Error al verificar el número de funcionario: " + response.statusText);
+                        return true; // Asumimos que existe si no hay una respuesta válida
+                    }
+                } catch (error) {
+                    console.error("Error al verificar el número de funcionario:", error);
+                    alert("Ocurrió un error al verificar el número de funcionario.");
+                    return true; // Asumimos que existe si hay un error
+                }
+            }
+        }
+
+        async function checkTelephoneExists() {
+            const nTelefono = document.getElementById("nTelefono").value.trim();
             try {
-                const response = await fetch('/GestionUsuarios/CheckNumberIdExists', {
+                const response = await fetch('/GestionUsuarios/CheckTelephoneExists', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ nFuncionario })
+                    body: JSON.stringify({ nTelefono })
                 });
 
                 if (response.ok) {
@@ -320,8 +376,8 @@
 
                     if (data.success) {
                         if (data.exists) {
-                            alert("El número de funcionario ya existe en el Directorio Activo.");
-                            document.getElementById('nFuncionario').value = "";
+                            alert("El número de teléfono ya existe en el directorio activo.");
+                            document.getElementById('nTelefono').value = "";
                             return true; // Existe en el Directorio Activo
                         } else {
                             return false; // No existe en el Directorio Activo
@@ -329,19 +385,20 @@
                     } else {
                         console.error("Error en la respuesta del servidor: " + data.message);
                         alert("Error en la respuesta del servidor");
-                        document.getElementById('nFuncionario').value = "";
+                        document.getElementById('nTelefono').value = "";
                         return true; // Asumimos que existe si hay un error en el servidor
                     }
                 } else {
-                    console.error("Error al verificar el número de funcionario: " + response.statusText);
+                    console.error("Error al verificar el número de telefono: " + response.statusText);
                     return true; // Asumimos que existe si no hay una respuesta válida
                 }
             } catch (error) {
-                console.error("Error al verificar el número de funcionario:", error);
-                alert("Ocurrió un error al verificar el número de funcionario.");
+                console.error("Error al verificar el número de teléfono:", error);
+                alert("Ocurrió un error al verificar el número de teléfono.");
                 return true; // Asumimos que existe si hay un error
             }
         }
+
 
 
         function createUser() {
@@ -355,12 +412,17 @@
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria').value;
             const departamento = document.getElementById('departamento').value;
+            const fechaCaducidadOp = document.getElementById('fechaCaducidadOp').value;
+            const fechaCaducidad = document.getElementById('fechaCaducidad').value;
+
+
 
             // Validar campos antes de enviar
-            if (!nombre || !apellido1 || !nTelefono || !username || !ouPrincipal || !ouSecundaria || !departamento) {
+            if (!nombre || !apellido1 || !nTelefono || !username || !ouPrincipal || !ouSecundaria || !departamento || !fechaCaducidadOp || !fechaCaducidad) {
                 alert('Por favor, complete todos los campos obligatorios.');
                 return;
             }
+
 
             // Enviar la solicitud
             fetch('/GestionUsuarios/CreateUser', {
@@ -377,7 +439,9 @@
                     nFuncionario: nFuncionario,
                     ouPrincipal: ouPrincipal,
                     ouSecundaria: ouSecundaria,
-                    departamento: departamento
+                    departamento: departamento,
+                    fechaCaducidadOp: fechaCaducidadOp,
+                    fechaCaducidad : fechaCaducidad
                 })
             })
                 .then(response => response.json())
