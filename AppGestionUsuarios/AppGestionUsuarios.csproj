@@ -7,8 +7,22 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <COMReference Include="DiskQuotaTypeLibrary">
+      <WrapperTool>tlbimp</WrapperTool>
+      <VersionMinor>0</VersionMinor>
+      <VersionMajor>1</VersionMajor>
+      <Guid>7988b57c-ec89-11cf-9c00-00aa00a14f56</Guid>
+      <Lcid>0</Lcid>
+      <Isolated>false</Isolated>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </COMReference>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CredentialManagement" Version="1.0.2" />
-    <PackageReference Include="EPPlus" Version="7.4.2" />
+    <PackageReference Include="EPPlus" Version="7.5.1" />
+    <PackageReference Include="Microsoft.PowerShell.Commands.Diagnostics" Version="7.4.6" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="9.0.0" />
     <PackageReference Include="System.DirectoryServices" Version="9.0.0" />
     <PackageReference Include="System.DirectoryServices.AccountManagement" Version="9.0.0" />
     <PackageReference Include="System.Management.Automation" Version="7.4.6" />
