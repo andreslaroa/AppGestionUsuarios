@@ -12,6 +12,8 @@ using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Collections.ObjectModel;
+using System.Management.Automation;
 
 
 [Authorize]
@@ -36,8 +38,16 @@ public class GestionUsuariosController : Controller
         public string Cuota { get; set; }
     }
 
+    public class userInputModel
+    {
+        public string Nombre { set; get; }
+        public string Apellido1 { set; get; }
+        public string Apellido2 { set; get; }
+    }
 
-    public GestionUsuariosController()
+
+
+        public GestionUsuariosController()
     {
         string filePath = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "ArchivoDePruebasOU.xlsx");
         _ouService = new OUService(filePath);
@@ -127,6 +137,75 @@ public class GestionUsuariosController : Controller
             // Manejo de errores
             return true; // Asumir que el usuario existe si hay un error
         }
+    }
+
+    [HttpPost]
+    public IActionResult GenerateUsername([FromBody] userInputModel userInput)
+    {
+        if (string.IsNullOrEmpty(userInput.Nombre) || string.IsNullOrEmpty(userInput.Apellido1) || string.IsNullOrEmpty(userInput.Apellido2))
+        {
+            return Json(new { success = true, username = "" });
+        }
+
+        try
+        {
+            // Normalizar y dividir los atributos
+            string[] nombrePartes = userInput.Nombre.Trim().ToLower().Split(' ');
+            string[] apellido1Partes = userInput.Apellido1.Trim().ToLower().Split(' ');
+            string[] apellido2Partes = string.IsNullOrEmpty(userInput.Apellido2)
+                ? new string[0]
+                : userInput.Apellido2.Trim().ToLower().Split(' ');
+
+            // Construcción de candidatos
+            List<string> candidatos = new List<string>();
+
+            // 1. Primera inicial del nombre, primer apellido completo, primera inicial del segundo apellido
+            string candidato1 = $"{GetInicial(nombrePartes)}{GetCompleto(apellido1Partes)}{GetInicial(apellido2Partes)}";
+            candidatos.Add(candidato1.Substring(0, Math.Min(12, candidato1.Length)));
+
+            // 2. Nombre completo (primera palabra completa y las iniciales de las demás), primera inicial del primer apellido, primera inicial del segundo apellido 
+            string candidato2 = $"{GetNombreCompuesto(nombrePartes)}{GetInicial(apellido1Partes)}{GetInicial(apellido2Partes)}";
+            candidatos.Add(candidato2.Substring(0, Math.Min(12, candidato2.Length)));
+
+            // 3. Primera inicial del nombre, primera inicial del primer apellido, segundo apellido completo
+            string candidato3 = $"{GetInicial(nombrePartes)}{GetInicial(apellido1Partes)}{GetCompleto(apellido2Partes)}";
+            candidatos.Add(candidato3.Substring(0, Math.Min(12, candidato3.Length)));
+
+            // Verificar la existencia de nombres de usuario
+            foreach (string candidato in candidatos)
+            {
+                if (!CheckUserInActiveDirectory(candidato))
+                {
+                    return Json(new { success = true, username = candidato });
+                }
+            }
+
+            // Si no se encuentra un nombre único
+            return Json(new { success = false, message = "No se pudo generar un nombre de usuario único." });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = $"Error al generar el nombre de usuario: {ex.Message}" });
+        }
+    }
+
+    // Función para obtener la inicial de la primera palabra
+    private string GetInicial(string[] partes)
+    {
+        return partes.Length > 0 ? partes[0][0].ToString() : "";
+    }
+
+    // Función para obtener el atributo completo (primera palabra completa y las iniciales de las demás)
+    private string GetNombreCompuesto(string[] partes)
+    {
+        if (partes.Length == 0) return "";
+        return partes[0] + string.Join("", partes.Skip(1).Select(p => p[0]));
+    }
+
+    // Función para obtener el atributo completo
+    private string GetCompleto(string[] partes)
+    {
+        return partes.Length > 0 ? string.Join("", partes) : "";
     }
 
     [HttpPost]
@@ -325,34 +404,27 @@ public class GestionUsuariosController : Controller
                     }
                     //Si decimos que no queremos fecha de caducidad, la creación de usuario por defecto pone a nunca la fecha de expiración
 
-
-
-                    //El texto comentado se usa para crear un directorio al usuario
-                    //string directorioRaiz = @"C:\Users\";
+                          
+                    //Cuando se realicen las pruebas reales descomentar esta zona de abajo que es la que crea el directorio de usuario en ribera y le asigna la cuota
 
                     //int cuotaMB = ObtenerCuotaEnMB(user.Cuota);
 
                     //try
                     //{
-                    //    string rutaUsuario = Path.Combine(directorioRaiz, user.Username);
+                        
 
-                    //    if (!Directory.Exists(rutaUsuario))
-                    //    {
-                    //        Directory.CreateDirectory(rutaUsuario);
-                    //    }
-                    //    else
-                    //    {
-                    //        return Json(new { success = false, message = $"Error al crear el directorio propio del usuario porque ya existe" });
-                    //    }
+                    //    var (success, message) = ConfigurarDirectorioYCuotaRemoto(user.Username, cuotaMB.ToString());
 
-                    //    ConfigurarCuota(rutaUsuario, cuotaMB);
+                    //    if (!success)
+                    //    {
+                    //        // Devolver el error desde la configuración de la cuota
+                    //        return Json(new { success = false, message = $"Error al configurar el directorio: {message}" });
+                    //    }
                     //}
                     //catch (Exception ex)
                     //{
                     //    return Json(new { success = false, message = $"Error al crear el directorio propio del usuario: {ex.Message}" });
                     //}
-
-
 
                     newUser.CommitChanges();
 
@@ -390,44 +462,51 @@ public class GestionUsuariosController : Controller
         }
     }
 
-    private void ConfigurarCuota(string rutaUsuario, int cuotaEnMB)
+    private (bool success, string message) ConfigurarDirectorioYCuotaRemoto( string username, string quota)
     {
         try
         {
-            // Convertir la cuota de MB a bytes
-            long cuotaEnBytes = cuotaEnMB * 1024L * 1024L;
+            // Script de PowerShell para ejecutar de forma remota en LEONARDO
+            string script = $@"
+        param(
+            [string]$nameUID,
+            [string]$quota
+        )
+        New-FsrmQuota -Path ('G:\HOME\' + $nameUID) -Template ('Users-' + $quota)
+        ";
 
-            // Configurar la cuota usando fsutil
-            var proceso = new System.Diagnostics.Process
+            // Configuración del comando remoto
+            string comandoRemoto = $@"
+        Invoke-Command -ComputerName ribera -ScriptBlock {{
+            {script}
+        }} -ArgumentList '{username}', '{quota}'
+        ";
+
+            using (PowerShell powerShell = PowerShell.Create())
             {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
+                powerShell.AddScript(comandoRemoto);
+
+                // Ejecutar el script
+                var result = powerShell.Invoke();
+
+                // Verificar errores en la ejecución
+                if (powerShell.Streams.Error.Count > 0)
                 {
-                    FileName = "fsutil",
-                    Arguments = $"quota enforce G: && quota modify {rutaUsuario} {cuotaEnBytes}",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
+                    var errores = powerShell.Streams.Error.Select(e => e.ToString()).ToList();
+                    return (false, string.Join("; ", errores));
                 }
-            };
 
-            proceso.Start();
-            string output = proceso.StandardOutput.ReadToEnd();
-            string error = proceso.StandardError.ReadToEnd();
-            proceso.WaitForExit();
-
-            if (proceso.ExitCode != 0)
-            {
-                throw new Exception($"Error al configurar la cuota: {error}");
+                return (true, "Directorio y cuota configurados exitosamente en LEONARDO.");
             }
-
-            Console.WriteLine($"Cuota de {cuotaEnMB} MB configurada exitosamente para el directorio: {rutaUsuario}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error al configurar la cuota: {ex.Message}");
+            return (false, $"Error en PowerShell: {ex.Message}");
         }
     }
+
+
+
 
     //Método para convertir el valor de la cuota a numérico
     private int ObtenerCuotaEnMB(string cuotaEnMB)

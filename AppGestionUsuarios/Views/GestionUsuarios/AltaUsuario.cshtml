@@ -263,54 +263,33 @@
             const apellido2 = document.getElementById('apellido2').value.trim();
             const usernameField = document.getElementById('username');
 
-            if (!nombre || !apellido1) {
-                usernameField.value = '';
-                return;
-            }
+            
 
-            let candidatos = [];
-            candidatos.push((nombre[0] + apellido1).substring(0, 12).toLowerCase());
-            if (apellido2) {
-                candidatos.push((nombre[0] + apellido1 + apellido2[0]).substring(0, 12).toLowerCase());
-            }
-            candidatos.push((nombre + apellido1.substring(0, 2) + (apellido2 ? apellido2.substring(0, 2) : '')).substring(0, 12).toLowerCase());
-
-            for (const candidato of candidatos) {
-                const existe = await checkUsernameExists(candidato);
-                if (!existe) {
-                    usernameField.value = candidato;
-                    usernameField.readOnly = true;
-                    return;
-                }
-            }
-
-            usernameField.readOnly = false;
-            usernameField.placeholder =
-                usernameField.placeholder = "Elija un nombre de usuario";
-        }
-
-        async function checkUsernameExists(username) {
             try {
-                const response = await fetch('/GestionUsuarios/CheckUsernameExists', {
+                const response = await fetch('/GestionUsuarios/GenerateUsername', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ username })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nombre, apellido1, apellido2 })
                 });
 
-                if (response.ok) {
-                    const exists = await response.json();
-                    return exists;
+                const data = await response.json();
+
+                if (data.success) {
+                    usernameField.value = data.username;
+                    usernameField.readOnly = true;
                 } else {
-                    console.error('Error al verificar el nombre de usuario');
-                    return true;
+                    alert(data.message || "Error al generar el nombre de usuario.");
+                    usernameField.value = '';
                 }
             } catch (error) {
-                console.error('Error al verificar el nombre de usuario:', error);
-                return true;
+                console.error("Error al generar el nombre de usuario:", error);
+                alert("Ocurrió un error inesperado.");
+                usernameField.value = '';
             }
         }
+
+
+       
 
         async function checkNumberIdExists() {
             const nFuncionario = document.getElementById('nFuncionario').value.trim();
