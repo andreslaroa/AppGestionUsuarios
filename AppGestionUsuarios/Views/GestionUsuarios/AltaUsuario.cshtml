@@ -179,8 +179,13 @@
             <button type="button" onclick="addGroup()">Añadir Grupo</button>
 
             <label for="gruposSeleccionados">Grupos Seleccionados:</label>
-            <textarea id="gruposSeleccionados" name="gruposSeleccionados" readonly style="height: 100px; width: 100%;"></textarea>
+            <select id="gruposSeleccionados" name="gruposSeleccionados" size="5">
+                <!-- Aquí se cargarán los grupos seleccionados -->
+            </select>
+
+            <button type="button" onclick="removeSelectedGroup()" style="margin-top: 10px;">Eliminar Grupo Seleccionado</button>
         </div>
+
 
 
 
@@ -413,18 +418,19 @@
             const fechaCaducidad = document.getElementById('fechaCaducidad').value;
             const cuota = document.getElementById('cuota').value;
 
-            // Grupos de checkboxes
+            // Recopilar grupos seleccionados de checkboxes
             const gruposCheckbox = Array.from(document.querySelectorAll('.checkbox-group input[type="checkbox"]:checked'))
                 .map(checkbox => checkbox.value);
 
-            // Grupos seleccionados en la lista desplegable
-            const gruposSeleccionadosTextarea = document.getElementById('gruposSeleccionados').value.split('\n').filter(g => g.trim() !== '');
+            // Recopilar grupos seleccionados de la lista desplegable
+            const gruposLista = Array.from(document.getElementById('gruposSeleccionados').options)
+                .map(option => option.value);
 
-            // Unir ambos arrays de grupos
-            const grupos = [...gruposCheckbox, ...gruposSeleccionadosTextarea];
+            // Unificar ambos arrays de grupos
+            const grupos = [...gruposCheckbox, ...gruposLista];
 
             // Validar campos antes de enviar
-            if (!nombre || !apellido1 || !apellido2 || !username || !ouPrincipal || !ouSecundaria || !departamento || !nTelefono || !nFuncionario || !fechaCaducidadOp || !cuota ) {
+            if (!nombre || !apellido1 || !username || !ouPrincipal || !ouSecundaria || !departamento) {
                 alert('Por favor, complete todos los campos obligatorios.');
                 return;
             }
@@ -446,7 +452,7 @@
                     fechaCaducidadOp,
                     fechaCaducidad,
                     cuota,
-                    grupos 
+                    grupos // Grupos unificados
                 })
             })
                 .then(response => response.json())
@@ -464,25 +470,55 @@
         }
 
 
+
         // Función para añadir un grupo a la lista seleccionada
         function addGroup() {
             const grupoDropdown = document.getElementById('grupoDropdown');
             const gruposSeleccionados = document.getElementById('gruposSeleccionados');
-            const grupoSeleccionado = grupoDropdown.value;
 
-            if (grupoSeleccionado) {
-                // Verificar si ya está seleccionado
-                const grupos = gruposSeleccionados.value.split('\n').filter(Boolean); // Split por líneas, eliminar vacíos
-                if (!grupos.includes(grupoSeleccionado)) {
-                    grupos.push(grupoSeleccionado);
-                    gruposSeleccionados.value = grupos.join('\n'); // Unir con saltos de línea
-                } else {
-                    alert("Este grupo ya ha sido añadido.");
-                }
-            } else {
-                alert("Seleccione un grupo de la lista.");
+            const grupo = grupoDropdown.value;
+            const grupoTexto = grupoDropdown.options[grupoDropdown.selectedIndex].text;
+
+            if (!grupo) {
+                alert("Por favor, seleccione un grupo válido.");
+                return;
+            }
+
+            // Evitar duplicados
+            const opcionesExistentes = Array.from(gruposSeleccionados.options).map(option => option.value);
+            if (opcionesExistentes.includes(grupo)) {
+                alert("Este grupo ya está en la lista.");
+                return;
+            }
+
+            // Añadir el grupo a la lista de seleccionados
+            const opcion = document.createElement('option');
+            opcion.value = grupo;
+            opcion.textContent = grupoTexto;
+            gruposSeleccionados.appendChild(opcion);
+
+            // Limpiar el dropdown
+            grupoDropdown.value = "";
+        }
+
+        // Función para eliminar el grupo seleccionado al hacer clic en el botón
+        function removeSelectedGroup() {
+            const gruposSeleccionados = document.getElementById('gruposSeleccionados');
+
+            if (gruposSeleccionados.selectedIndex === -1) {
+                alert("Por favor, seleccione un grupo para eliminar.");
+                return;
+            }
+
+            const opcionSeleccionada = gruposSeleccionados.options[gruposSeleccionados.selectedIndex];
+            const confirmar = confirm(`¿Está seguro de que desea eliminar el grupo "${opcionSeleccionada.text}" de la lista?`);
+
+            if (confirmar) {
+                gruposSeleccionados.remove(gruposSeleccionados.selectedIndex);
             }
         }
+
+
 
 
         
