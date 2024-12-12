@@ -17,17 +17,22 @@
         }
 
         form {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
             background: #ffffff;
             padding: 20px;
             margin: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 450px;
+            max-width: 1200px;
         }
 
-            form div {
-                margin-bottom: 15px;
+            form .field-group, form .checkbox-group {
+                flex: 1;
+                min-width: 300px;
+                margin-right: 20px;
             }
 
         label {
@@ -37,16 +42,15 @@
             font-weight: bold;
         }
 
-        select, input[type="text"], button {
+        select, input[type="text"], input[type="number"], input[type="date"], button {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
             background: #f9f9f9;
-            cursor: pointer;
         }
 
-            select:focus, input[type="text"]:focus {
+            select:focus, input:focus {
                 outline: none;
                 border-color: #007bff;
                 box-shadow: 0 0 4px rgba(0, 123, 255, 0.25);
@@ -56,16 +60,34 @@
             background-color: #007bff;
             color: white;
             border: none;
+            cursor: pointer;
         }
 
             button:hover {
                 background-color: #0056b3;
             }
+
+        .checkbox-group label {
+            font-weight: normal;
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            margin-right: 10px;
+        }
+
+        h4 {
+            margin-top: 0;
+            color: #333;
+        }
     </style>
 </head>
 <body>
     <form id="ouForm">
-        <div>
+        <!-- Campos principales -->
+        <div class="field-group">
             <label for="ouPrincipal">OU Principal:</label>
             <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamentos();">
                 <option value="">Seleccione una OU Principal</option>
@@ -74,85 +96,53 @@
                     <option value="@ou">@ou</option>
                 }
             </select>
-        </div>
 
-        <div>
             <label for="nFuncionario">Nº Funcionario:</label>
             <input type="text" id="nFuncionario" name="nFuncionario" onchange="checkNumberIdExists()" />
-        </div>
 
-        <div>
             <label for="nombre">Nombre:</label>
             <input type="text" id="nombre" name="nombre" oninput="generateUsername()" />
-        </div>
 
-        <div>
             <label for="apellido1">Apellido 1:</label>
             <input type="text" id="apellido1" name="apellido1" oninput="generateUsername()" />
-        </div>
 
-        <div>
             <label for="apellido2">Apellido 2:</label>
             <input type="text" id="apellido2" name="apellido2" oninput="generateUsername()" />
-        </div>
 
-        <div>
-            <label for="nTelefono">Extension de telefono:</label>
-            <input type="text" id="nTelefono" name="nTelefono"  oninput="checkTelephoneExists()"/>
-        </div>
+            <label for="nTelefono">Extensión de teléfono:</label>
+            <input type="text" id="nTelefono" name="nTelefono" oninput="checkTelephoneExists()" />
 
-        <div>
             <label for="username">Nombre de Usuario:</label>
             <input type="text" id="username" name="username" readonly />
         </div>
 
-        <div>
+        <!-- Más campos principales -->
+        <div class="field-group">
             <label for="ouSecundaria">OU Secundaria:</label>
             <select id="ouSecundaria" name="ouSecundaria">
                 <option value="">Seleccione una OU Secundaria</option>
             </select>
-        </div>
 
-        <div>
             <label for="departamento">Departamento:</label>
             <select id="departamento" name="departamento" onchange="fetchLugarEnvio()">
                 <option value="">Seleccione un departamento</option>
             </select>
-        </div>
 
-        <div>
             <label for="lugarEnvio">Lugar de Envío:</label>
             <select id="lugarEnvio" name="lugarEnvio">
                 <option value="">Seleccione un lugar de envío</option>
             </select>
-        </div>
 
-
-        <div>
             <label for="fechaCaducidadOp">Fecha de Caducidad:</label>
-            <select id="fechaCaducidadOp"  name="fechaCaducidadOp">
+            <select id="fechaCaducidadOp" name="fechaCaducidadOp">
                 <option value="si">Sí</option>
                 <option value="no">No</option>
             </select>
-        </div>
 
-        <div >
             <label for="fechaCaducidad">Fecha de Caducidad:</label>
             <input type="date" id="fechaCaducidad" name="fechaCaducidad" />
-        </div>
 
-        <div>
-            <label for="portalEmpleado">Portal Empleado:</label>
-            <select id="portalEmpleado" name="portalEmpleado">
-                <option value="">Seleccione si desea crear un portal del empleado</option>
-                @foreach (var portal in ViewBag.portalEmpleado as List<string>)
-                {
-                    <option value="@portal">@portal</option>
-                }
-            </select>
-        </div>
-
-        <div>
+            
             <label for="cuota">Cuota del usuario:</label>
             <select id="cuota" name="cuota">
                 <option value="">Seleccione la cuota para el usuario</option>
@@ -163,12 +153,41 @@
             </select>
         </div>
 
-        <div>
-            <button type="button" onclick="createUser()">Crear Usuario</button>
+        <!-- Checkboxes de grupos, cualquiera de los grupos comunes se mete aquí-->
+        <div class="checkbox-group">
+            <h4>Grupos de usuarios</h4>
+            <label>
+                <input type="checkbox" id="grupoInternet" name="grupoInternet" value="Internet" />
+                Grupo Internet
+            </label>
+            <label>
+                <input type="checkbox" id="grupoPortalEmpleado" name="grupoPortalEmpleado" value="GA_R_PORTALDELEMPLEADO" />
+                Portal del empleado
+            </label>
         </div>
 
-        
+        <div class="field-group">
+            <label for="grupoDropdown">Seleccionar Grupos:</label>
+            <select id="grupoDropdown" name="grupoDropdown">
+                <option value="">Seleccione un grupo</option>
+                @foreach (var grupo in ViewBag.GruposAD as List<string>)
+                {
+                    <option value="@grupo">@grupo</option>
+                }
+            </select>
 
+            <button type="button" onclick="addGroup()">Añadir Grupo</button>
+
+            <label for="gruposSeleccionados">Grupos Seleccionados:</label>
+            <textarea id="gruposSeleccionados" name="gruposSeleccionados" readonly style="height: 100px; width: 100%;"></textarea>
+        </div>
+
+
+
+        <!-- Botón de envío -->
+        <div style="width: 100%; margin-top: 20px;">
+            <button type="button" onclick="createUser()">Crear Usuario</button>
+        </div>
     </form>
 
     <script>
@@ -381,12 +400,11 @@
 
 
         function createUser() {
-            // Recoger los valores del formulario
             const nombre = document.getElementById('nombre').value.trim();
             const apellido1 = document.getElementById('apellido1').value.trim();
             const apellido2 = document.getElementById('apellido2').value.trim();
-            const nTelefono = document.getElementById('nTelefono').value.trim();
             const username = document.getElementById('username').value.trim();
+            const nTelefono = document.getElementById('nTelefono').value.trim();
             const nFuncionario = document.getElementById('nFuncionario').value.trim();
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria').value;
@@ -395,34 +413,40 @@
             const fechaCaducidad = document.getElementById('fechaCaducidad').value;
             const cuota = document.getElementById('cuota').value;
 
+            // Grupos de checkboxes
+            const gruposCheckbox = Array.from(document.querySelectorAll('.checkbox-group input[type="checkbox"]:checked'))
+                .map(checkbox => checkbox.value);
 
+            // Grupos seleccionados en la lista desplegable
+            const gruposSeleccionadosTextarea = document.getElementById('gruposSeleccionados').value.split('\n').filter(g => g.trim() !== '');
+
+            // Unir ambos arrays de grupos
+            const grupos = [...gruposCheckbox, ...gruposSeleccionadosTextarea];
 
             // Validar campos antes de enviar
-            if (!nombre || !apellido1 || !nTelefono || !username || !ouPrincipal || !ouSecundaria || !departamento || !fechaCaducidadOp || !fechaCaducidad || !cuota) {
+            if (!nombre || !apellido1 || !apellido2 || !username || !ouPrincipal || !ouSecundaria || !departamento || !nTelefono || !nFuncionario || !fechaCaducidadOp || !cuota ) {
                 alert('Por favor, complete todos los campos obligatorios.');
                 return;
             }
 
-
-            // Enviar la solicitud
+            // Enviar datos al controlador
             fetch('/GestionUsuarios/CreateUser', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    nombre: nombre,
-                    apellido1: apellido1,
-                    apellido2: apellido2,
-                    nTelefono: nTelefono,
-                    username: username,
-                    nFuncionario: nFuncionario,
-                    ouPrincipal: ouPrincipal,
-                    ouSecundaria: ouSecundaria,
-                    departamento: departamento,
-                    fechaCaducidadOp: fechaCaducidadOp,
-                    fechaCaducidad : fechaCaducidad,
-                    cuota : cuota
+                    nombre,
+                    apellido1,
+                    apellido2,
+                    username,
+                    nTelefono,
+                    nFuncionario,
+                    ouPrincipal,
+                    ouSecundaria,
+                    departamento,
+                    fechaCaducidadOp,
+                    fechaCaducidad,
+                    cuota,
+                    grupos 
                 })
             })
                 .then(response => response.json())
@@ -430,7 +454,7 @@
                     if (data.success) {
                         alert('Usuario creado exitosamente.');
                     } else {
-                        alert('Error al crear el usuario: ' + data.message);
+                        alert(`Error al crear el usuario: ${data.message}`);
                     }
                 })
                 .catch(error => {
@@ -438,6 +462,28 @@
                     alert('Ocurrió un error al crear el usuario.');
                 });
         }
+
+
+        // Función para añadir un grupo a la lista seleccionada
+        function addGroup() {
+            const grupoDropdown = document.getElementById('grupoDropdown');
+            const gruposSeleccionados = document.getElementById('gruposSeleccionados');
+            const grupoSeleccionado = grupoDropdown.value;
+
+            if (grupoSeleccionado) {
+                // Verificar si ya está seleccionado
+                const grupos = gruposSeleccionados.value.split('\n').filter(Boolean); // Split por líneas, eliminar vacíos
+                if (!grupos.includes(grupoSeleccionado)) {
+                    grupos.push(grupoSeleccionado);
+                    gruposSeleccionados.value = grupos.join('\n'); // Unir con saltos de línea
+                } else {
+                    alert("Este grupo ya ha sido añadido.");
+                }
+            } else {
+                alert("Seleccione un grupo de la lista.");
+            }
+        }
+
 
         
 
