@@ -106,6 +106,45 @@ public class GestionUsuariosController : Controller
         return View();
     }
 
+    [HttpGet]
+    public IActionResult HabilitarDeshabilitarUsuario()
+    {
+        try
+        {
+            // Obtener todos los usuarios del directorio activo
+            using (var entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
+            {
+                using (var searcher = new DirectorySearcher(entry))
+                {
+                    searcher.Filter = "(objectClass=user)";
+                    searcher.PropertiesToLoad.Add("displayName");
+                    searcher.PropertiesToLoad.Add("sAMAccountName");
+                    searcher.SearchScope = SearchScope.Subtree;
+
+                    var usuarios = new List<string>();
+
+                    foreach (SearchResult result in searcher.FindAll())
+                    {
+                        if (result.Properties.Contains("displayName") && result.Properties.Contains("sAMAccountName"))
+                        {
+                            string displayName = result.Properties["displayName"][0].ToString();
+                            string samAccountName = result.Properties["sAMAccountName"][0].ToString();
+                            usuarios.Add($"{displayName} ({samAccountName})");
+                        }
+                    }
+
+                    ViewBag.Usuarios = usuarios.OrderBy(u => u).ToList(); // Ordenar alfabéticamente
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ViewBag.Usuarios = new List<string>();
+            Console.WriteLine($"Error al cargar los usuarios: {ex.Message}");
+        }
+
+        return View();
+    }
 
 
 
@@ -502,6 +541,8 @@ public class GestionUsuariosController : Controller
 
                     newUser.CommitChanges();
 
+                    //Falta la creación del correo electrónico
+
                 }
                 catch (Exception ex)
                 {
@@ -656,5 +697,98 @@ public class GestionUsuariosController : Controller
     }
 
 
-   
+
+    [HttpPost]
+    public IActionResult ManageUserStatus([FromBody] Dictionary<string, string> requestData)
+    {
+        if (requestData == null || !requestData.ContainsKey("username") || !requestData.ContainsKey("action"))
+        {
+            return Json(new { success = false, message = "Datos inválidos. Se requiere el usuario y la acción." });
+        }
+
+        string input = requestData["username"];
+        string action = requestData["action"].ToLower();
+
+        try
+        {
+            // Extraer el nombre de usuario entre paréntesis
+            var username = ExtractUsername(input);
+
+            if (string.IsNullOrEmpty(username))
+            {
+                return Json(new { success = false, message = "El formato del usuario seleccionado no es válido." });
+            }
+
+            // Buscar al usuario en el Directorio Activo
+            string ldapPath = $"LDAP://DC=aytosa,DC=inet";
+            using (DirectoryEntry root = new DirectoryEntry(ldapPath))
+            {
+                using (DirectorySearcher searcher = new DirectorySearcher(root))
+                {
+                    searcher.Filter = $"(&(objectClass=user)(sAMAccountName={username}))";
+                    searcher.SearchScope = SearchScope.Subtree;
+                    searcher.PropertiesToLoad.Add("userAccountControl");
+
+                    SearchResult result = searcher.FindOne();
+
+                    if (result == null)
+                    {
+                        return Json(new { success = false, message = $"Usuario {username} no encontrado." });
+                    }
+
+                    using (DirectoryEntry userEntry = result.GetDirectoryEntry())
+                    {
+                        int userAccountControl = (int)userEntry.Properties["userAccountControl"].Value;
+
+                        if (action == "enable")
+                        {
+                            // Quitar el flag "AccountDisabled" (0x2)
+                            userAccountControl &= ~0x2;
+                        }
+                        else if (action == "disable")
+                        {
+                            // Agregar el flag "AccountDisabled" (0x2)
+                            userAccountControl |= 0x2;
+                        }
+                        else
+                        {
+                            return Json(new { success = false, message = "Acción no válida. Use 'enable' o 'disable'." });
+                        }
+
+                        userEntry.Properties["userAccountControl"].Value = userAccountControl;
+                        userEntry.CommitChanges();
+
+                        return Json(new { success = true, message = $"Usuario {username} {(action == "enable" ? "habilitado" : "deshabilitado")} correctamente." });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = $"Error al realizar la acción: {ex.Message}" });
+        }
+    }
+
+    // Función para extraer el nombre de usuario entre paréntesis
+    private string ExtractUsername(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return null;
+        }
+
+        int startIndex = input.LastIndexOf('(');
+        int endIndex = input.LastIndexOf(')');
+
+        if (startIndex >= 0 && endIndex > startIndex)
+        {
+            return input.Substring(startIndex + 1, endIndex - startIndex - 1).Trim();
+        }
+
+        return null;
+    }
+
+
+
+
 }
