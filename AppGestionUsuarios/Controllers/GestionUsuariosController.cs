@@ -111,7 +111,9 @@ public class GestionUsuariosController : Controller
     {
         try
         {
-            // Obtener todos los usuarios del directorio activo
+            // Establecer el límite de resultados por página
+            int pageSize = 1000; // Puedes cambiarlo si el servidor tiene un límite diferente
+
             using (var entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
             {
                 using (var searcher = new DirectorySearcher(entry))
@@ -120,6 +122,9 @@ public class GestionUsuariosController : Controller
                     searcher.PropertiesToLoad.Add("displayName");
                     searcher.PropertiesToLoad.Add("sAMAccountName");
                     searcher.SearchScope = SearchScope.Subtree;
+
+                    // Habilitar la paginación
+                    searcher.PageSize = pageSize;
 
                     var usuarios = new List<string>();
 
@@ -145,6 +150,8 @@ public class GestionUsuariosController : Controller
 
         return View();
     }
+
+
 
 
 
