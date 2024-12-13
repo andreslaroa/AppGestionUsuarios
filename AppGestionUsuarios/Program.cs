@@ -1,8 +1,24 @@
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+
 internal class Program
 {
     private static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+
+        // Configurar Kestrel para escuchar en puertos específicos
+        builder.WebHost.ConfigureKestrel(options =>
+        {
+            options.ListenAnyIP(8081, listenOptions =>
+            {
+                listenOptions.Protocols = HttpProtocols.Http1;
+            });
+            options.ListenAnyIP(8082, listenOptions =>
+            {
+                listenOptions.Protocols = HttpProtocols.Http1;
+                listenOptions.UseHttps(); // Habilitar HTTPS en el puerto 8082
+            });
+        });
 
         // Agregar servicios de autenticación por cookies
         builder.Services.AddAuthentication("CookieAuth")
@@ -12,12 +28,12 @@ internal class Program
                 options.AccessDeniedPath = "/InicioSesion/Error"; // Ruta en caso de acceso denegado
             });
 
-        builder.Services.AddAuthorization(); //Usar autenticación en la aplicación
+        builder.Services.AddAuthorization(); // Usar autenticación en la aplicación
         builder.Services.AddControllersWithViews();
-
 
         var app = builder.Build();
 
+        // Middleware
         app.UseHttpsRedirection();
         app.UseStaticFiles();
 
@@ -33,7 +49,6 @@ internal class Program
 
         app.Run();
 
-        builder.Logging.AddEventLog(); //Registro del proveedor del visor de eventos
-
+        builder.Logging.AddEventLog(); // Registro del proveedor del visor de eventos
     }
 }
