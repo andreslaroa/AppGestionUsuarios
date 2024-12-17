@@ -1,0 +1,214 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modificar Grupos del Usuario</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+
+        form {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        select, button, ul, input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+        }
+
+            button:hover {
+                background-color: #0056b3;
+            }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+            background-color: #f9f9f9;
+        }
+
+            ul li {
+                margin: 5px 0;
+                padding: 5px;
+                background-color: #e9ecef;
+                border-radius: 4px;
+                display: flex;
+                justify-content: space-between;
+            }
+
+                ul li button {
+                    background-color: #dc3545;
+                    color: white;
+                    border: none;
+                    padding: 5px;
+                    margin-left: 10px;
+                    border-radius: 4px;
+                }
+
+                    ul li button:hover {
+                        background-color: #c82333;
+                    }
+    </style>
+</head>
+<body>
+    <form id="userGroupsForm">
+        <label for="userDropdown">Seleccionar Usuario:</label>
+        <select id="userDropdown">
+            <option value="">Seleccione un usuario</option>
+            @foreach (var user in ViewBag.Users as List<string>)
+            {
+                <option value="@user">@user</option>
+            }
+        </select>
+
+        <!-- Botón y campo de texto para usuario seleccionado -->
+        <button type="button" onclick="selectUser()">Seleccionar Usuario</button>
+        <label for="selectedUser">Usuario Seleccionado:</label>
+        <input type="text" id="selectedUser" readonly />
+
+        <button type="button" onclick="fetchUserGroups()">Mostrar Grupos</button>
+
+        <h3>Grupos del Usuario</h3>
+        <ul id="groupList">
+            <!-- Los grupos se cargarán dinámicamente -->
+        </ul>
+
+        <label for="availableGroupsDropdown">Añadir a un Grupo:</label>
+        <select id="availableGroupsDropdown">
+            <option value="">Seleccione un grupo para añadir</option>
+            @foreach (var group in ViewBag.GruposAD as List<string>)
+            {
+                <option value="@group">@group</option>
+            }
+        </select>
+        <button type="button" onclick="addUserToGroup()">Añadir Grupo</button>
+    </form>
+
+    <script>
+        function selectUser() {
+            const dropdown = document.getElementById("userDropdown");
+            const selectedUser = dropdown.value;
+            document.getElementById("selectedUser").value = selectedUser;
+        }
+
+        async function fetchUserGroups() {
+            const username = document.getElementById("selectedUser").value;
+
+            if (!username) {
+                alert("Por favor, seleccione un usuario.");
+                return;
+            }
+
+            try {
+                const response = await fetch('/GestionUsuarios/GetUserGroups', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const groupList = document.getElementById("groupList");
+                    groupList.innerHTML = ""; // Limpiar la lista de grupos
+
+                    data.groups.forEach(group => {
+                        const li = document.createElement("li");
+                        li.textContent = group;
+
+                        const removeButton = document.createElement("button");
+                        removeButton.textContent = "Eliminar";
+                        removeButton.type = "button"; // Evitar submit del formulario
+                        removeButton.onclick = () => removeUserFromGroup(username, group);
+
+                        li.appendChild(removeButton);
+                        groupList.appendChild(li);
+                    });
+                } else {
+                    alert(data.message);
+                }
+            } catch (error) {
+                console.error("Error al obtener grupos del usuario:", error);
+                alert("Ocurrió un error al obtener los grupos del usuario.");
+            }
+        }
+
+        async function addUserToGroup() {
+            const group = document.getElementById("availableGroupsDropdown").value;
+            const username = document.getElementById("selectedUser").value;
+
+            if (!group || !username) {
+                alert("Seleccione un usuario y un grupo para añadir.");
+                return;
+            }
+
+            try {
+                const response = await fetch('/GestionUsuarios/ModifyUserGroup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, group, action: 'add' })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(data.message);
+                    fetchUserGroups(); // Refrescar la lista de grupos sin recargar la página
+                } else {
+                    alert(data.message);
+                }
+            } catch (error) {
+                console.error("Error al añadir grupo al usuario:", error);
+                alert("Ocurrió un error al añadir el grupo al usuario.");
+            }
+        }
+
+        async function removeUserFromGroup(username, group) {
+            if (!confirm(`¿Está seguro de que desea eliminar al usuario del grupo ${group}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/GestionUsuarios/ModifyUserGroup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, group, action: 'remove' })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(data.message);
+                    fetchUserGroups(); // Refrescar la lista de grupos sin recargar la página
+                } else {
+                    alert(data.message);
+                }
+            } catch (error) {
+                console.error("Error al eliminar grupo del usuario:", error);
+                alert("Ocurrió un error al eliminar el grupo del usuario.");
+            }
+        }
+    </script>
+</body>
+</html>
