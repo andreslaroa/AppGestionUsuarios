@@ -3,28 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modificar Grupos del Usuario</title>
+    <title>Modificar Usuario</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
             background-color: #f5f5f5;
+            margin: 20px;
         }
 
         form {
-            background: #ffffff;
+            background-color: #ffffff;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            margin: auto;
         }
 
         label {
             display: block;
             margin-bottom: 5px;
+            font-weight: bold;
             color: #333;
         }
 
-        select, button, ul, input {
+        select, input, button {
             width: 100%;
             padding: 10px;
             margin-bottom: 10px;
@@ -36,6 +39,7 @@
             background-color: #007bff;
             color: white;
             border: none;
+            cursor: pointer;
         }
 
             button:hover {
@@ -43,27 +47,25 @@
             }
 
         ul {
-            list-style-type: none;
+            list-style: none;
             padding: 0;
             background-color: #f9f9f9;
         }
 
             ul li {
-                margin: 5px 0;
-                padding: 5px;
-                background-color: #e9ecef;
-                border-radius: 4px;
                 display: flex;
                 justify-content: space-between;
+                padding: 5px;
+                margin-bottom: 5px;
+                background-color: #e9ecef;
+                border-radius: 4px;
             }
 
                 ul li button {
                     background-color: #dc3545;
                     color: white;
                     border: none;
-                    padding: 5px;
-                    margin-left: 10px;
-                    border-radius: 4px;
+                    cursor: pointer;
                 }
 
                     ul li button:hover {
@@ -72,7 +74,8 @@
     </style>
 </head>
 <body>
-    <form id="userGroupsForm">
+    <form id="modifyUserForm">
+        <!-- Selección de Usuario -->
         <label for="userDropdown">Seleccionar Usuario:</label>
         <select id="userDropdown">
             <option value="">Seleccione un usuario</option>
@@ -81,18 +84,14 @@
                 <option value="@user">@user</option>
             }
         </select>
-
-        <!-- Botón y campo de texto para usuario seleccionado -->
         <button type="button" onclick="selectUser()">Seleccionar Usuario</button>
+
         <label for="selectedUser">Usuario Seleccionado:</label>
         <input type="text" id="selectedUser" readonly />
 
-        <button type="button" onclick="fetchUserGroups()">Mostrar Grupos</button>
-
+        <!-- Gestión de Grupos -->
         <h3>Grupos del Usuario</h3>
-        <ul id="groupList">
-            <!-- Los grupos se cargarán dinámicamente -->
-        </ul>
+        <ul id="groupList"></ul>
 
         <label for="availableGroupsDropdown">Añadir a un Grupo:</label>
         <select id="availableGroupsDropdown">
@@ -103,57 +102,73 @@
             }
         </select>
         <button type="button" onclick="addUserToGroup()">Añadir Grupo</button>
+
+        <!-- Gestión de OUs -->
+        <h3>Cambiar OU y Departamento</h3>
+
+        <label for="ouPrincipal">Nueva OU Principal:</label>
+        <select id="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamentos();">
+            <option value="">Seleccione una OU Principal</option>
+            @foreach (var ou in ViewBag.OUPrincipales as List<string>)
+            {
+                <option value="@ou">@ou</option>
+            }
+        </select>
+
+        <label for="ouSecundaria">Nueva OU Secundaria:</label>
+        <select id="ouSecundaria">
+            <option value="">Seleccione una OU Secundaria</option>
+        </select>
+
+        <label for="departamento">Nuevo Departamento:</label>
+        <select id="departamento">
+            <option value="">Seleccione un departamento</option>
+        </select>
+
+        <button type="button" onclick="modifyUserOU()">Guardar Cambios de OU</button>
     </form>
 
     <script>
+        // Seleccionar Usuario
         function selectUser() {
             const dropdown = document.getElementById("userDropdown");
-            const selectedUser = dropdown.value;
-            document.getElementById("selectedUser").value = selectedUser;
+            document.getElementById("selectedUser").value = dropdown.value;
+            fetchUserGroups();
         }
 
+        // Obtener Grupos del Usuario
         async function fetchUserGroups() {
             const username = document.getElementById("selectedUser").value;
+            if (!username) return;
 
-            if (!username) {
-                alert("Por favor, seleccione un usuario.");
-                return;
-            }
+            const response = await fetch('/GestionUsuarios/GetUserGroups', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
 
-            try {
-                const response = await fetch('/GestionUsuarios/GetUserGroups', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username })
+            const data = await response.json();
+            const groupList = document.getElementById("groupList");
+            groupList.innerHTML = "";
+
+            if (data.success) {
+                data.groups.forEach(group => {
+                    const li = document.createElement("li");
+                    li.textContent = group;
+
+                    const removeBtn = document.createElement("button");
+                    removeBtn.textContent = "Eliminar";
+                    removeBtn.onclick = (e) => removeUserFromGroup(e, group); // Pasar el evento y el grupo
+                    li.appendChild(removeBtn);
+
+                    groupList.appendChild(li);
                 });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    const groupList = document.getElementById("groupList");
-                    groupList.innerHTML = ""; // Limpiar la lista de grupos
-
-                    data.groups.forEach(group => {
-                        const li = document.createElement("li");
-                        li.textContent = group;
-
-                        const removeButton = document.createElement("button");
-                        removeButton.textContent = "Eliminar";
-                        removeButton.type = "button"; // Evitar submit del formulario
-                        removeButton.onclick = () => removeUserFromGroup(username, group);
-
-                        li.appendChild(removeButton);
-                        groupList.appendChild(li);
-                    });
-                } else {
-                    alert(data.message);
-                }
-            } catch (error) {
-                console.error("Error al obtener grupos del usuario:", error);
-                alert("Ocurrió un error al obtener los grupos del usuario.");
+            } else {
+                alert(data.message);
             }
         }
 
+        // Añadir Grupo
         async function addUserToGroup() {
             const group = document.getElementById("availableGroupsDropdown").value;
             const username = document.getElementById("selectedUser").value;
@@ -184,7 +199,12 @@
             }
         }
 
-        async function removeUserFromGroup(username, group) {
+        // Eliminar Grupo
+        async function removeUserFromGroup(event, group) {
+            event.preventDefault(); // Prevenir recarga de la página
+
+            const username = document.getElementById("selectedUser").value;
+
             if (!confirm(`¿Está seguro de que desea eliminar al usuario del grupo ${group}?`)) {
                 return;
             }
@@ -207,6 +227,93 @@
             } catch (error) {
                 console.error("Error al eliminar grupo del usuario:", error);
                 alert("Ocurrió un error al eliminar el grupo del usuario.");
+            }
+        }
+
+        // Cargar OUs Secundarias
+        function fetchOUSecundarias() {
+            const ouPrincipal = document.getElementById('ouPrincipal').value;
+            const ouSecundaria = document.getElementById('ouSecundaria');
+            ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria</option>';
+
+            if (ouPrincipal) {
+                fetch('/GestionUsuarios/GetOUSecundarias', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ouPrincipal })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        data.forEach(ou => {
+                            const option = document.createElement('option');
+                            option.value = ou;
+                            option.textContent = ou;
+                            ouSecundaria.appendChild(option);
+                        });
+                    })
+                    .catch(error => console.error('Error al obtener las OUs secundarias:', error));
+            }
+        }
+
+        // Cargar Departamentos
+        function fetchDepartamentos() {
+            const ouPrincipal = document.getElementById('ouPrincipal').value;
+            const departamento = document.getElementById('departamento');
+            departamento.innerHTML = '<option value="">Seleccione un departamento</option>';
+
+            if (ouPrincipal) {
+                fetch('/GestionUsuarios/GetDepartamentos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ouPrincipal })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        data.forEach(dep => {
+                            const option = document.createElement('option');
+                            option.value = dep;
+                            option.textContent = dep;
+                            departamento.appendChild(option);
+                        });
+                    })
+                    .catch(error => console.error('Error al obtener los departamentos:', error));
+            }
+        }
+
+        // Modificar OU del Usuario
+        async function modifyUserOU() {
+            const username = document.getElementById("selectedUser").value;
+            const ouPrincipal = document.getElementById("ouPrincipal").value;
+            const ouSecundaria = document.getElementById("ouSecundaria").value;
+            const departamento = document.getElementById("departamento").value;
+
+            if (!username || !ouPrincipal || !ouSecundaria || !departamento) {
+                alert("Por favor, complete todos los campos de OU y Departamento.");
+                return;
+            }
+
+            try {
+                const response = await fetch('/GestionUsuarios/ModifyUserOU', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username,
+                        ouPrincipal,
+                        ouSecundaria,
+                        departamento
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(data.message);
+                } else {
+                    alert(data.message);
+                }
+            } catch (error) {
+                console.error("Error al modificar OU del usuario:", error);
+                alert("Ocurrió un error al modificar la OU del usuario.");
             }
         }
     </script>
