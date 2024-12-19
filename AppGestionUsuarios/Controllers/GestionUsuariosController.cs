@@ -1019,47 +1019,52 @@ public class GestionUsuariosController : Controller
     }
 
 
-
-
-
-
-
-
     [HttpPost]
     public IActionResult ModifyUserOU([FromBody] Dictionary<string, string> requestData)
     {
-        if (requestData == null || !requestData.ContainsKey("username") || !requestData.ContainsKey("ou"))
-            return Json(new { success = false, message = "Datos insuficientes para modificar la OU." });
+        if (requestData == null ||
+            !requestData.ContainsKey("username") ||
+            !requestData.ContainsKey("ouPrincipal") ||
+            !requestData.ContainsKey("ouSecundaria") ||
+            !requestData.ContainsKey("departamento"))
+        {
+            return Json(new { success = false, message = "Faltan datos para modificar la OU." });
+        }
 
-        string username = requestData["username"];
-        string newOU = requestData["ou"];
+        string username = ExtractUsername(requestData["username"]);
+        string ouPrincipal = requestData["ouPrincipal"];
+        string ouSecundaria = requestData["ouSecundaria"];
+        string departamento = requestData["departamento"];
 
         try
         {
-            string newLDAPPath = $"LDAP://OU={newOU},DC=aytosa,DC=inet";
+            string newLDAPPath = $"LDAP://OU={ouSecundaria},OU=Usuarios y Grupos,OU={ouPrincipal},DC=aytosa,DC=inet";
+
             using (var context = new PrincipalContext(ContextType.Domain))
             {
                 using (var user = UserPrincipal.FindByIdentity(context, username))
                 {
                     if (user == null)
+                    {
                         return Json(new { success = false, message = "Usuario no encontrado." });
+                    }
 
                     using (var directoryUser = (DirectoryEntry)user.GetUnderlyingObject())
                     {
                         directoryUser.MoveTo(new DirectoryEntry(newLDAPPath));
+                        directoryUser.Properties["physicalDeliveryOfficeName"].Value = departamento;
                         directoryUser.CommitChanges();
                     }
                 }
             }
-            return Json(new { success = true, message = "Usuario movido a la nueva OU correctamente." });
+
+            return Json(new { success = true, message = "OU del usuario modificada correctamente." });
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = $"Error al mover usuario a la OU: {ex.Message}" });
+            return Json(new { success = false, message = $"Error al modificar la OU: {ex.Message}" });
         }
     }
-
-
 
 
 }
