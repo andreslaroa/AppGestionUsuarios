@@ -88,18 +88,7 @@
     <form id="ouForm">
         <!-- Campos principales -->
         <div class="field-group">
-            <label for="ouPrincipal">OU Principal:</label>
-            <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamentos();">
-                <option value="">Seleccione una OU Principal</option>
-                @foreach (var ou in ViewBag.OUPrincipales as List<string>)
-                {
-                    <option value="@ou">@ou</option>
-                }
-            </select>
-
-            <label for="nFuncionario">Nº Funcionario:</label>
-            <input type="text" id="nFuncionario" name="nFuncionario" onchange="checkNumberIdExists()" />
-
+            
             <label for="nombre">Nombre:</label>
             <input type="text" id="nombre" name="nombre" oninput="generateUsername()" />
 
@@ -109,15 +98,29 @@
             <label for="apellido2">Apellido 2:</label>
             <input type="text" id="apellido2" name="apellido2" oninput="generateUsername()" />
 
-            <label for="nTelefono">Extensión de teléfono:</label>
-            <input type="text" id="nTelefono" name="nTelefono" oninput="checkTelephoneExists()" />
 
             <label for="username">Nombre de Usuario:</label>
             <input type="text" id="username" name="username" readonly />
+
+            <label for="nTelefono">Extensión de teléfono:</label>
+            <input type="text" id="nTelefono" name="nTelefono" oninput="checkTelephoneExists()" />
+
+
+            <label for="nFuncionario">Nº Funcionario:</label>
+            <input type="text" id="nFuncionario" name="nFuncionario" onchange="checkNumberIdExists()" />
+
         </div>
 
         <!-- Más campos principales -->
         <div class="field-group">
+            <label for="ouPrincipal">OU Principal:</label>
+            <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamentos();">
+                <option value="">Seleccione una OU Principal</option>
+                @foreach (var ou in ViewBag.OUPrincipales as List<string>)
+                {
+                    <option value="@ou">@ou</option>
+                }
+            </select>
             <label for="ouSecundaria">OU Secundaria:</label>
             <select id="ouSecundaria" name="ouSecundaria">
                 <option value="">Seleccione una OU Secundaria</option>

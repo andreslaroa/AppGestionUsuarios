@@ -902,42 +902,77 @@ public class GestionUsuariosController : Controller
 
 
 
-
     [HttpPost]
     public IActionResult ModifyUserGroup([FromBody] Dictionary<string, string> requestData)
     {
-        if (requestData == null || !requestData.ContainsKey("username") || !requestData.ContainsKey("group") || !requestData.ContainsKey("action"))
+        if (requestData == null ||
+            !requestData.ContainsKey("username") ||
+            !requestData.ContainsKey("group") ||
+            !requestData.ContainsKey("action"))
+        {
             return Json(new { success = false, message = "Datos insuficientes para modificar el grupo." });
+        }
 
-        string username = requestData["username"];
+        // Extraer solo el sAMAccountName (por ejemplo, "jperez" de "Juan Pérez (jperez)")
+        string input = requestData["username"];
+        string username = ExtractUsername(input);
+        if (string.IsNullOrEmpty(username))
+            return Json(new { success = false, message = "El formato del usuario seleccionado no es válido." });
+
         string group = requestData["group"];
         string action = requestData["action"];
 
         try
         {
-            using (var context = new PrincipalContext(ContextType.Domain))
-            {
-                var groupPrincipal = GroupPrincipal.FindByIdentity(context, group);
-                if (groupPrincipal == null)
-                    return Json(new { success = false, message = "Grupo no encontrado." });
+            // Buscar el grupo usando el método que ya tienes implementado
+            DirectoryEntry groupEntry = FindGroupByName(group);
+            if (groupEntry == null)
+                return Json(new { success = false, message = $"Grupo {group} no encontrado en el dominio." });
 
-                if (action == "add")
+            // Usamos el PrincipalContext con el dominio explícito para evitar problemas
+            using (var context = new PrincipalContext(ContextType.Domain, "aytosa.inet"))
+            using (var user = UserPrincipal.FindByIdentity(context, username))
+            {
+                if (user == null)
+                    return Json(new { success = false, message = "Usuario no encontrado en Active Directory." });
+
+                using (var userEntry = (DirectoryEntry)user.GetUnderlyingObject())
                 {
-                    groupPrincipal.Members.Add(context, IdentityType.SamAccountName, username);
+                    // Obtenemos el distinguishedName del usuario (ejemplo: "CN=Juan Pérez,OU=Usuarios,DC=aytosa,DC=inet")
+                    string userDN = userEntry.Properties["distinguishedName"].Value.ToString();
+
+                    if (action == "add")
+                    {
+                        // Si el usuario no es miembro ya, se agrega
+                        if (!groupEntry.Properties["member"].Contains(userDN))
+                        {
+                            groupEntry.Properties["member"].Add(userDN);
+                            groupEntry.CommitChanges();
+                        }
+                    }
+                    else if (action == "remove")
+                    {
+                        // Si el usuario es miembro, se elimina
+                        if (groupEntry.Properties["member"].Contains(userDN))
+                        {
+                            groupEntry.Properties["member"].Remove(userDN);
+                            groupEntry.CommitChanges();
+                        }
+                    }
                 }
-                else if (action == "remove")
-                {
-                    groupPrincipal.Members.Remove(context, IdentityType.SamAccountName, username);
-                }
-                groupPrincipal.Save();
-                return Json(new { success = true, message = $"Grupo modificado correctamente: {action}." });
             }
+
+            return Json(new { success = true, message = $"Grupo modificado correctamente: {action}." });
         }
         catch (Exception ex)
         {
             return Json(new { success = false, message = $"Error al modificar grupo: {ex.Message}" });
         }
     }
+
+
+
+
 
 
     [HttpPost]
@@ -1017,9 +1052,9 @@ public class GestionUsuariosController : Controller
         if (requestData == null || !requestData.ContainsKey("username"))
             return Json(new { success = false, message = "Usuario no especificado." });
 
+        // Extraer solo el sAMAccountName (por ejemplo, "jperez" de "Juan Pérez (jperez)")
         string input = requestData["username"];
-        string username = ExtractUsername(input); // Extraemos solo el nombre entre paréntesis
-
+        string username = ExtractUsername(input);
         if (string.IsNullOrEmpty(username))
             return Json(new { success = false, message = "El formato del usuario seleccionado no es válido." });
 
@@ -1029,7 +1064,6 @@ public class GestionUsuariosController : Controller
             string currentOU = "";
             List<string> groups = new List<string>();
 
-            // Buscar el usuario en el Directorio Activo
             using (DirectoryEntry root = new DirectoryEntry(ldapPath))
             {
                 using (DirectorySearcher searcher = new DirectorySearcher(root))
@@ -1037,38 +1071,22 @@ public class GestionUsuariosController : Controller
                     searcher.Filter = $"(&(objectClass=user)(sAMAccountName={username}))";
                     searcher.SearchScope = SearchScope.Subtree;
                     searcher.PropertiesToLoad.Add("distinguishedName");
+                    searcher.PropertiesToLoad.Add("memberOf");
 
                     SearchResult result = searcher.FindOne();
-
                     if (result == null)
-                    {
                         return Json(new { success = false, message = $"Usuario {username} no encontrado en Active Directory." });
-                    }
 
                     using (DirectoryEntry userEntry = result.GetDirectoryEntry())
                     {
-                        // Obtener la OU del usuario desde distinguishedName
+                        // Extraemos la OU a partir del distinguishedName
                         string distinguishedName = userEntry.Properties["distinguishedName"].Value.ToString();
                         currentOU = ExtractOUFromDN(distinguishedName);
+                        // Obtenemos solo los grupos directos a los que pertenece el usuario (propiedad memberOf)
+                        groups = GetUserGroups(userEntry);
                     }
                 }
             }
-
-            // Obtener los grupos a los que pertenece el usuario
-            using (var context = new PrincipalContext(ContextType.Domain, "aytosa.inet"))
-            {
-                using (var user = UserPrincipal.FindByIdentity(context, username))
-                {
-                    if (user == null)
-                        return Json(new { success = false, message = "Usuario no encontrado en Active Directory." });
-
-                    groups = user.GetAuthorizationGroups()
-                                 .Where(g => g is GroupPrincipal)
-                                 .Select(g => g.Name)
-                                 .ToList();
-                }
-            }
-
             return Json(new { success = true, currentOU, groups });
         }
         catch (Exception ex)
@@ -1077,25 +1095,64 @@ public class GestionUsuariosController : Controller
         }
     }
 
+    /// <summary>
+    /// Extrae la OU a partir del distinguishedName.
+    /// Ejemplo: "CN=Juan Pérez,OU=Usuarios,DC=aytosa,DC=inet" devuelve "Usuarios"
+    /// </summary>
     private string ExtractOUFromDN(string distinguishedName)
     {
         if (string.IsNullOrEmpty(distinguishedName))
-        {
             return "";
-        }
 
         string[] parts = distinguishedName.Split(',');
         foreach (string part in parts)
         {
             if (part.StartsWith("OU="))
-            {
-                return part.Replace("OU=", "").Trim(); // Retorna solo la OU
-            }
+                return part.Replace("OU=", "").Trim();
         }
-
         return "No se encontró OU";
     }
 
+    /// <summary>
+    /// Obtiene la lista de grupos directos (propiedad memberOf) del usuario.
+    /// Se extrae el nombre común (CN) de cada DN.
+    /// </summary>
+    private List<string> GetUserGroups(DirectoryEntry userEntry)
+    {
+        List<string> groups = new List<string>();
+        if (userEntry.Properties["memberOf"] != null)
+        {
+            foreach (var groupDN in userEntry.Properties["memberOf"])
+            {
+                string cn = ExtractCNFromDN(groupDN.ToString());
+                if (!string.IsNullOrEmpty(cn))
+                    groups.Add(cn);
+            }
+        }
+        return groups;
+    }
 
+    /// <summary>
+    /// Extrae el Common Name (CN) de un distinguishedName.
+    /// Ejemplo: "CN=Grupo1,OU=Usuarios,DC=aytosa,DC=inet" devuelve "Grupo1"
+    /// </summary>
+    private string ExtractCNFromDN(string distinguishedName)
+    {
+        if (!string.IsNullOrEmpty(distinguishedName))
+        {
+            int start = distinguishedName.IndexOf("CN=");
+            if (start >= 0)
+            {
+                int end = distinguishedName.IndexOf(",", start);
+                if (end > start)
+                    return distinguishedName.Substring(start + 3, end - start - 3);
+                else
+                    return distinguishedName.Substring(start + 3);
+            }
+        }
+        return "";
+    }
+
+   
 
 }

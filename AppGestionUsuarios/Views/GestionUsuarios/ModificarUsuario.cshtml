@@ -109,6 +109,28 @@
             </select>
 
             <button type="button" onclick="modifyUserOU()">Guardar Cambios</button>
+
+            <h3>Modificar Grupos del Usuario</h3>
+
+            <!-- Lista de grupos actuales -->
+            <label for="currentGroups">Grupos Actuales:</label>
+            <select id="currentGroups" size="5">
+                <!-- Se cargarán dinámicamente -->
+            </select>
+            <button type="button" onclick="removeUserFromGroup()">Eliminar Grupo Seleccionado</button>
+
+            <!-- Lista de grupos disponibles para agregar -->
+            <label for="availableGroups">Añadir a un Grupo:</label>
+            <select id="availableGroups">
+                <option value="">Seleccione un grupo</option>
+                @foreach (var group in ViewBag.GruposAD as List<string>)
+                {
+                    <option value="@group">@group</option>
+                }
+            </select>
+            <button type="button" onclick="addUserToGroup()">Añadir Grupo</button>
+
+
         </form>
 
 
@@ -262,6 +284,105 @@
                     alert("Error al modificar la OU.");
                 }
             }
+            // Cargar la información del usuario, incluyendo los grupos actuales
+            async function loadUserInfo() {
+                const selectedUser = document.getElementById("selectedUser").value;
+                if (!selectedUser) {
+                    alert("Seleccione y confirme un usuario antes de cargar la información.");
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/GestionUsuarios/GetUserDetails', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: selectedUser })
+                    });
+
+                    const data = await response.json();
+                    if (data.success) {
+                        document.getElementById("newOUPrincipal").value = data.ouPrincipal;
+                        fetchOUSecundarias();
+                        fetchDepartamentos();
+
+                        document.getElementById("newDepartamento").value = data.departamento;
+                        fetchLugarEnvio();
+
+                        document.getElementById("newLugarEnvio").value = data.lugarEnvio;
+
+                        // Cargar los grupos actuales del usuario
+                        const groupList = document.getElementById("currentGroups");
+                        groupList.innerHTML = ""; // Limpiar antes de agregar nuevos valores
+                        data.groups.forEach(group => {
+                            const option = document.createElement("option");
+                            option.value = group;
+                            option.textContent = group;
+                            groupList.appendChild(option);
+                        });
+
+                    } else {
+                        alert(data.message);
+                    }
+                } catch (error) {
+                    alert("Error al obtener información del usuario.");
+                }
+            }
+
+            // Añadir un usuario a un grupo seleccionado
+            async function addUserToGroup() {
+                const username = document.getElementById("selectedUser").value;
+                const group = document.getElementById("availableGroups").value;
+
+                if (!username || !group) {
+                    alert("Seleccione un usuario y un grupo.");
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/GestionUsuarios/ModifyUserGroup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, group, action: 'add' })
+                    });
+
+                    const data = await response.json();
+                    alert(data.message);
+                    loadUserInfo();  // Recargar la lista de grupos
+                } catch (error) {
+                    alert("Error al modificar el grupo.");
+                }
+            }
+
+            // Eliminar un grupo al que pertenece el usuario
+            async function removeUserFromGroup() {
+                const username = document.getElementById("selectedUser").value;
+                const groupList = document.getElementById("currentGroups");
+                const selectedGroup = groupList.value;
+
+                if (!username || !selectedGroup) {
+                    alert("Seleccione un usuario y un grupo para eliminar.");
+                    return;
+                }
+
+                if (!confirm(`¿Está seguro de que desea eliminar al usuario del grupo ${selectedGroup}?`)) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/GestionUsuarios/ModifyUserGroup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: document.getElementById("selectedUser").value, group: selectedGroup, action: 'remove' })
+                    });
+                    const data = await response.json();
+                    alert(data.message);
+                    loadUserInfo();  // Refrescar la lista de grupos
+                } catch (error) {
+                    alert("Error al eliminar el grupo.");
+                }
+            }
+
+
         </script>
 </body>
 </html>
