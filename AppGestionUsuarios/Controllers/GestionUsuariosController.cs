@@ -876,50 +876,24 @@ public class GestionUsuariosController : Controller
         if (requestData == null || !requestData.ContainsKey("username"))
             return Json(new { success = false, message = "Usuario no especificado." });
 
-        string input = requestData["username"];
-        string username = ExtractUsername(input);
 
-        if (string.IsNullOrEmpty(username))
-        {
-            return Json(new { success = false, message = "Formato del usuario inválido." });
-        }
+        string username = ExtractUsername(requestData["username"]);
 
         try
         {
-            string ldapPath = $"LDAP://DC=aytosa,DC=inet";
-            using (DirectoryEntry root = new DirectoryEntry(ldapPath))
+            using (var context = new PrincipalContext(ContextType.Domain))
+            using (var user = UserPrincipal.FindByIdentity(context, username))
             {
-                using (DirectorySearcher searcher = new DirectorySearcher(root))
-                {
-                    // Búsqueda del usuario por sAMAccountName
-                    searcher.Filter = $"(&(objectClass=user)(sAMAccountName={username}))";
-                    searcher.SearchScope = SearchScope.Subtree;
-                    searcher.PropertiesToLoad.Add("memberOf");
+                if (user == null)
+                    return Json(new { success = false, message = "Usuario no encontrado." });
 
-                    SearchResult result = searcher.FindOne();
+                var groups = user.GetAuthorizationGroups()
+                                 .Where(g => g is GroupPrincipal)
+                                 .Select(g => g.Name)
+                                 .ToList();
 
-                    if (result == null)
-                    {
-                        return Json(new { success = false, message = $"Usuario {username} no encontrado." });
-                    }
+                return Json(new { success = true, groups });
 
-                    // Obtener la lista de grupos del usuario
-                    var groupList = new List<string>();
-                    if (result.Properties.Contains("memberOf"))
-                    {
-                        foreach (var group in result.Properties["memberOf"])
-                        {
-                            // Extraer solo el CN (nombre del grupo)
-                            string groupName = ExtractGroupName(group.ToString());
-                            if (!string.IsNullOrEmpty(groupName))
-                            {
-                                groupList.Add(groupName);
-                            }
-                        }
-                    }
-
-                    return Json(new { success = true, groups = groupList });
-                }
             }
         }
         catch (Exception ex)
@@ -928,23 +902,8 @@ public class GestionUsuariosController : Controller
         }
     }
 
-    // Función para extraer el CN (nombre del grupo) de un distinguishedName
-    private string ExtractGroupName(string distinguishedName)
-    {
-        if (string.IsNullOrWhiteSpace(distinguishedName))
-            return null;
 
-        var parts = distinguishedName.Split(',');
-        foreach (var part in parts)
-        {
-            if (part.StartsWith("CN=", StringComparison.OrdinalIgnoreCase))
-            {
-                return part.Substring(3); // Eliminar "CN=" y devolver el nombre
-            }
-        }
 
-        return null;
-    }
 
 
     [HttpPost]
@@ -953,118 +912,192 @@ public class GestionUsuariosController : Controller
         if (requestData == null || !requestData.ContainsKey("username") || !requestData.ContainsKey("group") || !requestData.ContainsKey("action"))
             return Json(new { success = false, message = "Datos insuficientes para modificar el grupo." });
 
-        string input = requestData["username"];
-        string username = ExtractUsername(input); // Extrae el nombre de usuario
-        string groupName = requestData["group"];  // El nombre limpio del grupo
-        string action = requestData["action"].ToLower();
-
-        DirectoryEntry groupEntry = null; // Declaración fuera del try
+        string username = requestData["username"];
+        string group = requestData["group"];
+        string action = requestData["action"];
 
         try
         {
-            // Buscar el grupo en el dominio
-            groupEntry = FindGroupByName(groupName);
-            if (groupEntry == null)
-                return Json(new { success = false, message = $"Grupo '{groupName}' no encontrado en el dominio." });
-
-            // Buscar el usuario en el dominio
-            string ldapPath = "LDAP://DC=aytosa,DC=inet";
-            using (var root = new DirectoryEntry(ldapPath))
+            using (var context = new PrincipalContext(ContextType.Domain))
             {
-                using (var searcher = new DirectorySearcher(root))
+                var groupPrincipal = GroupPrincipal.FindByIdentity(context, group);
+                if (groupPrincipal == null)
+                    return Json(new { success = false, message = "Grupo no encontrado." });
+
+                if (action == "add")
                 {
-                    searcher.Filter = $"(&(objectClass=user)(sAMAccountName={username}))";
-                    searcher.SearchScope = SearchScope.Subtree;
-
-                    SearchResult result = searcher.FindOne();
-
-                    if (result == null)
-                        return Json(new { success = false, message = $"Usuario '{username}' no encontrado en el dominio." });
-
-                    using (DirectoryEntry userEntry = result.GetDirectoryEntry())
-                    {
-                        if (action == "add")
-                        {
-                            // Añadir el usuario al grupo
-                            groupEntry.Invoke("Add", new object[] { userEntry.Path });
-                            groupEntry.CommitChanges();
-                            return Json(new { success = true, message = $"El usuario '{username}' fue añadido al grupo '{groupName}' correctamente." });
-                        }
-                        else if (action == "remove")
-                        {
-                            // Eliminar el usuario del grupo
-                            groupEntry.Invoke("Remove", new object[] { userEntry.Path });
-                            groupEntry.CommitChanges();
-                            return Json(new { success = true, message = $"El usuario '{username}' fue eliminado del grupo '{groupName}' correctamente." });
-                        }
-                        else
-                        {
-                            return Json(new { success = false, message = "Acción no válida. Use 'add' o 'remove'." });
-                        }
-                    }
+                    groupPrincipal.Members.Add(context, IdentityType.SamAccountName, username);
                 }
+                else if (action == "remove")
+                {
+                    groupPrincipal.Members.Remove(context, IdentityType.SamAccountName, username);
+                }
+                groupPrincipal.Save();
+                return Json(new { success = true, message = $"Grupo modificado correctamente: {action}." });
             }
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = $"Error al modificar el grupo: {ex.Message}" });
-        }
-        finally
-        {
-            if (groupEntry != null)
-            {
-                groupEntry.Dispose(); // Liberar el recurso correctamente
-            }
+            return Json(new { success = false, message = $"Error al modificar grupo: {ex.Message}" });
         }
     }
 
 
     [HttpPost]
+
     public IActionResult ModifyUserOU([FromBody] Dictionary<string, string> requestData)
     {
         if (requestData == null ||
             !requestData.ContainsKey("username") ||
             !requestData.ContainsKey("ouPrincipal") ||
             !requestData.ContainsKey("ouSecundaria") ||
-            !requestData.ContainsKey("departamento"))
+            !requestData.ContainsKey("departamento") ||
+            !requestData.ContainsKey("lugarEnvio"))
         {
-            return Json(new { success = false, message = "Faltan datos para modificar la OU." });
+            return Json(new { success = false, message = "Datos insuficientes para modificar la información del usuario." });
         }
 
-        string username = ExtractUsername(requestData["username"]);
-        string ouPrincipal = requestData["ouPrincipal"];
-        string ouSecundaria = requestData["ouSecundaria"];
-        string departamento = requestData["departamento"];
+        string input = requestData["username"];
+        string username = ExtractUsername(input);
+        string newOUPrincipal = requestData["ouPrincipal"];
+        string newOUSecundaria = requestData["ouSecundaria"];
+        string newDepartamento = requestData["departamento"];
+        string newLugarEnvio = requestData["lugarEnvio"];
+
+        if (string.IsNullOrEmpty(username))
+            return Json(new { success = false, message = "El formato del usuario seleccionado no es válido." });
 
         try
         {
-            string newLDAPPath = $"LDAP://OU={ouSecundaria},OU=Usuarios y Grupos,OU={ouPrincipal},DC=aytosa,DC=inet";
+            string ldapBasePath = "LDAP://DC=aytosa,DC=inet";
+            string newLDAPPath = $"LDAP://OU={newOUSecundaria},OU=Usuarios y Grupos,OU={newOUPrincipal},DC=aytosa,DC=inet";
 
-            using (var context = new PrincipalContext(ContextType.Domain))
+            using (DirectoryEntry root = new DirectoryEntry(ldapBasePath))
             {
-                using (var user = UserPrincipal.FindByIdentity(context, username))
+                using (DirectorySearcher searcher = new DirectorySearcher(root))
                 {
-                    if (user == null)
-                    {
-                        return Json(new { success = false, message = "Usuario no encontrado." });
-                    }
+                    searcher.Filter = $"(&(objectClass=user)(sAMAccountName={username}))";
+                    searcher.SearchScope = SearchScope.Subtree;
+                    searcher.PropertiesToLoad.Add("distinguishedName");
 
-                    using (var directoryUser = (DirectoryEntry)user.GetUnderlyingObject())
+                    SearchResult result = searcher.FindOne();
+
+                    if (result == null)
+
+                        return Json(new { success = false, message = $"Usuario {username} no encontrado en Active Directory." });
+
+                    using (DirectoryEntry userEntry = result.GetDirectoryEntry())
                     {
-                        directoryUser.MoveTo(new DirectoryEntry(newLDAPPath));
-                        directoryUser.Properties["physicalDeliveryOfficeName"].Value = departamento;
-                        directoryUser.CommitChanges();
+                        // Obtener la OU actual del usuario
+                        string currentDistinguishedName = userEntry.Properties["distinguishedName"].Value.ToString();
+
+                        // Mover usuario a la nueva OU
+                        using (DirectoryEntry newOUEntry = new DirectoryEntry(newLDAPPath))
+                        {
+                            userEntry.MoveTo(newOUEntry);
+                        }
+
+                        // Actualizar atributos del usuario
+                        userEntry.Properties["physicalDeliveryOfficeName"].Value = newDepartamento;
+                        userEntry.Properties["streetAddress"].Value = newLugarEnvio; // Campo alternativo para "Lugar de Envío"
+
+                        userEntry.CommitChanges();
                     }
                 }
             }
 
-            return Json(new { success = true, message = "OU del usuario modificada correctamente." });
+            return Json(new { success = true, message = "OU, departamento y lugar de envío modificados correctamente." });
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = $"Error al modificar la OU: {ex.Message}" });
+            return Json(new { success = false, message = $"Error al modificar el usuario: {ex.Message}" });
         }
     }
 
 
+
+    [HttpPost]
+    public IActionResult GetUserDetails([FromBody] Dictionary<string, string> requestData)
+    {
+        if (requestData == null || !requestData.ContainsKey("username"))
+            return Json(new { success = false, message = "Usuario no especificado." });
+
+        string input = requestData["username"];
+        string username = ExtractUsername(input); // Extraemos solo el nombre entre paréntesis
+
+        if (string.IsNullOrEmpty(username))
+            return Json(new { success = false, message = "El formato del usuario seleccionado no es válido." });
+
+        try
+        {
+            string ldapPath = "LDAP://DC=aytosa,DC=inet";
+            string currentOU = "";
+            List<string> groups = new List<string>();
+
+            // Buscar el usuario en el Directorio Activo
+            using (DirectoryEntry root = new DirectoryEntry(ldapPath))
+            {
+                using (DirectorySearcher searcher = new DirectorySearcher(root))
+                {
+                    searcher.Filter = $"(&(objectClass=user)(sAMAccountName={username}))";
+                    searcher.SearchScope = SearchScope.Subtree;
+                    searcher.PropertiesToLoad.Add("distinguishedName");
+
+                    SearchResult result = searcher.FindOne();
+
+                    if (result == null)
+                    {
+                        return Json(new { success = false, message = $"Usuario {username} no encontrado en Active Directory." });
+                    }
+
+                    using (DirectoryEntry userEntry = result.GetDirectoryEntry())
+                    {
+                        // Obtener la OU del usuario desde distinguishedName
+                        string distinguishedName = userEntry.Properties["distinguishedName"].Value.ToString();
+                        currentOU = ExtractOUFromDN(distinguishedName);
+                    }
+                }
+            }
+
+            // Obtener los grupos a los que pertenece el usuario
+            using (var context = new PrincipalContext(ContextType.Domain, "aytosa.inet"))
+            {
+                using (var user = UserPrincipal.FindByIdentity(context, username))
+                {
+                    if (user == null)
+                        return Json(new { success = false, message = "Usuario no encontrado en Active Directory." });
+
+                    groups = user.GetAuthorizationGroups()
+                                 .Where(g => g is GroupPrincipal)
+                                 .Select(g => g.Name)
+                                 .ToList();
+                }
+            }
+
+            return Json(new { success = true, currentOU, groups });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = $"Error al obtener los detalles del usuario: {ex.Message}" });
+        }
+    }
+
+    private string ExtractOUFromDN(string distinguishedName)
+    {
+        if (string.IsNullOrEmpty(distinguishedName))
+        {
+            return "";
+        }
+
+        string[] parts = distinguishedName.Split(',');
+        foreach (string part in parts)
+        {
+            if (part.StartsWith("OU="))
+            {
+                return part.Replace("OU=", "").Trim(); // Retorna solo la OU
+            }
+        }
+
+        return "No se encontró OU";
+    }
 }
