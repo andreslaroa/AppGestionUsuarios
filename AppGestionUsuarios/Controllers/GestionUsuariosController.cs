@@ -607,6 +607,7 @@ public class GestionUsuariosController : Controller
         if (requestData == null || !requestData.ContainsKey("username"))
             return Json(new { success = false, message = "Usuario no especificado." });
 
+
         string username = ExtractUsername(requestData["username"]);
 
         try
@@ -623,6 +624,7 @@ public class GestionUsuariosController : Controller
                                  .ToList();
 
                 return Json(new { success = true, groups });
+
             }
         }
         catch (Exception ex)
@@ -633,7 +635,8 @@ public class GestionUsuariosController : Controller
 
 
 
-    //Función para modificar los grupos a los que pertenece el usuario
+
+
     [HttpPost]
     public IActionResult ModifyUserGroup([FromBody] Dictionary<string, string> requestData)
     {
@@ -708,6 +711,7 @@ public class GestionUsuariosController : Controller
 
     //Función para modificar la OU a la que corresponde el usuario
     [HttpPost]
+
     public IActionResult ModifyUserOU([FromBody] Dictionary<string, string> requestData)
     {
         if (requestData == null ||
@@ -746,6 +750,7 @@ public class GestionUsuariosController : Controller
                     SearchResult result = searcher.FindOne();
 
                     if (result == null)
+
                         return Json(new { success = false, message = $"Usuario {username} no encontrado en Active Directory." });
 
                     using (DirectoryEntry userEntry = result.GetDirectoryEntry())
@@ -896,7 +901,4 @@ public class GestionUsuariosController : Controller
             }
         }
     }
-
-
-
 }
