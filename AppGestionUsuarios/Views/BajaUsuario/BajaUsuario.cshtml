@@ -1,5 +1,5 @@
 ﻿@{
-    ViewBag.Title = "Eliminar Usuario";
+    ViewBag.Title = "Baja Usuario";
 }
 
 <!DOCTYPE html>
@@ -84,7 +84,7 @@
 
         <!-- Botón para eliminar usuario -->
         <div class="button-group">
-            <button type="button" onclick="eliminarUsuario()">Eliminar Usuario</button>
+            <button type="button" onclick="bajaUsuario()">Eliminar Usuario</button>
         </div>
     </div>
 
@@ -101,7 +101,7 @@
             document.getElementById('selectedUser').value = selectedUser;
         }
 
-        async function eliminarUsuario() {
+        async function bajaUsuario() {
             const username = document.getElementById('selectedUser').value;
 
             if (!username) {
@@ -114,7 +114,7 @@
             }
 
             try {
-                const response = await fetch('/GestionUsuarios/EliminarUsuario', {
+                const response = await fetch('/BajaUsuario/BajaUsuario', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username })
