@@ -17,7 +17,7 @@ namespace AppGestionUsuarios.Controllers
         [HttpGet]
         public IActionResult AltaUsuario()
         {
-            return RedirectToAction("AltaUsuario", "GestionUsuarios"); // Redirige al método que maneja la creación
+            return RedirectToAction("AltaUsuario", "AltaUsuario"); // Redirige al método que maneja la creación
         }
 
         [HttpGet]
@@ -29,7 +29,7 @@ namespace AppGestionUsuarios.Controllers
         [HttpGet]
         public IActionResult DeleteUser()
         {
-            return RedirectToAction("DeleteUser", "UserManagement"); // Asegúrate de tener este método en UserManagementController
+            return RedirectToAction("BajaUsuario", "BajaUsuario"); // Asegúrate de tener este método en UserManagementController
         }
     }
 }

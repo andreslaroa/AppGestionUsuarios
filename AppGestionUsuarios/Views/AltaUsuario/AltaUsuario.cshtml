@@ -6,194 +6,189 @@
     <title>Formulario de Usuario</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            min-height: 100vh;
             background-color: #f5f5f5;
         }
 
-        form {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            background: #ffffff;
-            padding: 20px;
-            margin: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            width: 100%;
+        .form-container {
             max-width: 1200px;
+            margin: 30px auto;
+            background-color: #ffffff;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
         }
 
-            form .field-group, form .checkbox-group {
-                flex: 1;
-                min-width: 300px;
-                margin-right: 20px;
-            }
+        h1 {
+            color: #960018;
+            margin-bottom: 20px;
+        }
+
+        .form-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+        }
+
+        .field-group, .checkbox-group {
+            flex: 1;
+            min-width: 280px;
+        }
 
         label {
             display: block;
+            font-weight: bold;
             margin-bottom: 5px;
             color: #333;
-            font-weight: bold;
         }
 
-        select, input[type="text"], input[type="number"], input[type="date"], button {
+        select,
+        input[type="text"],
+        input[type="number"],
+        input[type="date"],
+        button {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
-            border-radius: 4px;
-            background: #f9f9f9;
+            border-radius: 6px;
+            background-color: #f9f9f9;
+            margin-bottom: 15px;
         }
 
-            select:focus, input:focus {
-                outline: none;
-                border-color: #007bff;
-                box-shadow: 0 0 4px rgba(0, 123, 255, 0.25);
-            }
+        select:focus,
+        input:focus {
+            border-color: #960018;
+            outline: none;
+            box-shadow: 0 0 5px rgba(150, 0, 24, 0.3);
+        }
 
         button {
-            background-color: #007bff;
+            background-color: #960018;
             color: white;
+            font-weight: bold;
             border: none;
             cursor: pointer;
+            transition: background-color 0.3s ease;
         }
 
-            button:hover {
-                background-color: #0056b3;
-            }
+        button:hover {
+            background-color: #7a0013;
+        }
 
         .checkbox-group label {
-            font-weight: normal;
             display: flex;
             align-items: center;
-            margin-bottom: 10px;
+            font-weight: normal;
         }
 
         .checkbox-group input[type="checkbox"] {
             margin-right: 10px;
         }
 
-        h4 {
-            margin-top: 0;
-            color: #333;
+        .full-width {
+            width: 100%;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-    <form id="ouForm">
-        <!-- Campos principales -->
-        <div class="field-group">
-            <label for="ouPrincipal">OU Principal:</label>
-            <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamentos();">
-                <option value="">Seleccione una OU Principal</option>
-                @foreach (var ou in ViewBag.OUPrincipales as List<string>)
-                {
-                    <option value="@ou">@ou</option>
-                }
-            </select>
+    <div class="form-container">
+        <h1>Formulario de Alta de Usuario</h1>
+        <form id="ouForm">
+            <div class="form-section">
+                <div class="field-group">
+                    <label for="nombre">Nombre:</label>
+                    <input type="text" id="nombre" name="nombre" oninput="generateUsername()" />
 
-            <label for="nFuncionario">Nº Funcionario:</label>
-            <input type="text" id="nFuncionario" name="nFuncionario" onchange="checkNumberIdExists()" />
+                    <label for="apellido1">Apellido 1:</label>
+                    <input type="text" id="apellido1" name="apellido1" oninput="generateUsername()" />
 
-            <label for="nombre">Nombre:</label>
-            <input type="text" id="nombre" name="nombre" oninput="generateUsername()" />
+                    <label for="apellido2">Apellido 2:</label>
+                    <input type="text" id="apellido2" name="apellido2" oninput="generateUsername()" />
 
-            <label for="apellido1">Apellido 1:</label>
-            <input type="text" id="apellido1" name="apellido1" oninput="generateUsername()" />
+                    <label for="username">Nombre de Usuario:</label>
+                    <input type="text" id="username" name="username" readonly />
 
-            <label for="apellido2">Apellido 2:</label>
-            <input type="text" id="apellido2" name="apellido2" oninput="generateUsername()" />
+                    <label for="nTelefono">Extensión de teléfono:</label>
+                    <input type="text" id="nTelefono" name="nTelefono" oninput="checkTelephoneExists()" />
 
-            <label for="nTelefono">Extensión de teléfono:</label>
-            <input type="text" id="nTelefono" name="nTelefono" oninput="checkTelephoneExists()" />
+                    <label for="nFuncionario">Nº Funcionario:</label>
+                    <input type="text" id="nFuncionario" name="nFuncionario" onchange="checkNumberIdExists()" />
+                </div>
 
-            <label for="username">Nombre de Usuario:</label>
-            <input type="text" id="username" name="username" readonly />
-        </div>
+                <div class="field-group">
+                    <label for="ouPrincipal">OU Principal:</label>
+                    <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamentos();">
+                        <option value="">Seleccione una OU Principal</option>
+                        @foreach (var ou in ViewBag.OUPrincipales as List<string>) {
+                            <option value="@ou">@ou</option>
+                        }
+                    </select>
 
-        <!-- Más campos principales -->
-        <div class="field-group">
-            <label for="ouSecundaria">OU Secundaria:</label>
-            <select id="ouSecundaria" name="ouSecundaria">
-                <option value="">Seleccione una OU Secundaria</option>
-            </select>
+                    <label for="ouSecundaria">OU Secundaria:</label>
+                    <select id="ouSecundaria" name="ouSecundaria">
+                        <option value="">Seleccione una OU Secundaria</option>
+                    </select>
 
-            <label for="departamento">Departamento:</label>
-            <select id="departamento" name="departamento" onchange="fetchLugarEnvio()">
-                <option value="">Seleccione un departamento</option>
-            </select>
+                    <label for="departamento">Departamento:</label>
+                    <select id="departamento" name="departamento" onchange="fetchLugarEnvio()">
+                        <option value="">Seleccione un departamento</option>
+                    </select>
 
-            <label for="lugarEnvio">Lugar de Envío:</label>
-            <select id="lugarEnvio" name="lugarEnvio">
-                <option value="">Seleccione un lugar de envío</option>
-            </select>
+                    <label for="lugarEnvio">Lugar de Envío:</label>
+                    <select id="lugarEnvio" name="lugarEnvio">
+                        <option value="">Seleccione un lugar de envío</option>
+                    </select>
 
-            <label for="fechaCaducidadOp">Fecha de Caducidad:</label>
-            <select id="fechaCaducidadOp" name="fechaCaducidadOp">
-                <option value="si">Sí</option>
-                <option value="no">No</option>
-            </select>
+                    <label for="fechaCaducidadOp">¿Tiene fecha de caducidad?</label>
+                    <select id="fechaCaducidadOp" name="fechaCaducidadOp">
+                        <option value="si">Sí</option>
+                        <option value="no">No</option>
+                    </select>
 
-            <label for="fechaCaducidad">Fecha de Caducidad:</label>
-            <input type="date" id="fechaCaducidad" name="fechaCaducidad" />
+                    <label for="fechaCaducidad">Fecha de Caducidad:</label>
+                    <input type="date" id="fechaCaducidad" name="fechaCaducidad" />
 
-            
-            <label for="cuota">Cuota del usuario:</label>
-            <select id="cuota" name="cuota">
-                <option value="">Seleccione la cuota para el usuario</option>
-                @foreach (var cuota in ViewBag.cuota as List<string>)
-                {
-                    <option value="@cuota">@cuota</option>
-                }
-            </select>
-        </div>
+                    <label for="cuota">Cuota del usuario:</label>
+                    <select id="cuota" name="cuota">
+                        <option value="">Seleccione la cuota para el usuario</option>
+                        @foreach (var cuota in ViewBag.cuota as List<string>) {
+                            <option value="@cuota">@cuota</option>
+                        }
+                    </select>
+                </div>
 
-        <!-- Checkboxes de grupos, cualquiera de los grupos comunes se mete aquí-->
-        <div class="checkbox-group">
-            <h4>Grupos de usuarios</h4>
-            <label>
-                <input type="checkbox" id="grupoInternet" name="grupoInternet" value="Internet" />
-                Grupo Internet
-            </label>
-            <label>
-                <input type="checkbox" id="grupoPortalEmpleado" name="grupoPortalEmpleado" value="GA_R_PORTALDELEMPLEADO" />
-                Portal del empleado
-            </label>
-        </div>
+                <div class="checkbox-group">
+                    <h4>Grupos de usuarios</h4>
+                    <label><input type="checkbox" id="grupoInternet" name="grupoInternet" value="Internet" /> Grupo Internet</label>
+                    <label><input type="checkbox" id="grupoPortalEmpleado" name="grupoPortalEmpleado" value="GA_R_PORTALDELEMPLEADO" /> Portal del empleado</label>
+                </div>
 
-        <div class="field-group">
-            <label for="grupoDropdown">Seleccionar Grupos:</label>
-            <select id="grupoDropdown" name="grupoDropdown">
-                <option value="">Seleccione un grupo</option>
-                @foreach (var grupo in ViewBag.GruposAD as List<string>)
-                {
-                    <option value="@grupo">@grupo</option>
-                }
-            </select>
+                <div class="field-group">
+                    <label for="grupoDropdown">Seleccionar Grupos:</label>
+                    <select id="grupoDropdown" name="grupoDropdown">
+                        <option value="">Seleccione un grupo</option>
+                        @foreach (var grupo in ViewBag.GruposAD as List<string>) {
+                            <option value="@grupo">@grupo</option>
+                        }
+                    </select>
 
-            <button type="button" onclick="addGroup()">Añadir Grupo</button>
+                    <button type="button" onclick="addGroup()">Añadir Grupo</button>
 
-            <label for="gruposSeleccionados">Grupos Seleccionados:</label>
-            <select id="gruposSeleccionados" name="gruposSeleccionados" size="5">
-                <!-- Aquí se cargarán los grupos seleccionados -->
-            </select>
+                    <label for="gruposSeleccionados">Grupos Seleccionados:</label>
+                    <select id="gruposSeleccionados" name="gruposSeleccionados" size="5"></select>
 
-            <button type="button" onclick="removeSelectedGroup()" style="margin-top: 10px;">Eliminar Grupo Seleccionado</button>
-        </div>
+                    <button type="button" onclick="removeSelectedGroup()" style="margin-top: 10px;">Eliminar Grupo Seleccionado</button>
+                </div>
+            </div>
 
-
-
-
-        <!-- Botón de envío -->
-        <div style="width: 100%; margin-top: 20px;">
-            <button type="button" onclick="createUser()">Crear Usuario</button>
-        </div>
-    </form>
+            <div class="full-width">
+                <button type="button" onclick="createUser()">Crear Usuario</button>
+            </div>
+        </form>
+    </div>
 
     <script>
 
@@ -404,7 +399,7 @@
 
 
 
-        function createUser() {
+        async function createUser() {
             const nombre = document.getElementById('nombre').value.trim();
             const apellido1 = document.getElementById('apellido1').value.trim();
             const apellido2 = document.getElementById('apellido2').value.trim();
@@ -415,8 +410,13 @@
             const ouSecundaria = document.getElementById('ouSecundaria').value;
             const departamento = document.getElementById('departamento').value;
             const fechaCaducidadOp = document.getElementById('fechaCaducidadOp').value;
-            const fechaCaducidad = document.getElementById('fechaCaducidad').value;
+            let fechaCaducidad = document.getElementById('fechaCaducidad').value;
             const cuota = document.getElementById('cuota').value;
+
+            // Si el usuario selecciona "no", asignamos la fecha de hoy
+            if (fechaCaducidadOp === "no") {
+                fechaCaducidad = new Date().toISOString().split('T')[0];
+            }
 
             // Recopilar grupos seleccionados de checkboxes
             const gruposCheckbox = Array.from(document.querySelectorAll('.checkbox-group input[type="checkbox"]:checked'))
@@ -429,45 +429,51 @@
             // Unificar ambos arrays de grupos
             const grupos = [...gruposCheckbox, ...gruposLista];
 
-            // Validar campos antes de enviar
+            // Validar campos obligatorios
             if (!nombre || !apellido1 || !username || !ouPrincipal || !ouSecundaria || !departamento) {
                 alert('Por favor, complete todos los campos obligatorios.');
                 return;
             }
 
+            // Si el usuario selecciona "sí", se exige que se haya seleccionado una fecha de caducidad
+            if (fechaCaducidadOp === "si" && !fechaCaducidad) {
+                alert('Por favor, seleccione una fecha de caducidad.');
+                return;
+            }
+
             // Enviar datos al controlador
-            fetch('/GestionUsuarios/CreateUser', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    nombre,
-                    apellido1,
-                    apellido2,
-                    username,
-                    nTelefono,
-                    nFuncionario,
-                    ouPrincipal,
-                    ouSecundaria,
-                    departamento,
-                    fechaCaducidadOp,
-                    fechaCaducidad,
-                    cuota,
-                    grupos // Grupos unificados
-                })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Usuario creado exitosamente.');
-                    } else {
-                        alert(`Error al crear el usuario: ${data.message}`);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error al crear el usuario:', error);
-                    alert('Ocurrió un error al crear el usuario.');
+            try {
+                const response = await fetch('/AltaUsuario/CreateUser', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nombre,
+                        apellido1,
+                        apellido2,
+                        username,
+                        nTelefono,
+                        nFuncionario,
+                        ouPrincipal,
+                        ouSecundaria,
+                        departamento,
+                        fechaCaducidadOp,
+                        fechaCaducidad,
+                        cuota,
+                        grupos
+                    })
                 });
+                const data = await response.json();
+                if (data.success) {
+                    alert('Usuario creado exitosamente.');
+                } else {
+                    alert(`Error al crear el usuario: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Error al crear el usuario:', error);
+                alert('Ocurrió un error al crear el usuario.');
+            }
         }
+
 
 
 
@@ -518,10 +524,24 @@
             }
         }
 
-
-
-
         
+        // Función para actualizar el estado del campo de fecha según la opción seleccionada
+        function updateFechaCaducidadField() {
+            const fechaSelect = document.getElementById('fechaCaducidadOp');
+            const fechaInput = document.getElementById('fechaCaducidad');
+            if (fechaSelect.value === 'no') {
+                fechaInput.disabled = true;
+                fechaInput.value = ""; // Limpiamos el campo
+            } else {
+                fechaInput.disabled = false;
+            }
+        }
+
+        // Asignar el event listener al select
+        document.getElementById('fechaCaducidadOp').addEventListener('change', updateFechaCaducidadField);
+
+        // Al cargar la página, actualizamos el estado del campo según el valor por defecto
+        window.addEventListener('load', updateFechaCaducidadField);
 
     </script>
 </body>
