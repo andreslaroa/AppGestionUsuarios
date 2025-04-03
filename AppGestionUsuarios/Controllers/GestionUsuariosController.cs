@@ -48,17 +48,7 @@ public class GestionUsuariosController : Controller
         public string Apellido1 { set; get; }
         public string Apellido2 { set; get; }
     }
-
-
-
-        public GestionUsuariosController()
-    {
-        string filePath = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "ArchivoDePruebasOU.xlsx");
-        _ouService = new OUService(filePath);
-    }
-
-
-    
+        
 
     [HttpGet]
     public IActionResult HabilitarDeshabilitarUsuario()

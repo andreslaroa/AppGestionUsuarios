@@ -1,0 +1,18 @@
+﻿@{
+    ViewData["Title"] = "Error";
+}
+
+<h1>Error</h1>
+<p>Ocurrió un error al procesar su solicitud.</p>
+
+@if (ViewBag.ErrorMessage != null)
+{
+    <div id="errorMessage" style="display:none;">@ViewBag.ErrorMessage</div>
+    <script>
+        // Mostrar el error en una ventana emergente
+        window.onload = function() {
+            var errorMessage = document.getElementById("errorMessage").innerText;
+            alert("Error: " + errorMessage);
+        };
+    </script>
+}

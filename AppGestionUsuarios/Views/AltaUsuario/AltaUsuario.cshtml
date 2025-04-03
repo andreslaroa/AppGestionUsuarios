@@ -57,12 +57,12 @@
             margin-bottom: 15px;
         }
 
-        select:focus,
-        input:focus {
-            border-color: #960018;
-            outline: none;
-            box-shadow: 0 0 5px rgba(150, 0, 24, 0.3);
-        }
+            select:focus,
+            input:focus {
+                border-color: #960018;
+                outline: none;
+                box-shadow: 0 0 5px rgba(150, 0, 24, 0.3);
+            }
 
         button {
             background-color: #960018;
@@ -73,9 +73,9 @@
             transition: background-color 0.3s ease;
         }
 
-        button:hover {
-            background-color: #7a0013;
-        }
+            button:hover {
+                background-color: #7a0013;
+            }
 
         .checkbox-group label {
             display: flex;
@@ -100,16 +100,19 @@
             <div class="form-section">
                 <div class="field-group">
                     <label for="nombre">Nombre:</label>
-                    <input type="text" id="nombre" name="nombre" oninput="generateUsername()" />
+                    <input type="text" id="nombre" name="nombre" oninput="generateUsername()" required />
 
                     <label for="apellido1">Apellido 1:</label>
-                    <input type="text" id="apellido1" name="apellido1" oninput="generateUsername()" />
+                    <input type="text" id="apellido1" name="apellido1" oninput="generateUsername()" required />
 
                     <label for="apellido2">Apellido 2:</label>
                     <input type="text" id="apellido2" name="apellido2" oninput="generateUsername()" />
 
                     <label for="username">Nombre de Usuario:</label>
-                    <input type="text" id="username" name="username" readonly />
+                    <input type="text" id="username" name="username" readonly required />
+
+                    <label for="dni">DNI:</label>
+                    <input type="text" id="dni" name="dni" onchange="checkDNIExists()" required />
 
                     <label for="nTelefono">Extensión de teléfono:</label>
                     <input type="text" id="nTelefono" name="nTelefono" oninput="checkTelephoneExists()" />
@@ -120,30 +123,34 @@
 
                 <div class="field-group">
                     <label for="ouPrincipal">OU Principal:</label>
-                    <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamentos();">
+                    <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamento(); fetchLugarEnvio();" required>
                         <option value="">Seleccione una OU Principal</option>
-                        @foreach (var ou in ViewBag.OUPrincipales as List<string>) {
-                            <option value="@ou">@ou</option>
+                        @if (ViewBag.OUPrincipales != null)
+
+                        {
+
+                            foreach (var ou in ViewBag.OUPrincipales as List<string>)
+
+                            {
+                                <option value="@ou">@ou</option>
+                            }
+
                         }
                     </select>
 
                     <label for="ouSecundaria">OU Secundaria:</label>
-                    <select id="ouSecundaria" name="ouSecundaria">
-                        <option value="">Seleccione una OU Secundaria</option>
+                    <select id="ouSecundaria" name="ouSecundaria" onchange="fetchDepartamento(); fetchLugarEnvio();">
+                        <option value="">Seleccione una OU Secundaria (opcional)</option>
                     </select>
 
                     <label for="departamento">Departamento:</label>
-                    <select id="departamento" name="departamento" onchange="fetchLugarEnvio()">
-                        <option value="">Seleccione un departamento</option>
-                    </select>
+                    <input type="text" id="departamento" name="departamento" readonly required />
 
                     <label for="lugarEnvio">Lugar de Envío:</label>
-                    <select id="lugarEnvio" name="lugarEnvio">
-                        <option value="">Seleccione un lugar de envío</option>
-                    </select>
+                    <input type="text" id="lugarEnvio" name="lugarEnvio" readonly />
 
                     <label for="fechaCaducidadOp">¿Tiene fecha de caducidad?</label>
-                    <select id="fechaCaducidadOp" name="fechaCaducidadOp">
+                    <select id="fechaCaducidadOp" name="fechaCaducidadOp" required>
                         <option value="si">Sí</option>
                         <option value="no">No</option>
                     </select>
@@ -154,8 +161,16 @@
                     <label for="cuota">Cuota del usuario:</label>
                     <select id="cuota" name="cuota">
                         <option value="">Seleccione la cuota para el usuario</option>
-                        @foreach (var cuota in ViewBag.cuota as List<string>) {
-                            <option value="@cuota">@cuota</option>
+                        @if (ViewBag.Cuota != null)
+
+                        {
+
+                            foreach (var cuota in ViewBag.Cuota as List<string>)
+
+                            {
+                                <option value="@cuota">@cuota</option>
+                            }
+
                         }
                     </select>
                 </div>
@@ -163,15 +178,31 @@
                 <div class="checkbox-group">
                     <h4>Grupos de usuarios</h4>
                     <label><input type="checkbox" id="grupoInternet" name="grupoInternet" value="Internet" /> Grupo Internet</label>
-                    <label><input type="checkbox" id="grupoPortalEmpleado" name="grupoPortalEmpleado" value="GA_R_PORTALDELEMPLEADO" /> Portal del empleado</label>
+                    @{
+                        var portalList = ViewBag.PortalEmpleado as List<string>;
+
+                        if (portalList != null && portalList.Any())
+
+                        {
+                            <label><input type="checkbox" id="grupoPortalEmpleado" name="grupoPortalEmpleado" value="@portalList.First()" /> Portal del empleado</label>
+                        }
+                    }
                 </div>
 
                 <div class="field-group">
                     <label for="grupoDropdown">Seleccionar Grupos:</label>
                     <select id="grupoDropdown" name="grupoDropdown">
                         <option value="">Seleccione un grupo</option>
-                        @foreach (var grupo in ViewBag.GruposAD as List<string>) {
-                            <option value="@grupo">@grupo</option>
+                        @if (ViewBag.GruposAD != null)
+
+                        {
+
+                            foreach (var grupo in ViewBag.GruposAD as List<string>)
+
+                            {
+                                <option value="@grupo">@grupo</option>
+                            }
+
                         }
                     </select>
 
@@ -191,89 +222,134 @@
     </div>
 
     <script>
-
         // Función para obtener las OUs Secundarias
         function fetchOUSecundarias() {
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria');
-            ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria</option>';
+            ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria (opcional)</option>';
 
             if (ouPrincipal) {
-                fetch('/GestionUsuarios/GetOUSecundarias', {
+                fetch('/AltaUsuario/GetOUSecundarias', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ ouPrincipal })
                 })
-                    .then(response => response.json())
-                    .then(data => {
-                        data.forEach(ou => {
-                            const option = document.createElement('option');
-                            option.value = ou;
-                            option.textContent = ou;
-                            ouSecundaria.appendChild(option);
-                        });
+                    .then(response => {
+                        console.log('Respuesta de GetOUSecundarias:', response);
+                        return response.json();
                     })
-                    .catch(error => console.error('Error al obtener las OUs secundarias:', error));
-            }
-        }
-
-
-        function fetchDepartamentos() {
-            const ouPrincipal = document.getElementById('ouPrincipal').value;
-            const departamento = document.getElementById('departamento');
-            departamento.innerHTML = '<option value="">Seleccione un departamento</option>';
-
-            if (ouPrincipal) {
-                fetch('/GestionUsuarios/GetDepartamentos', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ ouPrincipal })
-                })
-                    .then(response => response.json())
                     .then(data => {
-                        data.forEach(dep => {
-                            const option = document.createElement('option');
-                            option.value = dep;
-                            option.textContent = dep;
-                            departamento.appendChild(option);
-                        });
-                    })
-                    .catch(error => console.error('Error al obtener los departamentos:', error));
-            }
-        }
-
-        function fetchLugarEnvio() {
-            const departamento = document.getElementById('departamento').value;
-            const lugarEnvio = document.getElementById('lugarEnvio');
-            lugarEnvio.innerHTML = '<option value="">Seleccione un lugar de envío</option>';
-
-            if (departamento) {
-                fetch('/GestionUsuarios/GetLugarEnvio', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ departamento })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.length === 1) {
-                            lugarEnvio.innerHTML = '<option value="' + data[0] + '">' + data[0] + '</option>';
+                        console.log('OU Secundarias recibidas:', data);
+                        if (data.length === 0) {
+                            ouSecundaria.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
                         } else {
-                            data.forEach(lugar => {
+                            data.forEach(ou => {
                                 const option = document.createElement('option');
-                                option.value = lugar;
-                                option.textContent = lugar;
-                                lugarEnvio.appendChild(option);
+                                option.value = ou;
+                                option.textContent = ou;
+                                ouSecundaria.appendChild(option);
                             });
                         }
                     })
-                    .catch(error => console.error('Error al obtener el lugar de envío:', error));
+                    .catch(error => {
+                        console.error('Error al obtener las OUs secundarias:', error);
+                        alert('Error al obtener las OUs secundarias: ' + error.message);
+                    });
             }
+        }
+
+        // Función para obtener el departamento
+        function fetchDepartamento() {
+            const ouPrincipal = document.getElementById('ouPrincipal').value;
+            const ouSecundaria = document.getElementById('ouSecundaria').value;
+            const departamentoField = document.getElementById('departamento');
+
+            console.log('Iniciando fetchDepartamento con:', { ouPrincipal, ouSecundaria });
+
+            if (!ouPrincipal) {
+                console.log('No hay OU principal, limpiando campo departamento');
+                departamentoField.value = '';
+                return;
+            }
+
+            fetch('/AltaUsuario/GetDepartamento', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ ouPrincipal, ouSecundaria })
+            })
+                .then(response => {
+                    console.log('Respuesta del servidor (GetDepartamento):', response);
+                    if (!response.ok) {
+                        throw new Error(`Error HTTP: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Datos recibidos de GetDepartamento:', data);
+                    if (data.success) {
+                        console.log('Asignando departamento:', data.departamento);
+                        departamentoField.value = data.departamento;
+                    } else {
+                        console.log('No se encontró departamento:', data.message);
+                        departamentoField.value = '';
+                        alert(data.message + ' (Path: ' + data.ldapPath + ')');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error al obtener el departamento:', error);
+                    alert('Error al obtener el departamento: ' + error.message);
+                    departamentoField.value = '';
+                });
+        }
+
+        // Nueva función para obtener el lugar de envío
+        function fetchLugarEnvio() {
+            const ouPrincipal = document.getElementById('ouPrincipal').value;
+            const ouSecundaria = document.getElementById('ouSecundaria').value;
+            const lugarEnvioField = document.getElementById('lugarEnvio');
+
+            console.log('Iniciando fetchLugarEnvio con:', { ouPrincipal, ouSecundaria });
+
+            if (!ouPrincipal) {
+                console.log('No hay OU principal, limpiando campo lugar de envío');
+                lugarEnvioField.value = '';
+                return;
+            }
+
+            fetch('/AltaUsuario/GetLugarEnvio', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ ouPrincipal, ouSecundaria })
+            })
+                .then(response => {
+                    console.log('Respuesta del servidor (GetLugarEnvio):', response);
+                    if (!response.ok) {
+                        throw new Error(`Error HTTP: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Datos recibidos de GetLugarEnvio:', data);
+                    if (data.success) {
+                        console.log('Asignando lugar de envío:', data.lugarEnvio);
+                        lugarEnvioField.value = data.lugarEnvio;
+                    } else {
+                        console.log('No se encontró lugar de envío:', data.message);
+                        lugarEnvioField.value = '';
+                        alert(data.message + ' (Path: ' + data.ldapPath + ')');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error al obtener el lugar de envío:', error);
+                    alert('Error al obtener el lugar de envío: ' + error.message);
+                    lugarEnvioField.value = '';
+                });
         }
 
         async function generateUsername() {
@@ -281,8 +357,6 @@
             const apellido1 = document.getElementById('apellido1').value.trim();
             const apellido2 = document.getElementById('apellido2').value.trim();
             const usernameField = document.getElementById('username');
-
-            
 
             try {
                 const response = await fetch('/GestionUsuarios/GenerateUsername', {
@@ -307,19 +381,57 @@
             }
         }
 
+        async function checkDNIExists() {
+            const dni = document.getElementById('dni').value.trim();
+            if (!dni) {
+                alert("Por favor, ingrese un DNI.");
+                return true; // Asumimos que hay un error para evitar continuar
+            }
 
-       
+            try {
+                const response = await fetch('/AltaUsuario/CheckDNIExists', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ dni })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success) {
+                        if (data.exists) {
+                            alert("El DNI ya existe en el Directorio Activo.");
+                            document.getElementById('dni').value = "";
+                            return true; // Existe en el Directorio Activo
+                        } else {
+                            return false; // No existe en el Directorio Activo
+                        }
+                    } else {
+                        console.error("Error en la respuesta del servidor: " + data.message);
+                        alert("Error en la respuesta del servidor: " + data.message);
+                        document.getElementById('dni').value = "";
+                        return true; // Asumimos que existe si hay un error en el servidor
+                    }
+                } else {
+                    console.error("Error al verificar el DNI: " + response.statusText);
+                    return true; // Asumimos que existe si no hay una respuesta válida
+                }
+            } catch (error) {
+                console.error("Error al verificar el DNI:", error);
+                alert("Ocurrió un error al verificar el DNI: " + error.message);
+                return true; // Asumimos que existe si hay un error
+            }
+        }
 
         async function checkNumberIdExists() {
             const nFuncionario = document.getElementById('nFuncionario').value.trim();
             if (!nFuncionario) {
-                console.error("El número de funcionario está vacío.");
-                alert("Por favor, ingrese un número de funcionario.");
-                return true; // Asumimos que existe para evitar errores
+                return false; // No existe conflicto, ya que es opcional
             }
 
             if (nFuncionario != "999999") {
-
                 try {
                     const response = await fetch('/GestionUsuarios/CheckNumberIdExists', {
                         method: 'POST',
@@ -356,10 +468,15 @@
                     return true; // Asumimos que existe si hay un error
                 }
             }
+            return false;
         }
 
         async function checkTelephoneExists() {
             const nTelefono = document.getElementById("nTelefono").value.trim();
+            if (!nTelefono) {
+                return false; // No existe conflicto, ya que es opcional
+            }
+
             try {
                 const response = await fetch('/GestionUsuarios/CheckTelephoneExists', {
                     method: 'POST',
@@ -397,18 +514,18 @@
             }
         }
 
-
-
         async function createUser() {
             const nombre = document.getElementById('nombre').value.trim();
             const apellido1 = document.getElementById('apellido1').value.trim();
             const apellido2 = document.getElementById('apellido2').value.trim();
             const username = document.getElementById('username').value.trim();
+            const dni = document.getElementById('dni').value.trim();
             const nTelefono = document.getElementById('nTelefono').value.trim();
             const nFuncionario = document.getElementById('nFuncionario').value.trim();
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria').value;
             const departamento = document.getElementById('departamento').value;
+            const lugarEnvio = document.getElementById('lugarEnvio').value;
             const fechaCaducidadOp = document.getElementById('fechaCaducidadOp').value;
             let fechaCaducidad = document.getElementById('fechaCaducidad').value;
             const cuota = document.getElementById('cuota').value;
@@ -429,8 +546,8 @@
             // Unificar ambos arrays de grupos
             const grupos = [...gruposCheckbox, ...gruposLista];
 
-            // Validar campos obligatorios
-            if (!nombre || !apellido1 || !username || !ouPrincipal || !ouSecundaria || !departamento) {
+            // Validar campos obligatorios (DNI ahora es obligatorio)
+            if (!nombre || !apellido1 || !username || !ouPrincipal || !dni) {
                 alert('Por favor, complete todos los campos obligatorios.');
                 return;
             }
@@ -439,6 +556,15 @@
             if (fechaCaducidadOp === "si" && !fechaCaducidad) {
                 alert('Por favor, seleccione una fecha de caducidad.');
                 return;
+            }
+
+            // Verificar si el DNI, número de teléfono o número de funcionario ya existen
+            const dniExists = await checkDNIExists();
+            const telephoneExists = await checkTelephoneExists();
+            const numberIdExists = await checkNumberIdExists();
+
+            if (dniExists || telephoneExists || numberIdExists) {
+                return; // Detener el proceso si hay conflictos
             }
 
             // Enviar datos al controlador
@@ -451,11 +577,13 @@
                         apellido1,
                         apellido2,
                         username,
+                        dni, // Nuevo campo
                         nTelefono,
                         nFuncionario,
                         ouPrincipal,
-                        ouSecundaria,
+                        ouSecundaria: ouSecundaria || null,
                         departamento,
+                        lugarEnvio,
                         fechaCaducidadOp,
                         fechaCaducidad,
                         cuota,
@@ -470,12 +598,9 @@
                 }
             } catch (error) {
                 console.error('Error al crear el usuario:', error);
-                alert('Ocurrió un error al crear el usuario.');
+                alert('Ocurrió un error al crear el usuario: ' + error.message);
             }
         }
-
-
-
 
         // Función para añadir un grupo a la lista seleccionada
         function addGroup() {
@@ -524,14 +649,13 @@
             }
         }
 
-        
         // Función para actualizar el estado del campo de fecha según la opción seleccionada
         function updateFechaCaducidadField() {
             const fechaSelect = document.getElementById('fechaCaducidadOp');
             const fechaInput = document.getElementById('fechaCaducidad');
             if (fechaSelect.value === 'no') {
                 fechaInput.disabled = true;
-                fechaInput.value = ""; // Limpiamos el campo
+                fechaInput.value = "";
             } else {
                 fechaInput.disabled = false;
             }
@@ -542,7 +666,6 @@
 
         // Al cargar la página, actualizamos el estado del campo según el valor por defecto
         window.addEventListener('load', updateFechaCaducidadField);
-
     </script>
 </body>
 </html>

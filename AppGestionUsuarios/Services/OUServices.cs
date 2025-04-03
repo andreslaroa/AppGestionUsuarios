@@ -1,235 +1,93 @@
-﻿using OfficeOpenXml;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.DirectoryServices;
 
 public class OUService
 {
-    private readonly string _filePath;
-
-    public OUService(string filePath)
+    public OUService()
     {
-        _filePath = filePath;
     }
 
     public List<string> GetOUPrincipales()
     {
-        var ouPrincipales = new List<string>();
-
-        // Configurar la licencia de EPPlus
-        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-        using (var package = new ExcelPackage(new FileInfo(_filePath)))
-        {
-            var worksheet = package.Workbook.Worksheets["OU_PRINCIPAL"]; // Primera hoja
-            int rowCount = worksheet.Dimension.Rows;
-
-            for (int row = 2; row <= rowCount; row++) // Asume que la primera fila es el encabezado
-            {
-                string ouPrincipal = worksheet.Cells[row, 1].Text; // Columna 1
-                if (!string.IsNullOrEmpty(ouPrincipal) && !ouPrincipales.Contains(ouPrincipal))
-                {
-                    ouPrincipales.Add(ouPrincipal);
-                }
-            }
-        }
-
-        return ouPrincipales;
+        // Este método ya no se usa directamente en AltaUsuarioController,
+        // pero lo dejamos por si se necesita en otro lugar
+        return new List<string>();
     }
 
     public List<string> GetOUSecundarias(string selectedOU)
     {
-        var ouSecundarias = new List<string>();
-
-        // Configurar la licencia de EPPlus
-        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-        using (var package = new ExcelPackage(new FileInfo(_filePath)))
+        try
         {
-            var worksheet = package.Workbook.Worksheets["OU_SECUNDARIA"]; // Hoja llamada "OU_SECUNDARIA"
-
-            if (worksheet == null)
-                return ouSecundarias; // Si la hoja no existe, retorna la lista vacía
-
-            int columnCount = worksheet.Dimension.Columns;
-            int rowCount = worksheet.Dimension.Rows;
-
-            // Encontrar la columna correspondiente a la OU seleccionada (buscando en la primera fila)
-            int targetColumnIndex = -1;
-            for (int col = 1; col <= columnCount; col++)
+            var ouSecundarias = new List<string>();
+            using (var rootEntry = new DirectoryEntry($"LDAP://OU=Usuarios y Grupos,OU={selectedOU},OU=AREAS,DC=aytosa,DC=inet"))
             {
-                string header = worksheet.Cells[1, col].Text; // Primera fila (encabezado)
-                if (header.Equals(selectedOU, System.StringComparison.OrdinalIgnoreCase))
+                foreach (DirectoryEntry child in rootEntry.Children)
                 {
-                    targetColumnIndex = col;
-                    break;
+                    if (child.SchemaClassName == "organizationalUnit")
+                    {
+                        string ouName = child.Properties["ou"].Value?.ToString();
+                        if (!string.IsNullOrEmpty(ouName))
+                        {
+                            ouSecundarias.Add(ouName);
+                        }
+                    }
                 }
             }
-
-            if (targetColumnIndex == -1)
-                return ouSecundarias; // No se encontró la OU seleccionada en la primera fila
-
-            // Recorrer la columna y agregar celdas con contenido a la lista
-            for (int row = 2; row <= rowCount; row++) // Comienza en la fila 2 para omitir el encabezado
-            {
-                string ouSecundaria = worksheet.Cells[row, targetColumnIndex].Text;
-                if (!string.IsNullOrEmpty(ouSecundaria))
-                {
-                    ouSecundarias.Add(ouSecundaria);
-                }
-            }
+            ouSecundarias.Sort();
+            return ouSecundarias;
         }
-
-        return ouSecundarias;
+        catch (Exception ex)
+        {
+            throw new Exception($"Error al obtener las OUs secundarias para {selectedOU}: {ex.Message}", ex);
+        }
     }
-
 
     public List<string> GetDepartamentos(string selectedOU)
     {
-        var departamentos = new List<string>();
-
-        // Configurar la licencia de EPPlus
-        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-        using (var package = new ExcelPackage(new FileInfo(_filePath)))
+        try
         {
-            var worksheet = package.Workbook.Worksheets["DEPARTAMENTO"]; // Hoja llamada "DEPARTAMENTO"
-
-            if (worksheet == null)
-                return departamentos; // Si la hoja no existe, retorna la lista vacía
-
-            int columnCount = worksheet.Dimension.Columns;
-            int rowCount = worksheet.Dimension.Rows;
-
-            // Encontrar la columna correspondiente al departamento seleccionada (buscando en la primera fila)
-            int targetColumnIndex = -1;
-            for (int col = 1; col <= columnCount; col++)
-            {
-                string header = worksheet.Cells[1, col].Text; 
-                if (header.Equals(selectedOU, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    targetColumnIndex = col;
-                    break;
-                }
-            }
-
-            if (targetColumnIndex == -1)
-                return departamentos; // No se encontró la OU seleccionada en la primera fila
-
-            // Recorrer la columna y agregar celdas con contenido a la lista
-            for (int row = 2; row <= rowCount; row++) // Comienza en la fila 2 para omitir el encabezado
-            {
-                string departamento = worksheet.Cells[row, targetColumnIndex].Text;
-                if (!string.IsNullOrEmpty(departamento))
-                {
-                    departamentos.Add(departamento);
-                }
-            }
+            // Aquí podrías buscar departamentos en el AD, pero por ahora devolvemos una lista predeterminada
+            return new List<string> { "Departamento1", "Departamento2", "Departamento3" };
         }
-
-        return departamentos;
+        catch (Exception ex)
+        {
+            throw new Exception($"Error al obtener los departamentos para {selectedOU}: {ex.Message}", ex);
+        }
     }
-
 
     public List<string> GetLugarEnvio(string departamento)
     {
-        var lugaresEnvio = new List<string>();
-
-        // Configurar la licencia de EPPlus
-        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-        using (var package = new ExcelPackage(new FileInfo(_filePath)))
+        try
         {
-            var worksheet = package.Workbook.Worksheets["LUGAR_ENVIO"]; // Hoja llamada "LUGAR_ENVIO"
-            if (worksheet == null)
-                return lugaresEnvio;
-
-            int rowCount = worksheet.Dimension.Rows;
-            int columnCount = worksheet.Dimension.Columns;
-
-            for (int row = 2; row <= rowCount; row++) // Comienza desde la fila 2 para omitir el encabezado
-            {
-                string valorDepartamento = worksheet.Cells[row, 1].Text; // Columna A
-
-                // Si el departamento coincide, procesar
-                if (valorDepartamento.Equals(departamento, StringComparison.OrdinalIgnoreCase))
-                {
-                    // Si el departamento es "CEAS", agregar valores de columnas B en adelante como lista desplegable
-                    if (departamento.Equals("BS:BS_CEAS", StringComparison.OrdinalIgnoreCase))
-                    {
-                        for (int col = 2; col <= columnCount; col++) // Columnas B, C, D...
-                        {
-                            string lugar = worksheet.Cells[row, col].Text;
-                            if (!string.IsNullOrEmpty(lugar))
-                            {
-                                lugaresEnvio.Add(lugar);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // Si no es "CEAS", agregar solo el valor de la columna B
-                        string lugar = worksheet.Cells[row, 2].Text; // Columna B
-                        if (!string.IsNullOrEmpty(lugar))
-                        {
-                            lugaresEnvio.Add(lugar);
-                        }
-                    }
-                    break; // Detener la búsqueda ya que encontramos el valor
-                }
-            }
+            // Aquí podrías buscar lugares de envío en el AD, pero por ahora devolvemos una lista predeterminada
+            return new List<string> { "Lugar1", "Lugar2", "Lugar3" };
         }
-
-        return lugaresEnvio;
+        catch (Exception ex)
+        {
+            throw new Exception($"Error al obtener los lugares de envío para {departamento}: {ex.Message}", ex);
+        }
     }
 
     public List<string> GetPortalEmpleado()
     {
-        var portalEmpleado = new List<string>();
-
-        // Configurar la licencia de EPPlus
-        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-        using (var package = new ExcelPackage(new FileInfo(_filePath)))
+        try
         {
-            var worksheet = package.Workbook.Worksheets["PORTAL_EMPLEADO"]; 
-            int rowCount = worksheet.Dimension.Rows;
-
-            for (int row = 2; row <= rowCount; row++) // Asume que la primera fila es el encabezado
-            {
-                string portalEmpleadoVar = worksheet.Cells[row, 1].Text; // Columna 1
-                if (!string.IsNullOrEmpty(portalEmpleadoVar) && !portalEmpleado.Contains(portalEmpleadoVar))
-                {
-                    portalEmpleado.Add(portalEmpleadoVar);
-                }
-            }
+            return new List<string> { "GA_R_PORTALDELEMPLEADO" };
         }
-
-        return portalEmpleado;
+        catch (Exception ex)
+        {
+            throw new Exception("Error al obtener los portales del empleado: " + ex.Message, ex);
+        }
     }
 
     public List<string> GetCuota()
     {
-        var cuota = new List<string>();
-
-        // Configurar la licencia de EPPlus
-        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-        using (var package = new ExcelPackage(new FileInfo(_filePath)))
+        try
         {
-            var worksheet = package.Workbook.Worksheets["CUOTA"]; 
-            int rowCount = worksheet.Dimension.Rows;
-
-            for (int row = 2; row <= rowCount; row++) // Asume que la primera fila es el encabezado
-            {
-                string cuotaVar = worksheet.Cells[row, 1].Text; // Columna 1
-                if (!string.IsNullOrEmpty(cuotaVar) && !cuota.Contains(cuotaVar))
-                {
-                    cuota.Add(cuotaVar);
-                }
-            }
+            return new List<string> { "500 MB", "1 GB", "2 GB" };
         }
-
-        return cuota;
+        catch (Exception ex)
+        {
+            throw new Exception("Error al obtener las cuotas: " + ex.Message, ex);
+        }
     }
-
 }

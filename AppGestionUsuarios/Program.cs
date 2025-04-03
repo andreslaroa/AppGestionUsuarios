@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.EntityFrameworkCore;
 
 internal class Program
 {
@@ -30,6 +31,9 @@ internal class Program
 
         builder.Services.AddAuthorization(); // Usar autenticación en la aplicación
         builder.Services.AddControllersWithViews();
+
+        // Registrar OUService
+        builder.Services.AddTransient<OUService>();
 
         var app = builder.Build();
 

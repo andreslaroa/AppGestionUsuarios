@@ -18,10 +18,9 @@ public class AltaUsuarioController : Controller
 {
     private readonly OUService _ouService;
 
-    public AltaUsuarioController()
+    public AltaUsuarioController(OUService ouService)
     {
-        string filePath = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "ArchivoDePruebasOU.xlsx");
-        _ouService = new OUService(filePath);
+        _ouService = ouService;
     }
 
     public class UserModelAltaUsuario
@@ -35,47 +34,274 @@ public class AltaUsuarioController : Controller
         public string OUPrincipal { get; set; }
         public string OUSecundaria { get; set; }
         public string Departamento { get; set; }
+        public string LugarEnvio { get; set; }
+        public string Dni { get; set; } 
         public string FechaCaducidadOp { get; set; }
         public DateTime FechaCaducidad { get; set; }
         public string Cuota { get; set; }
         public List<string> Grupos { get; set; }
     }
 
-   
-    //Función para recibir la petición get
     [HttpGet]
     public IActionResult AltaUsuario()
     {
-        ViewBag.OUPrincipales = _ouService.GetOUPrincipales();
-        ViewBag.portalEmpleado = _ouService.GetPortalEmpleado();
-        ViewBag.cuota = _ouService.GetCuota();
+        try
+        {
+            // Cargar OUs principales desde el Active Directory
+            ViewBag.OUPrincipales = GetOUPrincipalesFromAD();
 
-        // Grupos de AD
+            // Cargar grupos del Active Directory
+            var grupos = GetGruposFromAD();
+            ViewBag.GruposAD = grupos.OrderBy(g => g).ToList();
+
+            // Otros datos necesarios desde el servicio
+            ViewBag.PortalEmpleado = _ouService.GetPortalEmpleado();
+            ViewBag.Cuota = _ouService.GetCuota();
+
+            return View("AltaUsuario");
+        }
+        catch (Exception ex)
+        {
+            // Lanzar la excepción para que el middleware la maneje
+            throw new Exception("Error al cargar la página de alta de usuario: " + ex.Message, ex);
+        }
+    }
+
+    private List<string> GetGruposFromAD()
+    {
+        var grupos = new List<string>();
+
         try
         {
             using (var entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
-            using (var searcher = new DirectorySearcher(entry))
             {
-                searcher.Filter = "(objectClass=group)";
-                searcher.PropertiesToLoad.Add("cn");
-                searcher.SearchScope = SearchScope.Subtree;
-
-                var grupos = new List<string>();
-                foreach (SearchResult result in searcher.FindAll())
+                using (var searcher = new DirectorySearcher(entry))
                 {
-                    if (result.Properties.Contains("cn"))
-                        grupos.Add(result.Properties["cn"][0].ToString());
-                }
+                    searcher.Filter = "(objectClass=group)";
+                    searcher.PropertiesToLoad.Add("cn");
+                    searcher.SearchScope = SearchScope.Subtree;
+                    searcher.PageSize = 1000;
 
-                ViewBag.GruposAD = grupos.OrderBy(g => g).ToList();
+                    foreach (SearchResult result in searcher.FindAll())
+                    {
+                        if (result.Properties.Contains("cn"))
+                        {
+                            grupos.Add(result.Properties["cn"][0].ToString());
+                        }
+                    }
+                }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            ViewBag.GruposAD = new List<string>();
+            throw new Exception("Error al obtener los grupos del Active Directory: " + ex.Message, ex);
         }
 
-        return View("AltaUsuario"); // Asegúrate de que tu vista esté en /Views/AltaUsuario/AltaUsuario.cshtml
+        return grupos;
+    }
+
+    private List<string> GetOUPrincipalesFromAD()
+    {
+        var ouPrincipales = new List<string>();
+
+        try
+        {
+            using (var rootEntry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
+            {
+                using (var searcher = new DirectorySearcher(rootEntry))
+                {
+                    // Buscar la OU "AREAS" como base
+                    searcher.Filter = "(&(objectClass=organizationalUnit)(ou=AREAS))";
+                    searcher.SearchScope = SearchScope.Subtree;
+                    searcher.PropertiesToLoad.Add("distinguishedName");
+
+                    SearchResult areasResult = searcher.FindOne();
+                    if (areasResult == null)
+                    {
+                        throw new Exception("No se encontró la OU 'AREAS' en el Active Directory.");
+                    }
+
+                    string areasPath = areasResult.Path;
+
+                    // Buscar las sub-OUs bajo "AREAS"
+                    using (var areasEntry = new DirectoryEntry(areasPath))
+                    {
+                        foreach (DirectoryEntry child in areasEntry.Children)
+                        {
+                            if (child.SchemaClassName == "organizationalUnit")
+                            {
+                                string ouName = child.Properties["ou"].Value?.ToString();
+                                if (!string.IsNullOrEmpty(ouName))
+                                {
+                                    ouPrincipales.Add(ouName);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            ouPrincipales.Sort();
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("Error al obtener las OUs principales del Active Directory: " + ex.Message, ex);
+        }
+
+        return ouPrincipales;
+    }
+
+    [HttpPost]
+    public IActionResult GetOUSecundarias([FromBody] Dictionary<string, string> requestData)
+    {
+        if (requestData == null || !requestData.ContainsKey("ouPrincipal"))
+        {
+            return Json(new List<string>());
+        }
+
+        string ouPrincipal = requestData["ouPrincipal"];
+        if (string.IsNullOrEmpty(ouPrincipal))
+        {
+            return Json(new List<string>());
+        }
+
+        try
+        {
+            var ouSecundarias = new List<string>();
+
+            // Construir el path LDAP para la OU principal seleccionada
+            string ldapPath = $"LDAP://OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+
+            using (var rootEntry = new DirectoryEntry(ldapPath))
+            {
+                // Buscar las sub-OUs dentro de la OU principal
+                foreach (DirectoryEntry child in rootEntry.Children)
+                {
+                    if (child.SchemaClassName == "organizationalUnit")
+                    {
+                        string ouName = child.Properties["ou"].Value?.ToString();
+                        if (!string.IsNullOrEmpty(ouName))
+                        {
+                            ouSecundarias.Add(ouName);
+                        }
+                    }
+                }
+            }
+
+            ouSecundarias.Sort();
+            return Json(ouSecundarias);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Error al obtener las OU secundarias para {ouPrincipal}: {ex.Message}", ex);
+        }
+    }
+
+    [HttpPost]
+    public IActionResult GetDepartamento([FromBody] Dictionary<string, string> requestData)
+    {
+        if (requestData == null || !requestData.ContainsKey("ouPrincipal"))
+        {
+            return Json(new { success = false, message = "OU principal no especificada." });
+        }
+
+        string ouPrincipal = requestData["ouPrincipal"];
+        string ouSecundaria = requestData.ContainsKey("ouSecundaria") ? requestData["ouSecundaria"] : null;
+
+        if (string.IsNullOrEmpty(ouPrincipal))
+        {
+            return Json(new { success = false, message = "OU principal no puede estar vacía." });
+        }
+
+        try
+        {
+            string ldapPath;
+            if (!string.IsNullOrEmpty(ouSecundaria))
+            {
+                // Si hay OU secundaria, buscamos el departamento en la OU secundaria
+                ldapPath = $"LDAP://OU={ouSecundaria},OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+            }
+            else
+            {
+                // Si no hay OU secundaria, buscamos el departamento en la OU principal
+                ldapPath = $"LDAP://OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+            }
+
+            using (var ouEntry = new DirectoryEntry(ldapPath))
+            {
+                if (ouEntry == null)
+                {
+                    return Json(new { success = false, message = "No se pudo conectar a la OU especificada.", ldapPath });
+                }
+
+                // Obtener el atributo 'description' de la OU
+                string departamento = ouEntry.Properties["description"]?.Value?.ToString();
+                if (string.IsNullOrEmpty(departamento))
+                {
+                    // Si no hay descripción, usar el nombre de la OU como valor predeterminado
+                    departamento = ouEntry.Properties["ou"]?.Value?.ToString() ?? "Sin departamento";
+                }
+
+                return Json(new { success = true, departamento, ldapPath });
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Error al obtener el departamento: {ex.Message}, OU Principal: {ouPrincipal}, OU Secundaria: {ouSecundaria}", ex);
+        }
+    }
+
+    [HttpPost]
+    public IActionResult GetLugarEnvio([FromBody] Dictionary<string, string> requestData)
+    {
+        if (requestData == null || !requestData.ContainsKey("ouPrincipal"))
+        {
+            return Json(new { success = false, message = "OU principal no especificada." });
+        }
+
+        string ouPrincipal = requestData["ouPrincipal"];
+        string ouSecundaria = requestData.ContainsKey("ouSecundaria") ? requestData["ouSecundaria"] : null;
+
+        if (string.IsNullOrEmpty(ouPrincipal))
+        {
+            return Json(new { success = false, message = "OU principal no puede estar vacía." });
+        }
+
+        try
+        {
+            string ldapPath;
+            if (!string.IsNullOrEmpty(ouSecundaria))
+            {
+                // Si hay OU secundaria, buscamos el lugar de envío en la OU secundaria
+                ldapPath = $"LDAP://OU={ouSecundaria},OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+            }
+            else
+            {
+                // Si no hay OU secundaria, buscamos el lugar de envío en la OU principal
+                ldapPath = $"LDAP://OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+            }
+
+            using (var ouEntry = new DirectoryEntry(ldapPath))
+            {
+                if (ouEntry == null)
+                {
+                    return Json(new { success = false, message = "No se pudo conectar a la OU especificada.", ldapPath });
+                }
+
+                // Obtener el atributo 'city' de la OU
+                string lugarEnvio = ouEntry.Properties["l"]?.Value?.ToString(); // El atributo 'city' en AD es 'l' (lowercase L)
+                if (string.IsNullOrEmpty(lugarEnvio))
+                {
+                    // Si no hay valor para 'city', usar un valor predeterminado
+                    lugarEnvio = "Sin lugar de envío";
+                }
+
+                return Json(new { success = true, lugarEnvio, ldapPath });
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Error al obtener el lugar de envío: {ex.Message}, OU Principal: {ouPrincipal}, OU Secundaria: {ouSecundaria}", ex);
+        }
     }
 
 
@@ -89,11 +315,11 @@ public class AltaUsuarioController : Controller
             return Json(new { success = false, message = "No se recibieron datos válidos." });
         }
 
-        // Validar los campos obligatorios
+        // Validar los campos obligatorios (Dni ahora es obligatorio)
         if (string.IsNullOrEmpty(user.Nombre) || string.IsNullOrEmpty(user.Apellido1) ||
-            string.IsNullOrEmpty(user.NTelefono) || string.IsNullOrEmpty(user.Username) ||
-            string.IsNullOrEmpty(user.OUPrincipal) || string.IsNullOrEmpty(user.OUSecundaria) ||
-            string.IsNullOrEmpty(user.Departamento) || string.IsNullOrEmpty(user.FechaCaducidadOp))
+            string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.OUPrincipal) ||
+            string.IsNullOrEmpty(user.Departamento) || string.IsNullOrEmpty(user.FechaCaducidadOp) ||
+            string.IsNullOrEmpty(user.Dni))
         {
             return Json(new { success = false, message = "Faltan campos obligatorios." });
         }
@@ -108,8 +334,18 @@ public class AltaUsuarioController : Controller
             // Conformar el nombre completo
             string displayName = $"{nombreUpper} {apellido1Upper} {apellido2Upper}".Trim();
 
-            // Construir el path LDAP
-            string ldapPath = $"LDAP://OU={user.OUSecundaria},OU=Usuarios y Grupos,OU={user.OUPrincipal},DC=aytosa,DC=inet";
+            // Construir el path LDAP (usar la OU principal directamente si no hay OU secundaria)
+            string ldapPath;
+            if (!string.IsNullOrEmpty(user.OUSecundaria))
+            {
+                // Si hay OU secundaria, creamos el usuario en la OU secundaria
+                ldapPath = $"LDAP://OU={user.OUSecundaria},OU={user.OUPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+            }
+            else
+            {
+                // Si no hay OU secundaria, creamos el usuario directamente en la OU principal
+                ldapPath = $"LDAP://OU={user.OUPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+            }
 
             using (DirectoryEntry ouEntry = new DirectoryEntry(ldapPath))
             {
@@ -131,9 +367,19 @@ public class AltaUsuarioController : Controller
                     newUser.Properties["sAMAccountName"].Value = user.Username;
                     newUser.Properties["userPrincipalName"].Value = $"{user.Username}@aytosa.inet";
                     newUser.Properties["displayName"].Value = displayName;
-                    newUser.Properties["description"].Value = user.NFuncionario;
-                    newUser.Properties["telephoneNumber"].Value = user.NTelefono;
+                    // Solo asignar NFuncionario si no está vacío
+                    if (!string.IsNullOrEmpty(user.NFuncionario))
+                    {
+                        newUser.Properties["employeeNumber"].Value = user.NFuncionario;
+                    }
+                    // Solo asignar NTelefono si no está vacío
+                    if (!string.IsNullOrEmpty(user.NTelefono))
+                    {
+                        newUser.Properties["telephoneNumber"].Value = user.NTelefono;
+                    }
                     newUser.Properties["physicalDeliveryOfficeName"].Value = user.Departamento;
+                    newUser.Properties["l"].Value = user.LugarEnvio; // Establecer el atributo 'city' (l)
+                    newUser.Properties["employeeID"].Value = user.Dni; // Establecer el atributo 'employeeID'
 
                     if (user.FechaCaducidadOp == "si")
                     {
@@ -153,30 +399,6 @@ public class AltaUsuarioController : Controller
                         }
                     }
 
-                    //Si decimos que no queremos fecha de caducidad, la creación de usuario por defecto pone a nunca la fecha de expiración
-
-
-                    //Cuando se realicen las pruebas reales descomentar esta zona de abajo que es la que crea el directorio de usuario en ribera y le asigna la cuota
-
-                    //int cuotaMB = ObtenerCuotaEnMB(user.Cuota);
-
-                    //try
-                    //{
-
-
-                    //    var (success, message) = ConfigurarDirectorioYCuotaRemoto(user.Username, cuotaMB.ToString());
-
-                    //    if (!success)
-                    //    {
-                    //        // Devolver el error desde la configuración de la cuota
-                    //        return Json(new { success = false, message = $"Error al configurar el directorio: {message}" });
-                    //    }
-                    //}
-                    //catch (Exception ex)
-                    //{
-                    //    return Json(new { success = false, message = $"Error al crear el directorio propio del usuario: {ex.Message}" });
-                    //}
-
                     newUser.CommitChanges();
 
                     // Configurar contraseña y activar cuenta
@@ -185,7 +407,6 @@ public class AltaUsuarioController : Controller
                     newUser.Properties["pwdLastSet"].Value = 0;
 
                     newUser.CommitChanges();
-
 
                     // Añadir al usuario a los grupos seleccionados
                     if (user.Grupos != null && user.Grupos.Any())
@@ -203,7 +424,7 @@ public class AltaUsuarioController : Controller
                                 }
                                 catch (Exception ex)
                                 {
-
+                                    // Ignorar errores al agregar a grupos (puedes registrar el error si lo deseas)
                                 }
                                 finally
                                 {
@@ -218,9 +439,6 @@ public class AltaUsuarioController : Controller
                     }
 
                     newUser.CommitChanges();
-
-                    //Falta la creación del correo electrónico
-
                 }
                 catch (Exception ex)
                 {
@@ -237,6 +455,49 @@ public class AltaUsuarioController : Controller
         catch (Exception ex)
         {
             return Json(new { success = false, message = $"Error al crear el usuario: {ex.Message}" });
+        }
+    }
+
+    // Nuevo método para verificar si el DNI ya existe en el Active Directory
+    [HttpPost]
+    public IActionResult CheckDniExists([FromBody] Dictionary<string, string> requestData)
+    {
+        if (requestData == null || !requestData.ContainsKey("dni"))
+        {
+            return Json(new { success = false, message = "DNI no especificado." });
+        }
+
+        string dni = requestData["dni"];
+        if (string.IsNullOrEmpty(dni))
+        {
+            return Json(new { success = false, message = "El DNI no puede estar vacío." });
+        }
+
+        try
+        {
+            using (var entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
+            {
+                using (var searcher = new DirectorySearcher(entry))
+                {
+                    searcher.Filter = $"(&(objectClass=user)(employeeID={dni}))";
+                    searcher.SearchScope = SearchScope.Subtree;
+                    searcher.PropertiesToLoad.Add("employeeID");
+
+                    var result = searcher.FindOne();
+                    if (result != null)
+                    {
+                        return Json(new { success = true, exists = true });
+                    }
+                    else
+                    {
+                        return Json(new { success = true, exists = false });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = $"Error al verificar el DNI: {ex.Message}" });
         }
     }
 
