@@ -95,130 +95,149 @@
 </head>
 <body>
     <div class="form-container">
-        <h1>Formulario de Alta de Usuario</h1>
-        <form id="ouForm">
-            <div class="form-section">
-                <div class="field-group">
-                    <label for="nombre">Nombre:</label>
-                    <input type="text" id="nombre" name="nombre" oninput="generateUsername()" required />
+        <h1>Alta de Usuario</h1>
+        <div class="form-section">
+            <div class="field-group">
+                <label for="nombre">Nombre:</label>
+                <input type="text" id="nombre" name="nombre" required onblur="generateUsername();" />
 
-                    <label for="apellido1">Apellido 1:</label>
-                    <input type="text" id="apellido1" name="apellido1" oninput="generateUsername()" required />
+                <label for="apellido1">Apellido 1:</label>
+                <input type="text" id="apellido1" name="apellido1" required onblur="generateUsername();" />
 
-                    <label for="apellido2">Apellido 2:</label>
-                    <input type="text" id="apellido2" name="apellido2" oninput="generateUsername()" />
+                <label for="apellido2">Apellido 2:</label>
+                <input type="text" id="apellido2" name="apellido2" onblur="generateUsername();" />
 
-                    <label for="username">Nombre de Usuario:</label>
-                    <input type="text" id="username" name="username" readonly required />
+                <label for="username">Nombre de usuario:</label>
+                <input type="text" id="username" name="username" readonly required />
+            </div>
 
-                    <label for="dni">DNI:</label>
-                    <input type="text" id="dni" name="dni" onchange="checkDNIExists()" required />
+            <div class="field-group">
+                <label for="nTelefono">Extensión de teléfono:</label>
+                <input type="text" id="nTelefono" name="nTelefono" onblur="checkTelephoneExists();" />
 
-                    <label for="nTelefono">Extensión de teléfono:</label>
-                    <input type="text" id="nTelefono" name="nTelefono" oninput="checkTelephoneExists()" />
+                <label for="numeroLargoFijo">Número largo fijo:</label>
+                <input type="text" id="numeroLargoFijo" name="numeroLargoFijo" onblur="checkOtherTelephoneExists();" />
 
-                    <label for="nFuncionario">Nº Funcionario:</label>
-                    <input type="text" id="nFuncionario" name="nFuncionario" onchange="checkNumberIdExists()" />
-                </div>
+                <label for="extensionMovil">Extensión del móvil:</label>
+                <input type="text" id="extensionMovil" name="extensionMovil" onblur="checkMobileExists();" />
 
-                <div class="field-group">
-                    <label for="ouPrincipal">OU Principal:</label>
-                    <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamento(); fetchLugarEnvio();" required>
-                        <option value="">Seleccione una OU Principal</option>
-                        @if (ViewBag.OUPrincipales != null)
+                <label for="numeroLargoMovil">Número largo del móvil:</label>
+                <input type="text" id="numeroLargoMovil" name="numeroLargoMovil" onblur="checkOtherMobileExists();" />
 
-                        {
+                <label for="nFuncionario">Número de Funcionario:</label>
+                <input type="text" id="nFuncionario" name="nFuncionario" onblur="checkNumberIdExists();" />
 
-                            foreach (var ou in ViewBag.OUPrincipales as List<string>)
+                
+                <label for="dni">DNI :</label>
+                <input type="text" id="dni" name="dni" placeholder="Introduce el DNI" onblur="checkDNIExists();" />
+            </div>
 
-                            {
-                                <option value="@ou">@ou</option>
-                            }
+            <div class="field-group">
+                <label for="ouPrincipal">OU Principal:</label>
+                <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamento(); fetchLugarEnvio();" required>
+                    <option value="">Seleccione una OU Principal</option>
+                    @if (ViewBag.OUPrincipales != null)
 
-                        }
-                    </select>
+                    {
 
-                    <label for="ouSecundaria">OU Secundaria:</label>
-                    <select id="ouSecundaria" name="ouSecundaria" onchange="fetchDepartamento(); fetchLugarEnvio();">
-                        <option value="">Seleccione una OU Secundaria (opcional)</option>
-                    </select>
-
-                    <label for="departamento">Departamento:</label>
-                    <input type="text" id="departamento" name="departamento" readonly required />
-
-                    <label for="lugarEnvio">Lugar de Envío:</label>
-                    <input type="text" id="lugarEnvio" name="lugarEnvio" readonly />
-
-                    <label for="fechaCaducidadOp">¿Tiene fecha de caducidad?</label>
-                    <select id="fechaCaducidadOp" name="fechaCaducidadOp" required>
-                        <option value="si">Sí</option>
-                        <option value="no">No</option>
-                    </select>
-
-                    <label for="fechaCaducidad">Fecha de Caducidad:</label>
-                    <input type="date" id="fechaCaducidad" name="fechaCaducidad" />
-
-                    <label for="cuota">Cuota del usuario:</label>
-                    <select id="cuota" name="cuota">
-                        <option value="">Seleccione la cuota para el usuario</option>
-                        @if (ViewBag.Cuota != null)
+                        foreach (var ou in ViewBag.OUPrincipales as List<string>)
 
                         {
-
-                            foreach (var cuota in ViewBag.Cuota as List<string>)
-
-                            {
-                                <option value="@cuota">@cuota</option>
-                            }
-
+                            <option value="@ou">@ou</option>
                         }
-                    </select>
-                </div>
 
+                    }
+                </select>
+
+                <label for="ouSecundaria">OU Secundaria:</label>
+                <select id="ouSecundaria" name="ouSecundaria" onchange="fetchDepartamento(); fetchLugarEnvio();">
+                    <option value="">Seleccione una OU Secundaria (opcional)</option>
+                </select>
+
+                <label for="departamento">Departamento:</label>
+                <input type="text" id="departamento" name="departamento" readonly required />
+
+                <label for="lugarEnvio">Lugar de Envío:</label>
+                <input type="text" id="lugarEnvio" name="lugarEnvio" readonly required />
+            </div>
+
+            <div class="field-group">
+                <label for="fechaCaducidadOp">¿Fecha de caducidad?</label>
+                <select id="fechaCaducidadOp" name="fechaCaducidadOp">
+                    <option value="no">No</option>
+                    <option value="si">Sí</option>
+                </select>
+
+                <label for="fechaCaducidad">Fecha de caducidad:</label>
+                <input type="date" id="fechaCaducidad" name="fechaCaducidad" />
+
+                <label for="tarjetaIdentificativa">Tarjeta Identificativa (Opcional):</label>
+                <input type="text" id="tarjetaIdentificativa" name="tarjetaIdentificativa" placeholder="Introduce la tarjeta identificativa" onblur="checkTarjetaIdentificativaExists();" />
+            </div>
+
+            <div class="field-group">
+                <label for="cuota">Cuota:</label>
+                <select id="cuota" name="cuota">
+                    @if (ViewBag.Cuota != null)
+
+                    {
+
+                        foreach (var cuota in ViewBag.Cuota as List<string>)
+
+                        {
+                            <option value="@cuota">@cuota</option>
+                        }
+
+                    }
+                </select>
+            </div>
+
+            <div class="field-group">
+                <label>Grupos:</label>
                 <div class="checkbox-group">
-                    <h4>Grupos de usuarios</h4>
-                    <label><input type="checkbox" id="grupoInternet" name="grupoInternet" value="Internet" /> Grupo Internet</label>
-                    @{
-                        var portalList = ViewBag.PortalEmpleado as List<string>;
+                    @if (ViewBag.PortalEmpleado != null)
 
-                        if (portalList != null && portalList.Any())
+                    {
+
+                        foreach (var grupo in ViewBag.PortalEmpleado as List<string>)
 
                         {
-                            <label><input type="checkbox" id="grupoPortalEmpleado" name="grupoPortalEmpleado" value="@portalList.First()" /> Portal del empleado</label>
+                            <label><input type="checkbox" value="@grupo" /> @grupo</label>
                         }
+
                     }
                 </div>
+            </div>
 
-                <div class="field-group">
-                    <label for="grupoDropdown">Seleccionar Grupos:</label>
-                    <select id="grupoDropdown" name="grupoDropdown">
-                        <option value="">Seleccione un grupo</option>
-                        @if (ViewBag.GruposAD != null)
+            <div class="field-group">
+                <label for="grupoDropdown">Añadir grupo:</label>
+                <select id="grupoDropdown">
+                    <option value="">Seleccione un grupo</option>
+                    @if (ViewBag.GruposAD != null)
+
+                    {
+
+                        foreach (var grupo in ViewBag.GruposAD as List<string>)
 
                         {
-
-                            foreach (var grupo in ViewBag.GruposAD as List<string>)
-
-                            {
-                                <option value="@grupo">@grupo</option>
-                            }
-
+                            <option value="@grupo">@grupo</option>
                         }
-                    </select>
 
-                    <button type="button" onclick="addGroup()">Añadir Grupo</button>
+                    }
+                </select>
+                <button type="button" onclick="addGroup()">Añadir</button>
+            </div>
 
-                    <label for="gruposSeleccionados">Grupos Seleccionados:</label>
-                    <select id="gruposSeleccionados" name="gruposSeleccionados" size="5"></select>
-
-                    <button type="button" onclick="removeSelectedGroup()" style="margin-top: 10px;">Eliminar Grupo Seleccionado</button>
-                </div>
+            <div class="field-group">
+                <label for="gruposSeleccionados">Grupos seleccionados:</label>
+                <select id="gruposSeleccionados" multiple></select>
+                <button type="button" onclick="removeSelectedGroup()">Eliminar</button>
             </div>
 
             <div class="full-width">
-                <button type="button" onclick="createUser()">Crear Usuario</button>
+                <button type="button" onclick="createUser()">Crear usuario</button>
             </div>
-        </form>
+        </div>
     </div>
 
     <script>
@@ -314,6 +333,7 @@
 
             console.log('Iniciando fetchLugarEnvio con:', { ouPrincipal, ouSecundaria });
 
+            // Limpiar el campo de lugar de envío si no hay OU principal
             if (!ouPrincipal) {
                 console.log('No hay OU principal, limpiando campo lugar de envío');
                 lugarEnvioField.value = '';
@@ -359,7 +379,7 @@
             const usernameField = document.getElementById('username');
 
             try {
-                const response = await fetch('/GestionUsuarios/GenerateUsername', {
+                const response = await fetch('/AltaUsuario/GenerateUsername', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nombre, apellido1, apellido2 })
@@ -381,59 +401,16 @@
             }
         }
 
-        async function checkDNIExists() {
-            const dni = document.getElementById('dni').value.trim();
-            if (!dni) {
-                alert("Por favor, ingrese un DNI.");
-                return true; // Asumimos que hay un error para evitar continuar
-            }
-
-            try {
-                const response = await fetch('/AltaUsuario/CheckDNIExists', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ dni })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-
-                    if (data.success) {
-                        if (data.exists) {
-                            alert("El DNI ya existe en el Directorio Activo.");
-                            document.getElementById('dni').value = "";
-                            return true; // Existe en el Directorio Activo
-                        } else {
-                            return false; // No existe en el Directorio Activo
-                        }
-                    } else {
-                        console.error("Error en la respuesta del servidor: " + data.message);
-                        alert("Error en la respuesta del servidor: " + data.message);
-                        document.getElementById('dni').value = "";
-                        return true; // Asumimos que existe si hay un error en el servidor
-                    }
-                } else {
-                    console.error("Error al verificar el DNI: " + response.statusText);
-                    return true; // Asumimos que existe si no hay una respuesta válida
-                }
-            } catch (error) {
-                console.error("Error al verificar el DNI:", error);
-                alert("Ocurrió un error al verificar el DNI: " + error.message);
-                return true; // Asumimos que existe si hay un error
-            }
-        }
-
         async function checkNumberIdExists() {
             const nFuncionario = document.getElementById('nFuncionario').value.trim();
+            // Si el campo está vacío, no hacemos nada (es opcional)
             if (!nFuncionario) {
                 return false; // No existe conflicto, ya que es opcional
             }
 
             if (nFuncionario != "999999") {
                 try {
-                    const response = await fetch('/GestionUsuarios/CheckNumberIdExists', {
+                    const response = await fetch('/AltaUsuario/CheckNumberIdExists', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -473,12 +450,13 @@
 
         async function checkTelephoneExists() {
             const nTelefono = document.getElementById("nTelefono").value.trim();
+            // Si el campo está vacío, no hacemos nada (es opcional)
             if (!nTelefono) {
                 return false; // No existe conflicto, ya que es opcional
             }
 
             try {
-                const response = await fetch('/GestionUsuarios/CheckTelephoneExists', {
+                const response = await fetch('/AltaUsuario/CheckTelephoneExists', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -514,14 +492,239 @@
             }
         }
 
+        async function checkOtherTelephoneExists() {
+            const numeroLargoFijo = document.getElementById("numeroLargoFijo").value.trim();
+            // Si el campo está vacío, no hacemos nada (es opcional)
+            if (!numeroLargoFijo) {
+                return false; // No existe conflicto, ya que es opcional
+            }
+
+            try {
+                const response = await fetch('/AltaUsuario/CheckOtherTelephoneExists', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ numeroLargoFijo })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success) {
+                        if (data.exists) {
+                            alert("El número largo fijo ya existe en el directorio activo.");
+                            document.getElementById('numeroLargoFijo').value = "";
+                            return true; // Existe en el Directorio Activo
+                        } else {
+                            return false; // No existe en el Directorio Activo
+                        }
+                    } else {
+                        console.error("Error en la respuesta del servidor: " + data.message);
+                        alert("Error en la respuesta del servidor");
+                        document.getElementById('numeroLargoFijo').value = "";
+                        return true; // Asumimos que existe si hay un error en el servidor
+                    }
+                } else {
+                    console.error("Error al verificar el número largo fijo: " + response.statusText);
+                    return true; // Asumimos que existe si no hay una respuesta válida
+                }
+            } catch (error) {
+                console.error("Error al verificar el número largo fijo:", error);
+                alert("Ocurrió un error al verificar el número largo fijo.");
+                return true; // Asumimos que existe si hay un error
+            }
+        }
+
+        async function checkMobileExists() {
+            const extensionMovil = document.getElementById("extensionMovil").value.trim();
+            // Si el campo está vacío, no hacemos nada (es opcional)
+            if (!extensionMovil) {
+                return false; // No existe conflicto, ya que es opcional
+            }
+
+            try {
+                const response = await fetch('/AltaUsuario/CheckMobileExists', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ extensionMovil })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success) {
+                        if (data.exists) {
+                            alert("La extensión del móvil ya existe en el directorio activo.");
+                            document.getElementById('extensionMovil').value = "";
+                            return true; // Existe en el Directorio Activo
+                        } else {
+                            return false; // No existe en el Directorio Activo
+                        }
+                    } else {
+                        console.error("Error en la respuesta del servidor: " + data.message);
+                        alert("Error en la respuesta del servidor");
+                        document.getElementById('extensionMovil').value = "";
+                        return true; // Asumimos que existe si hay un error en el servidor
+                    }
+                } else {
+                    console.error("Error al verificar la extensión del móvil: " + response.statusText);
+                    return true; // Asumimos que existe si no hay una respuesta válida
+                }
+            } catch (error) {
+                console.error("Error al verificar la extensión del móvil:", error);
+                alert("Ocurrió un error al verificar la extensión del móvil.");
+                return true; // Asumimos que existe si hay un error
+            }
+        }
+
+        async function checkOtherMobileExists() {
+            const numeroLargoMovil = document.getElementById("numeroLargoMovil").value.trim();
+            // Si el campo está vacío, no hacemos nada (es opcional)
+            if (!numeroLargoMovil) {
+                return false; // No existe conflicto, ya que es opcional
+            }
+
+            try {
+                const response = await fetch('/AltaUsuario/CheckOtherMobileExists', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ numeroLargoMovil })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success) {
+                        if (data.exists) {
+                            alert("El número largo del móvil ya existe en el directorio activo.");
+                            document.getElementById('numeroLargoMovil').value = "";
+                            return true; // Existe en el Directorio Activo
+                        } else {
+                            return false; // No existe en el Directorio Activo
+                        }
+                    } else {
+                        console.error("Error en la respuesta del servidor: " + data.message);
+                        alert("Error en la respuesta del servidor");
+                        document.getElementById('numeroLargoMovil').value = "";
+                        return true; // Asumimos que existe si hay un error en el servidor
+                    }
+                } else {
+                    console.error("Error al verificar el número largo del móvil: " + response.statusText);
+                    return true; // Asumimos que existe si no hay una respuesta válida
+                }
+            } catch (error) {
+                console.error("Error al verificar el número largo del móvil:", error);
+                alert("Ocurrió un error al verificar el número largo del móvil.");
+                return true; // Asumimos que existe si hay un error
+            }
+        }
+
+        async function checkTarjetaIdentificativaExists() {
+            const tarjetaIdentificativa = document.getElementById("tarjetaIdentificativa").value.trim();
+            // Si el campo está vacío, no hacemos nada (es opcional)
+            if (!tarjetaIdentificativa) {
+                return false; // No existe conflicto, ya que es opcional
+            }
+
+            try {
+                const response = await fetch('/AltaUsuario/checkTarjetaIdentificativaExists', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ tarjetaIdentificativa }) // Corrección: Usar tarjetaIdentificativa en lugar de nTelefono
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success) {
+                        if (data.exists) {
+                            alert("La tarjeta identificativa ya existe en el directorio activo.");
+                            document.getElementById('tarjetaIdentificativa').value = "";
+                            return true; // Existe en el Directorio Activo
+                        } else {
+                            return false; // No existe en el Directorio Activo
+                        }
+                    } else {
+                        console.error("Error en la respuesta del servidor: " + data.message);
+                        alert("Error en la respuesta del servidor");
+                        document.getElementById('tarjetaIdentificativa').value = "";
+                        return true; // Asumimos que existe si hay un error en el servidor
+                    }
+                } else {
+                    console.error("Error al verificar la tarjeta identificativa: " + response.statusText);
+                    return true; // Asumimos que existe si no hay una respuesta válida
+                }
+            } catch (error) {
+                console.error("Error al verificar la tarjeta identificativa:", error);
+                alert("Ocurrió un error al verificar la tarjeta identificativa.");
+                return true; // Asumimos que existe si hay un error
+            }
+        }
+
+        // Nueva función para verificar si el DNI ya existe
+        async function checkDNIExists() {
+            const dni = document.getElementById("dni").value.trim();
+            // Si el campo está vacío, no hacemos nada (es opcional)
+            if (!dni) {
+                return false; // No existe conflicto, ya que es opcional
+            }
+
+            try {
+                const response = await fetch('/AltaUsuario/CheckDNIExists', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ dni })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success) {
+                        if (data.exists) {
+                            alert("El DNI ya existe en el Directorio Activo.");
+                            document.getElementById('dni').value = "";
+                            return true; // Existe en el Directorio Activo
+                        } else {
+                            return false; // No existe en el Directorio Activo
+                        }
+                    } else {
+                        console.error("Error en la respuesta del servidor: " + data.message);
+                        alert("Error en la respuesta del servidor");
+                        document.getElementById('dni').value = "";
+                        return true; // Asumimos que existe si hay un error en el servidor
+                    }
+                } else {
+                    console.error("Error al verificar el DNI: " + response.statusText);
+                    return true; // Asumimos que existe si no hay una respuesta válida
+                }
+            } catch (error) {
+                console.error("Error al verificar el DNI:", error);
+                alert("Ocurrió un error al verificar el DNI.");
+                return true; // Asumimos que existe si hay un error
+            }
+        }
+
         async function createUser() {
             const nombre = document.getElementById('nombre').value.trim();
             const apellido1 = document.getElementById('apellido1').value.trim();
             const apellido2 = document.getElementById('apellido2').value.trim();
             const username = document.getElementById('username').value.trim();
-            const dni = document.getElementById('dni').value.trim();
             const nTelefono = document.getElementById('nTelefono').value.trim();
             const nFuncionario = document.getElementById('nFuncionario').value.trim();
+            const numeroLargoFijo = document.getElementById('numeroLargoFijo').value.trim();
+            const extensionMovil = document.getElementById('extensionMovil').value.trim();
+            const numeroLargoMovil = document.getElementById('numeroLargoMovil').value.trim();
+            const tarjetaIdentificativa = document.getElementById('tarjetaIdentificativa').value.trim();
+            const dni = document.getElementById('dni').value.trim(); 
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria').value;
             const departamento = document.getElementById('departamento').value;
@@ -546,7 +749,7 @@
             // Unificar ambos arrays de grupos
             const grupos = [...gruposCheckbox, ...gruposLista];
 
-            // Validar campos obligatorios (DNI ahora es obligatorio)
+            // Validar campos obligatorios (nTelefono, nFuncionario, numeroLargoFijo, extensionMovil, numeroLargoMovil, tarjetaIdentificativa y dni son opcionales)
             if (!nombre || !apellido1 || !username || !ouPrincipal || !dni) {
                 alert('Por favor, complete todos los campos obligatorios.');
                 return;
@@ -558,12 +761,16 @@
                 return;
             }
 
-            // Verificar si el DNI, número de teléfono o número de funcionario ya existen
-            const dniExists = await checkDNIExists();
+            // Verificar si los valores ya existen (si se proporcionaron)
             const telephoneExists = await checkTelephoneExists();
             const numberIdExists = await checkNumberIdExists();
+            const otherTelephoneExists = await checkOtherTelephoneExists();
+            const mobileExists = await checkMobileExists();
+            const otherMobileExists = await checkOtherMobileExists();
+            const tarjetaIdentificativaExists = await checkTarjetaIdentificativaExists();
+            const dniExists = await checkDNIExists(); // Nueva verificación
 
-            if (dniExists || telephoneExists || numberIdExists) {
+            if (telephoneExists || numberIdExists || otherTelephoneExists || mobileExists || otherMobileExists || tarjetaIdentificativaExists || dniExists) {
                 return; // Detener el proceso si hay conflictos
             }
 
@@ -577,9 +784,13 @@
                         apellido1,
                         apellido2,
                         username,
-                        dni, // Nuevo campo
                         nTelefono,
                         nFuncionario,
+                        numeroLargoFijo,
+                        extensionMovil,
+                        numeroLargoMovil,
+                        tarjetaIdentificativa,
+                        dni, 
                         ouPrincipal,
                         ouSecundaria: ouSecundaria || null,
                         departamento,
@@ -655,7 +866,7 @@
             const fechaInput = document.getElementById('fechaCaducidad');
             if (fechaSelect.value === 'no') {
                 fechaInput.disabled = true;
-                fechaInput.value = "";
+                fechaInput.value = ""; // Limpiamos el campo
             } else {
                 fechaInput.disabled = false;
             }

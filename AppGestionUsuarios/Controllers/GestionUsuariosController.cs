@@ -19,7 +19,7 @@ using System.Management.Automation;
 [Authorize]
 public class GestionUsuariosController : Controller
 {
-    private readonly OUService _ouService;
+    
     private readonly ILogger<GestionUsuariosController> _logger;
 
     public class UserModelAltaUsuario
@@ -96,80 +96,7 @@ public class GestionUsuariosController : Controller
     }
 
 
-    [HttpGet]
-    public IActionResult ModificarUsuario()
-    {
-        try
-        {
-
-            int pageSize = 1000;
-
-            // Obtener todos los usuarios del Directorio Activo
-            using (var entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
-            {
-                using (var searcher = new DirectorySearcher(entry))
-                {
-                    searcher.Filter = "(objectClass=user)";
-                    searcher.PropertiesToLoad.Add("displayName");
-                    searcher.PropertiesToLoad.Add("sAMAccountName");
-                    searcher.SearchScope = SearchScope.Subtree;
-
-                    // Habilitar la paginación
-                    searcher.PageSize = pageSize;
-
-                    var usuarios = new List<string>();
-
-                    foreach (SearchResult result in searcher.FindAll())
-                    {
-                        if (result.Properties.Contains("displayName") && result.Properties.Contains("sAMAccountName"))
-                        {
-                            string displayName = result.Properties["displayName"][0].ToString();
-                            string samAccountName = result.Properties["sAMAccountName"][0].ToString();
-                            usuarios.Add($"{displayName} ({samAccountName})");
-                        }
-                    }
-
-                    ViewBag.Users = usuarios.OrderBy(u => u).ToList(); // Ordenar usuarios alfabéticamente
-                }
-            }
-
-            // Obtener lista de grupos del Directorio Activo
-            using (var entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
-            {
-                using (var searcher = new DirectorySearcher(entry))
-                {
-                    searcher.Filter = "(objectClass=group)";
-                    searcher.PropertiesToLoad.Add("cn");
-                    searcher.SearchScope = SearchScope.Subtree;
-
-                    var grupos = new List<string>();
-
-                    foreach (SearchResult result in searcher.FindAll())
-                    {
-                        if (result.Properties.Contains("cn"))
-                        {
-                            grupos.Add(result.Properties["cn"][0].ToString());
-                        }
-                    }
-
-                    ViewBag.GruposAD = grupos.OrderBy(g => g).ToList(); // Ordenar grupos alfabéticamente
-                }
-            }
-
-            // Obtener lista de OUs desde el servicio asociado al Excel
-            var ouPrincipales = _ouService.GetOUPrincipales();
-            ViewBag.OUPrincipales = ouPrincipales;
-        }
-        catch (Exception ex)
-        {
-            ViewBag.Users = new List<string>();
-            ViewBag.GruposAD = new List<string>();
-            ViewBag.OUPrincipales = new List<string>();
-            Console.WriteLine($"Error al cargar los datos para la vista de modificación: {ex.Message}");
-        }
-
-        return View();
-    }
+    
 
    
 
@@ -185,49 +112,11 @@ public class GestionUsuariosController : Controller
    
 
 
-    //Nos muestra una lista de las OU secundarias recibiendo la principal como parámetro
-    [HttpPost]
-    public IActionResult GetOUSecundarias([FromBody] Dictionary<string, string> requestData)
-    {
-        if (requestData != null && requestData.ContainsKey("ouPrincipal"))
-        {
-            string ouPrincipal = requestData["ouPrincipal"];
-            var ouSecundarias = _ouService.GetOUSecundarias(ouPrincipal);
-            return Json(ouSecundarias);
-        }
-
-        return Json(new List<string>());
-    }
 
 
 
-    //Nos muestra los departamentos disponibles según la OU princpal que pasa como parámetro
-    [HttpPost]
-    public IActionResult GetDepartamentos([FromBody] Dictionary<string, string> requestData)
-    {
-        if (requestData != null && requestData.ContainsKey("ouPrincipal"))
-        {
-            string ouPrincipal = requestData["ouPrincipal"];
-            var departamentos = _ouService.GetDepartamentos(ouPrincipal);
-            return Json(departamentos);
-        }
+    
 
-        return Json(new List<string>());
-    }
-
-    //Devuelve el lugar de envío correspondiente al departamento
-    [HttpPost]
-    public IActionResult GetLugarEnvio([FromBody] Dictionary<string, string> requestData)
-    {
-        if (requestData != null && requestData.ContainsKey("departamento"))
-        {
-            string departamento = requestData["departamento"];
-            var lugaresEnvio = _ouService.GetLugarEnvio(departamento);
-            return Json(lugaresEnvio);
-        }
-
-        return Json(new List<string>());
-    }
 
 
     //Función encargada de comvertir el username recibido de una vista en string y pasarlo a la función que lo busca en AD
