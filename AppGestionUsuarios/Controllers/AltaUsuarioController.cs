@@ -21,7 +21,7 @@ using System.Runtime.InteropServices; // Para COM
 [Authorize]
 public class AltaUsuarioController : Controller
 {
-    
+
 
     public class UserModelAltaUsuario
     {
@@ -170,13 +170,10 @@ public class AltaUsuarioController : Controller
         try
         {
             var ouSecundarias = new List<string>();
-
-            // Construir el path LDAP para la OU "Usuarios y Grupos" dentro de la OU principal seleccionada
             string ldapPath = $"LDAP://OU=Usuarios y Grupos,OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
 
             using (var rootEntry = new DirectoryEntry(ldapPath))
             {
-                // Buscar las sub-OUs dentro de "Usuarios y Grupos"
                 foreach (DirectoryEntry child in rootEntry.Children)
                 {
                     if (child.SchemaClassName == "organizationalUnit")
@@ -191,11 +188,13 @@ public class AltaUsuarioController : Controller
             }
 
             ouSecundarias.Sort();
-            return Json(ouSecundarias);
+            return Json(ouSecundarias); // Devolver solo la lista de OUs secundarias
         }
         catch (Exception ex)
         {
-            throw new Exception($"Error al obtener las OU secundarias para {ouPrincipal}: {ex.Message}", ex);
+            // En lugar de lanzar una excepción, devolvemos una lista vacía y registramos el error
+            Console.WriteLine($"Error al obtener las OU secundarias para {ouPrincipal}: {ex.Message}");
+            return Json(new List<string>());
         }
     }
 

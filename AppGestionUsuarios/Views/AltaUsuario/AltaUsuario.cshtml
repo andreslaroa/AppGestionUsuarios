@@ -1,4 +1,5 @@
-﻿<!DOCTYPE html>
+﻿﻿
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -127,7 +128,7 @@
                 <label for="nFuncionario">Número de Funcionario:</label>
                 <input type="text" id="nFuncionario" name="nFuncionario" onblur="checkNumberIdExists();" />
 
-                
+
                 <label for="dni">DNI :</label>
                 <input type="text" id="dni" name="dni" placeholder="Introduce el DNI" onblur="checkDNIExists();" />
             </div>
@@ -138,13 +139,21 @@
                     <option value="">Seleccione una OU Principal</option>
                     @if (ViewBag.OUPrincipales != null)
 
+
+
                     {
 
+
+
                         foreach (var ou in ViewBag.OUPrincipales as List<string>)
+
+
 
                         {
                             <option value="@ou">@ou</option>
                         }
+
+
 
                     }
                 </select>
@@ -180,13 +189,21 @@
                 <select id="cuota" name="cuota">
                     @if (ViewBag.Cuota != null)
 
+
+
                     {
 
+
+
                         foreach (var cuota in ViewBag.Cuota as List<string>)
+
+
 
                         {
                             <option value="@cuota">@cuota</option>
                         }
+
+
 
                     }
                 </select>
@@ -197,13 +214,21 @@
                 <div class="checkbox-group">
                     @if (ViewBag.PortalEmpleado != null)
 
+
+
                     {
 
+
+
                         foreach (var grupo in ViewBag.PortalEmpleado as List<string>)
+
+
 
                         {
                             <label><input type="checkbox" value="@grupo" /> @grupo</label>
                         }
+
+
 
                     }
                 </div>
@@ -215,13 +240,21 @@
                     <option value="">Seleccione un grupo</option>
                     @if (ViewBag.GruposAD != null)
 
+
+
                     {
 
+
+
                         foreach (var grupo in ViewBag.GruposAD as List<string>)
+
+
 
                         {
                             <option value="@grupo">@grupo</option>
                         }
+
+
 
                     }
                 </select>
@@ -247,36 +280,45 @@
             const ouSecundaria = document.getElementById('ouSecundaria');
             ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria (opcional)</option>';
 
-            if (ouPrincipal) {
-                fetch('/AltaUsuario/GetOUSecundarias', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ ouPrincipal })
-                })
-                    .then(response => {
-                        console.log('Respuesta de GetOUSecundarias:', response);
-                        return response.json();
-                    })
-                    .then(data => {
-                        console.log('OU Secundarias recibidas:', data);
-                        if (data.length === 0) {
-                            ouSecundaria.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
-                        } else {
-                            data.forEach(ou => {
-                                const option = document.createElement('option');
-                                option.value = ou;
-                                option.textContent = ou;
-                                ouSecundaria.appendChild(option);
-                            });
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error al obtener las OUs secundarias:', error);
-                        alert('Error al obtener las OUs secundarias: ' + error.message);
-                    });
+            if (!ouPrincipal) {
+                console.log('No se seleccionó OU principal, no se buscan OUs secundarias.');
+                return;
             }
+
+            console.log('Buscando OUs secundarias para OU principal:', ouPrincipal);
+
+            fetch('/AltaUsuario/GetOUSecundarias', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ ouPrincipal })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Error HTTP: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('OUs secundarias recibidas:', data);
+                    if (data.length === 0) {
+                        console.log('No hay OUs secundarias disponibles.');
+                        ouSecundaria.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
+                    } else {
+                        data.forEach(ou => {
+                            const option = document.createElement('option');
+                            option.value = ou;
+                            option.textContent = ou;
+                            ouSecundaria.appendChild(option);
+                        });
+                        console.log('OUs secundarias cargadas en el desplegable.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error al obtener las OUs secundarias:', error);
+                    alert('Error al obtener las OUs secundarias: ' + error.message);
+                });
         }
 
         // Función para obtener el departamento
@@ -285,89 +327,59 @@
             const ouSecundaria = document.getElementById('ouSecundaria').value;
             const departamentoField = document.getElementById('departamento');
 
-            console.log('Iniciando fetchDepartamento con:', { ouPrincipal, ouSecundaria });
-
             if (!ouPrincipal) {
-                console.log('No hay OU principal, limpiando campo departamento');
                 departamentoField.value = '';
                 return;
             }
 
+            console.log('Obteniendo departamento para:', { ouPrincipal, ouSecundaria });
+
             fetch('/AltaUsuario/GetDepartamento', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ouPrincipal, ouSecundaria })
             })
-                .then(response => {
-                    console.log('Respuesta del servidor (GetDepartamento):', response);
-                    if (!response.ok) {
-                        throw new Error(`Error HTTP: ${response.status} ${response.statusText}`);
-                    }
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
-                    console.log('Datos recibidos de GetDepartamento:', data);
-                    if (data.success) {
-                        console.log('Asignando departamento:', data.departamento);
-                        departamentoField.value = data.departamento;
-                    } else {
-                        console.log('No se encontró departamento:', data.message);
-                        departamentoField.value = '';
-                        alert(data.message + ' (Path: ' + data.ldapPath + ')');
+                    console.log('Respuesta de GetDepartamento:', data);
+                    departamentoField.value = data.success ? data.departamento : '';
+                    if (!data.success) {
+                        console.warn('No se pudo obtener el departamento:', data.message);
                     }
                 })
                 .catch(error => {
-                    console.error('Error al obtener el departamento:', error);
-                    alert('Error al obtener el departamento: ' + error.message);
+                    console.error('Error al obtener departamento:', error);
                     departamentoField.value = '';
                 });
         }
 
-        // Nueva función para obtener el lugar de envío
         function fetchLugarEnvio() {
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria').value;
             const lugarEnvioField = document.getElementById('lugarEnvio');
 
-            console.log('Iniciando fetchLugarEnvio con:', { ouPrincipal, ouSecundaria });
-
-            // Limpiar el campo de lugar de envío si no hay OU principal
             if (!ouPrincipal) {
-                console.log('No hay OU principal, limpiando campo lugar de envío');
                 lugarEnvioField.value = '';
                 return;
             }
 
+            console.log('Obteniendo lugar de envío para:', { ouPrincipal, ouSecundaria });
+
             fetch('/AltaUsuario/GetLugarEnvio', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ouPrincipal, ouSecundaria })
             })
-                .then(response => {
-                    console.log('Respuesta del servidor (GetLugarEnvio):', response);
-                    if (!response.ok) {
-                        throw new Error(`Error HTTP: ${response.status} ${response.statusText}`);
-                    }
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
-                    console.log('Datos recibidos de GetLugarEnvio:', data);
-                    if (data.success) {
-                        console.log('Asignando lugar de envío:', data.lugarEnvio);
-                        lugarEnvioField.value = data.lugarEnvio;
-                    } else {
-                        console.log('No se encontró lugar de envío:', data.message);
-                        lugarEnvioField.value = '';
-                        alert(data.message + ' (Path: ' + data.ldapPath + ')');
+                    console.log('Respuesta de GetLugarEnvio:', data);
+                    lugarEnvioField.value = data.success ? data.lugarEnvio : '';
+                    if (!data.success) {
+                        console.warn('No se pudo obtener el lugar de envío:', data.message);
                     }
                 })
                 .catch(error => {
-                    console.error('Error al obtener el lugar de envío:', error);
-                    alert('Error al obtener el lugar de envío: ' + error.message);
+                    console.error('Error al obtener lugar de envío:', error);
                     lugarEnvioField.value = '';
                 });
         }
@@ -724,7 +736,7 @@
             const extensionMovil = document.getElementById('extensionMovil').value.trim();
             const numeroLargoMovil = document.getElementById('numeroLargoMovil').value.trim();
             const tarjetaIdentificativa = document.getElementById('tarjetaIdentificativa').value.trim();
-            const dni = document.getElementById('dni').value.trim(); 
+            const dni = document.getElementById('dni').value.trim();
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria').value;
             const departamento = document.getElementById('departamento').value;
@@ -790,7 +802,7 @@
                         extensionMovil,
                         numeroLargoMovil,
                         tarjetaIdentificativa,
-                        dni, 
+                        dni,
                         ouPrincipal,
                         ouSecundaria: ouSecundaria || null,
                         departamento,

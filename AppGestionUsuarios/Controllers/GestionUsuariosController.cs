@@ -19,7 +19,7 @@ using System.Management.Automation;
 [Authorize]
 public class GestionUsuariosController : Controller
 {
-    
+
     private readonly ILogger<GestionUsuariosController> _logger;
 
     public class UserModelAltaUsuario
@@ -48,7 +48,7 @@ public class GestionUsuariosController : Controller
         public string Apellido1 { set; get; }
         public string Apellido2 { set; get; }
     }
-        
+
 
     [HttpGet]
     public IActionResult HabilitarDeshabilitarUsuario()
@@ -96,9 +96,6 @@ public class GestionUsuariosController : Controller
     }
 
 
-    
-
-   
 
 
 
@@ -109,13 +106,16 @@ public class GestionUsuariosController : Controller
 
 
 
-   
 
 
 
 
 
-    
+
+
+
+
+
 
 
 
@@ -341,8 +341,8 @@ public class GestionUsuariosController : Controller
     {
         return partes.Length > 0 ? string.Join("", partes) : "";
     }
-    
-    
+
+
     //Función para buscar el grupo en el dominio del directorio activo
     private DirectoryEntry FindGroupByName(string groupName)
     {
@@ -387,7 +387,7 @@ public class GestionUsuariosController : Controller
     }
 
 
-        
+
     [HttpPost]
     public IActionResult ManageUserStatus([FromBody] Dictionary<string, string> requestData)
     {
@@ -727,7 +727,7 @@ public class GestionUsuariosController : Controller
         return "No se encontró OU";
     }
 
-    
+
     //Extrae los grupos a los que pertenece el usuario. Método para llamarse desde el propio controlador
     private List<string> GetUserGroups(DirectoryEntry userEntry)
     {
