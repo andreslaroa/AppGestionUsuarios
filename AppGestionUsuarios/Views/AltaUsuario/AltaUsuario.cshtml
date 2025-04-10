@@ -1,327 +1,425 @@
-﻿﻿
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Formulario de Usuario</title>
+    <title>Alta de Usuario - Asistente</title>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f5f5f5;
-        }
-
-        .form-container {
-            max-width: 1200px;
-            margin: 30px auto;
-            background-color: #ffffff;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
-
-        h1 {
-            color: #960018;
-            margin-bottom: 20px;
-        }
-
-        .form-section {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 30px;
-        }
-
-        .field-group, .checkbox-group {
-            flex: 1;
-            min-width: 280px;
-        }
-
-        label {
-            display: block;
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: #333;
-        }
-
-        select,
-        input[type="text"],
-        input[type="number"],
-        input[type="date"],
-        button {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            background-color: #f9f9f9;
-            margin-bottom: 15px;
-        }
-
-            select:focus,
-            input:focus {
-                border-color: #960018;
-                outline: none;
-                box-shadow: 0 0 5px rgba(150, 0, 24, 0.3);
-            }
-
-        button {
-            background-color: #960018;
-            color: white;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-            button:hover {
-                background-color: #7a0013;
-            }
-
-        .checkbox-group label {
-            display: flex;
-            align-items: center;
-            font-weight: normal;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            margin-right: 10px;
-        }
-
-        .full-width {
-            width: 100%;
-            margin-top: 20px;
-        }
-    </style>
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #F5F5F5; /* Gris claro del Ayuntamiento */
+    }
+    .wizard-container {
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: #FFFFFF; /* Blanco para el contenedor */
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+        color: #A42327; /* Rojo oscuro del Ayuntamiento */
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .steps {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+    .step {
+        flex: 1;
+        text-align: center;
+        padding: 10px;
+        background-color: #E9ECEF; /* Gris medio para pasos inactivos */
+        border-radius: 5px;
+        margin: 0 5px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+    .step.active {
+        background-color: #A42327; /* Rojo oscuro para paso activo */
+        color: #FFFFFF; /* Blanco para contraste */
+    }
+    .step.completed {
+        background-color: #28A745; /* Verde oscuro para pasos completados */
+        color: #FFFFFF;
+    }
+    .form-step {
+        display: none;
+    }
+    .form-step.active {
+        display: block;
+    }
+    .field-group {
+        margin-bottom: 20px;
+    }
+    label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #333; /* Gris oscuro para texto */
+    }
+    input, select, textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #CCC;
+        border-radius: 6px;
+        background-color: #F9F9F9; /* Gris muy claro para campos */
+        margin-bottom: 10px;
+    }
+    input:focus, select:focus {
+        border-color: #A42327; /* Rojo oscuro en foco */
+        outline: none;
+        box-shadow: 0 0 5px rgba(164, 35, 39, 0.3); /* Sombra con rojo oscuro */
+    }
+    .checkbox-group label {
+        display: flex;
+        align-items: center;
+        font-weight: normal;
+        margin-bottom: 10px;
+    }
+    .checkbox-group input[type="checkbox"] {
+        margin-right: 10px;
+    }
+    .button-group {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 20px;
+    }
+    button {
+        padding: 10px 20px;
+        background-color: #A42327; /* Rojo oscuro para botones */
+        color: #FFFFFF; /* Blanco para texto */
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+    button:disabled {
+        background-color: #CCCCCC; /* Gris para botones desactivados */
+        cursor: not-allowed;
+    }
+    button:hover:not(:disabled) {
+        background-color: #7E1C20; /* Tono más oscuro del rojo para hover */
+    }
+    .summary {
+        background-color: #F9F9F9; /* Gris muy claro para resumen */
+        padding: 15px;
+        border-radius: 6px;
+    }
+</style>
 </head>
 <body>
-    <div class="form-container">
+    <div class="wizard-container">
         <h1>Alta de Usuario</h1>
-        <div class="form-section">
-            <div class="field-group">
-                <label for="nombre">Nombre:</label>
-                <input type="text" id="nombre" name="nombre" required onblur="generateUsername();" />
+        <div class="steps">
+            <div class="step active" data-step="1">1. Datos Personales</div>
+            <div class="step" data-step="2">2. Ubicación</div>
+            <div class="step" data-step="3">3. Configuración</div>
+            <div class="step" data-step="4">4. Revisión</div>
+        </div>
 
-                <label for="apellido1">Apellido 1:</label>
-                <input type="text" id="apellido1" name="apellido1" required onblur="generateUsername();" />
-
-                <label for="apellido2">Apellido 2:</label>
-                <input type="text" id="apellido2" name="apellido2" onblur="generateUsername();" />
-
-                <label for="username">Nombre de usuario:</label>
-                <input type="text" id="username" name="username" readonly required />
-            </div>
-
-            <div class="field-group">
-                <label for="nTelefono">Extensión de teléfono:</label>
-                <input type="text" id="nTelefono" name="nTelefono" onblur="checkTelephoneExists();" />
-
-                <label for="numeroLargoFijo">Número largo fijo:</label>
-                <input type="text" id="numeroLargoFijo" name="numeroLargoFijo" onblur="checkOtherTelephoneExists();" />
-
-                <label for="extensionMovil">Extensión del móvil:</label>
-                <input type="text" id="extensionMovil" name="extensionMovil" onblur="checkMobileExists();" />
-
-                <label for="numeroLargoMovil">Número largo del móvil:</label>
-                <input type="text" id="numeroLargoMovil" name="numeroLargoMovil" onblur="checkOtherMobileExists();" />
-
-                <label for="nFuncionario">Número de Funcionario:</label>
-                <input type="text" id="nFuncionario" name="nFuncionario" onblur="checkNumberIdExists();" />
-
-
-                <label for="dni">DNI :</label>
-                <input type="text" id="dni" name="dni" placeholder="Introduce el DNI" onblur="checkDNIExists();" />
-            </div>
-
-            <div class="field-group">
-                <label for="ouPrincipal">OU Principal:</label>
-                <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamento(); fetchLugarEnvio();" required>
-                    <option value="">Seleccione una OU Principal</option>
-                    @if (ViewBag.OUPrincipales != null)
-
-
-
-                    {
-
-
-
-                        foreach (var ou in ViewBag.OUPrincipales as List<string>)
-
-
-
-                        {
-                            <option value="@ou">@ou</option>
-                        }
-
-
-
-                    }
-                </select>
-
-                <label for="ouSecundaria">OU Secundaria:</label>
-                <select id="ouSecundaria" name="ouSecundaria" onchange="fetchDepartamento(); fetchLugarEnvio();">
-                    <option value="">Seleccione una OU Secundaria (opcional)</option>
-                </select>
-
-                <label for="departamento">Departamento:</label>
-                <input type="text" id="departamento" name="departamento" readonly required />
-
-                <label for="lugarEnvio">Lugar de Envío:</label>
-                <input type="text" id="lugarEnvio" name="lugarEnvio" readonly required />
-            </div>
-
-            <div class="field-group">
-                <label for="fechaCaducidadOp">¿Fecha de caducidad?</label>
-                <select id="fechaCaducidadOp" name="fechaCaducidadOp">
-                    <option value="no">No</option>
-                    <option value="si">Sí</option>
-                </select>
-
-                <label for="fechaCaducidad">Fecha de caducidad:</label>
-                <input type="date" id="fechaCaducidad" name="fechaCaducidad" />
-
-                <label for="tarjetaIdentificativa">Tarjeta Identificativa (Opcional):</label>
-                <input type="text" id="tarjetaIdentificativa" name="tarjetaIdentificativa" placeholder="Introduce la tarjeta identificativa" onblur="checkTarjetaIdentificativaExists();" />
-            </div>
-
-            <div class="field-group">
-                <label for="cuota">Cuota:</label>
-                <select id="cuota" name="cuota">
-                    @if (ViewBag.Cuota != null)
-
-
-
-                    {
-
-
-
-                        foreach (var cuota in ViewBag.Cuota as List<string>)
-
-
-
-                        {
-                            <option value="@cuota">@cuota</option>
-                        }
-
-
-
-                    }
-                </select>
-            </div>
-
-            <div class="field-group">
-                <label>Grupos:</label>
-                <div class="checkbox-group">
-                    @if (ViewBag.PortalEmpleado != null)
-
-
-
-                    {
-
-
-
-                        foreach (var grupo in ViewBag.PortalEmpleado as List<string>)
-
-
-
-                        {
-                            <label><input type="checkbox" value="@grupo" /> @grupo</label>
-                        }
-
-
-
-                    }
+        <form id="ouForm">
+            <!-- Paso 1: Datos Personales -->
+            <div class="form-step active" data-step="1">
+                <div class="field-group">
+                    <label for="nombre">Nombre:</label>
+                    <input type="text" id="nombre" name="nombre" oninput="generateUsername()" required />
+                </div>
+                <div class="field-group">
+                    <label for="apellido1">Apellido 1:</label>
+                    <input type="text" id="apellido1" name="apellido1" oninput="generateUsername()" required />
+                </div>
+                <div class="field-group">
+                    <label for="apellido2">Apellido 2:</label>
+                    <input type="text" id="apellido2" name="apellido2" oninput="generateUsername()" />
+                </div>
+                <div class="field-group">
+                    <label for="username">Nombre de Usuario:</label>
+                    <input type="text" id="username" name="username" readonly required />
+                </div>
+                <div class="field-group">
+                    <label for="dni">DNI:</label>
+                    <input type="text" id="dni" name="dni" onchange="checkDNIExists()" required />
+                </div>
+                <div class="field-group">
+                    <label for="nTelefono">Extensión de teléfono:</label>
+                    <input type="text" id="nTelefono" name="nTelefono" oninput="checkTelephoneExists()" />
+                </div>
+                <div class="field-group">
+                    <label for="ddi">Número largo fijo (DDI):</label>
+                    <input type="text" id="ddi" name="ddi" />
+                </div>
+                <div class="field-group">
+                    <label for="mobileExt">Extensión del teléfono móvil:</label>
+                    <input type="text" id="mobileExt" name="mobileExt" />
+                </div>
+                <div class="field-group">
+                    <label for="mobileNumber">Número largo de móvil:</label>
+                    <input type="text" id="mobileNumber" name="mobileNumber" />
+                </div>
+                <div class="field-group">
+                    <label for="tarjetaId">Tarjeta identificativa:</label>
+                    <input type="text" id="tarjetaId" name="tarjetaId" />
+                </div>
+                <div class="field-group">
+                    <label for="nFuncionario">Nº Funcionario:</label>
+                    <input type="text" id="nFuncionario" name="nFuncionario" onchange="checkNumberIdExists()" />
                 </div>
             </div>
 
-            <div class="field-group">
-                <label for="grupoDropdown">Añadir grupo:</label>
-                <select id="grupoDropdown">
-                    <option value="">Seleccione un grupo</option>
-                    @if (ViewBag.GruposAD != null)
-
-
-
-                    {
-
-
-
-                        foreach (var grupo in ViewBag.GruposAD as List<string>)
-
-
+            <!-- Paso 2: Ubicación y Organización (sin cambios) -->
+            <div class="form-step" data-step="2">
+                <div class="field-group">
+                    <label for="ouPrincipal">OU Principal:</label>
+                    <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamento(); fetchLugarEnvio();" required>
+                        <option value="">Seleccione una OU Principal</option>
+                        @if (ViewBag.OUPrincipales != null)
 
                         {
-                            <option value="@grupo">@grupo</option>
+
+                            foreach (var ou in ViewBag.OUPrincipales as List<string>)
+
+                            {
+                                <option value="@ou">@ou</option>
+                            }
+
                         }
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="ouSecundaria">OU Secundaria:</label>
+                    <select id="ouSecundaria" name="ouSecundaria" onchange="fetchDepartamento(); fetchLugarEnvio();">
+                        <option value="">Seleccione una OU Secundaria (opcional)</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="departamento">Departamento:</label>
+                    <input type="text" id="departamento" name="departamento" readonly required />
+                </div>
+                <div class="field-group">
+                    <label for="lugarEnvio">Lugar de Envío:</label>
+                    <input type="text" id="lugarEnvio" name="lugarEnvio" readonly />
+                </div>
+            </div>
 
+            <!-- Paso 3: Configuración de Cuenta (sin cambios) -->
+            <div class="form-step" data-step="3">
+                <div class="field-group">
+                    <label for="fechaCaducidadOp">¿Tiene fecha de caducidad?</label>
+                    <select id="fechaCaducidadOp" name="fechaCaducidadOp" required>
+                        <option value="si">Sí</option>
+                        <option value="no">No</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="fechaCaducidad">Fecha de Caducidad:</label>
+                    <input type="date" id="fechaCaducidad" name="fechaCaducidad" />
+                </div>
+                <div class="field-group">
+                    <label for="cuota">Cuota del usuario:</label>
+                    <select id="cuota" name="cuota">
+                        <option value="">Seleccione la cuota para el usuario</option>
+                        @if (ViewBag.Cuota != null)
 
+                        {
 
+                            foreach (var cuota in ViewBag.Cuota as List<string>)
+
+                            {
+                                <option value="@cuota">@cuota</option>
+                            }
+
+                        }
+                    </select>
+                </div>
+                <div class="checkbox-group">
+                    <h4>Grupos de usuarios</h4>
+                    <label><input type="checkbox" id="grupoInternet" name="grupoInternet" value="Internet" /> Grupo Internet</label>
+                    @{
+                        var portalList = ViewBag.PortalEmpleado as List<string>;
+
+                        if (portalList != null && portalList.Any())
+
+                        {
+                            <label><input type="checkbox" id="grupoPortalEmpleado" name="grupoPortalEmpleado" value="@portalList.First()" /> Portal del empleado</label>
+                        }
                     }
-                </select>
-                <button type="button" onclick="addGroup()">Añadir</button>
+                </div>
+                <div class="field-group">
+                    <label for="grupoDropdown">Seleccionar Grupos:</label>
+                    <select id="grupoDropdown" name="grupoDropdown">
+                        <option value="">Seleccione un grupo</option>
+                        @if (ViewBag.GruposAD != null)
+
+                        {
+
+                            foreach (var grupo in ViewBag.GruposAD as List<string>)
+
+                            {
+                                <option value="@grupo">@grupo</option>
+                            }
+
+                        }
+                    </select>
+                    <button type="button" onclick="addGroup()">Añadir Grupo</button>
+                    <label for="gruposSeleccionados">Grupos Seleccionados:</label>
+                    <select id="gruposSeleccionados" name="gruposSeleccionados" size="5"></select>
+                    <button type="button" onclick="removeSelectedGroup()">Eliminar Grupo Seleccionado</button>
+                </div>
             </div>
 
-            <div class="field-group">
-                <label for="gruposSeleccionados">Grupos seleccionados:</label>
-                <select id="gruposSeleccionados" multiple></select>
-                <button type="button" onclick="removeSelectedGroup()">Eliminar</button>
+            <!-- Paso 4: Revisión y Envío -->
+            <div class="form-step" data-step="4">
+                <div class="summary">
+                    <h4>Resumen del Usuario</h4>
+                    <p><strong>Nombre:</strong> <span id="summary-nombre"></span></p>
+                    <p><strong>Apellido 1:</strong> <span id="summary-apellido1"></span></p>
+                    <p><strong>Apellido 2:</strong> <span id="summary-apellido2"></span></p>
+                    <p><strong>Usuario:</strong> <span id="summary-username"></span></p>
+                    <p><strong>DNI:</strong> <span id="summary-dni"></span></p>
+                    <p><strong>Extensión de teléfono:</strong> <span id="summary-nTelefono"></span></p>
+                    <p><strong>Número largo fijo (DDI):</strong> <span id="summary-ddi"></span></p>
+                    <p><strong>Extensión del teléfono móvil:</strong> <span id="summary-mobileExt"></span></p>
+                    <p><strong>Número largo de móvil:</strong> <span id="summary-mobileNumber"></span></p>
+                    <p><strong>Tarjeta identificativa:</strong> <span id="summary-tarjetaId"></span></p>
+                    <p><strong>Nº Funcionario:</strong> <span id="summary-nFuncionario"></span></p>
+                    <p><strong>OU Principal:</strong> <span id="summary-ouPrincipal"></span></p>
+                    <p><strong>OU Secundaria:</strong> <span id="summary-ouSecundaria"></span></p>
+                    <p><strong>Departamento:</strong> <span id="summary-departamento"></span></p>
+                    <p><strong>Lugar de Envío:</strong> <span id="summary-lugarEnvio"></span></p>
+                    <p><strong>Fecha de Caducidad:</strong> <span id="summary-fechaCaducidad"></span></p>
+                    <p><strong>Cuota:</strong> <span id="summary-cuota"></span></p>
+                    <p><strong>Grupos:</strong> <span id="summary-grupos"></span></p>
+                </div>
             </div>
 
-            <div class="full-width">
-                <button type="button" onclick="createUser()">Crear usuario</button>
+            <div class="button-group">
+                <button type="button" id="prevBtn" onclick="prevStep()" disabled>Anterior</button>
+                <button type="button" id="nextBtn" onclick="nextStep()">Siguiente</button>
+                <button type="button" id="submitBtn" onclick="createUser()" style="display:none;">Crear Usuario</button>
             </div>
-        </div>
+        </form>
     </div>
 
     <script>
-        // Función para obtener las OUs Secundarias
+        let currentStep = 1;
+
+        function updateStepDisplay() {
+            document.querySelectorAll('.form-step').forEach(step => step.classList.remove('active'));
+            document.querySelector(`.form-step[data-step="${currentStep}"]`).classList.add('active');
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('active');
+                if (parseInt(step.getAttribute('data-step')) < currentStep) step.classList.add('completed');
+                else step.classList.remove('completed');
+            });
+            document.querySelector(`.step[data-step="${currentStep}"]`).classList.add('active');
+
+            document.getElementById('prevBtn').disabled = currentStep === 1;
+            document.getElementById('nextBtn').style.display = currentStep === 4 ? 'none' : 'inline-block';
+            document.getElementById('submitBtn').style.display = currentStep === 4 ? 'inline-block' : 'none';
+
+            if (currentStep === 4) updateSummary();
+        }
+
+        function nextStep() {
+            if (!validateStep(currentStep)) return;
+            currentStep++;
+            updateStepDisplay();
+        }
+
+        function prevStep() {
+            currentStep--;
+            updateStepDisplay();
+        }
+
+        function validateStep(step) {
+            if (step === 1) {
+                const requiredFields = ['nombre', 'apellido1', 'username', 'dni'];
+                return requiredFields.every(id => {
+                    const field = document.getElementById(id);
+                    if (!field.value.trim()) {
+                        alert(`Por favor, complete el campo ${field.previousElementSibling.textContent}`);
+                        return false;
+                    }
+                    return true;
+                });
+            } else if (step === 2) {
+                const ouPrincipal = document.getElementById('ouPrincipal');
+                if (!ouPrincipal.value) {
+                    alert('Por favor, seleccione una OU Principal.');
+                    return false;
+                }
+                return true;
+            } else if (step === 3) {
+                const fechaCaducidadOp = document.getElementById('fechaCaducidadOp').value;
+                if (fechaCaducidadOp === 'si' && !document.getElementById('fechaCaducidad').value) {
+                    alert('Por favor, seleccione una fecha de caducidad.');
+                    return false;
+                }
+                return true;
+            }
+            return true;
+        }
+
+        function updateSummary() {
+            document.getElementById('summary-nombre').textContent = document.getElementById('nombre').value;
+            document.getElementById('summary-apellido1').textContent = document.getElementById('apellido1').value;
+            document.getElementById('summary-apellido2').textContent = document.getElementById('apellido2').value || '-';
+            document.getElementById('summary-username').textContent = document.getElementById('username').value;
+            document.getElementById('summary-dni').textContent = document.getElementById('dni').value;
+            document.getElementById('summary-nTelefono').textContent = document.getElementById('nTelefono').value || '-';
+            document.getElementById('summary-ddi').textContent = document.getElementById('ddi').value || '-';
+            document.getElementById('summary-mobileExt').textContent = document.getElementById('mobileExt').value || '-';
+            document.getElementById('summary-mobileNumber').textContent = document.getElementById('mobileNumber').value || '-';
+            document.getElementById('summary-tarjetaId').textContent = document.getElementById('tarjetaId').value || '-';
+            document.getElementById('summary-nFuncionario').textContent = document.getElementById('nFuncionario').value || '-';
+            document.getElementById('summary-ouPrincipal').textContent = document.getElementById('ouPrincipal').value;
+            document.getElementById('summary-ouSecundaria').textContent = document.getElementById('ouSecundaria').value || '-';
+            document.getElementById('summary-departamento').textContent = document.getElementById('departamento').value;
+            document.getElementById('summary-lugarEnvio').textContent = document.getElementById('lugarEnvio').value || '-';
+            const fechaCaducidadOp = document.getElementById('fechaCaducidadOp').value;
+            document.getElementById('summary-fechaCaducidad').textContent = fechaCaducidadOp === 'si' ? document.getElementById('fechaCaducidad').value : 'No aplica';
+            document.getElementById('summary-cuota').textContent = document.getElementById('cuota').value || '-';
+            const grupos = [...document.querySelectorAll('.checkbox-group input[type="checkbox"]:checked')].map(cb => cb.value)
+                .concat([...document.getElementById('gruposSeleccionados').options].map(opt => opt.value));
+            document.getElementById('summary-grupos').textContent = grupos.length ? grupos.join(', ') : '-';
+        }
+
         function fetchOUSecundarias() {
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria');
             ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria (opcional)</option>';
 
-            if (!ouPrincipal) {
-                console.log('No se seleccionó OU principal, no se buscan OUs secundarias.');
-                return;
+            if (ouPrincipal) {
+                fetch('/AltaUsuario/GetOUSecundarias', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ouPrincipal })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length === 0) {
+                            ouSecundaria.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
+                        } else {
+                            data.forEach(ou => {
+                                const option = document.createElement('option');
+                                option.value = ou;
+                                option.textContent = ou;
+                                ouSecundaria.appendChild(option);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error al obtener las OUs secundarias:', error);
+                        alert('Error al obtener las OUs secundarias.');
+                    });
             }
-
-            console.log('Buscando OUs secundarias para OU principal:', ouPrincipal);
-
-            fetch('/AltaUsuario/GetOUSecundarias', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ ouPrincipal })
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Error HTTP: ${response.status} ${response.statusText}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('OUs secundarias recibidas:', data);
-                    if (data.length === 0) {
-                        console.log('No hay OUs secundarias disponibles.');
-                        ouSecundaria.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
-                    } else {
-                        data.forEach(ou => {
-                            const option = document.createElement('option');
-                            option.value = ou;
-                            option.textContent = ou;
-                            ouSecundaria.appendChild(option);
-                        });
-                        console.log('OUs secundarias cargadas en el desplegable.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error al obtener las OUs secundarias:', error);
-                    alert('Error al obtener las OUs secundarias: ' + error.message);
-                });
         }
 
-        // Función para obtener el departamento
         function fetchDepartamento() {
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria').value;
@@ -332,8 +430,6 @@
                 return;
             }
 
-            console.log('Obteniendo departamento para:', { ouPrincipal, ouSecundaria });
-
             fetch('/AltaUsuario/GetDepartamento', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -341,14 +437,12 @@
             })
                 .then(response => response.json())
                 .then(data => {
-                    console.log('Respuesta de GetDepartamento:', data);
                     departamentoField.value = data.success ? data.departamento : '';
-                    if (!data.success) {
-                        console.warn('No se pudo obtener el departamento:', data.message);
-                    }
+                    if (!data.success) alert(data.message);
                 })
                 .catch(error => {
-                    console.error('Error al obtener departamento:', error);
+                    console.error('Error al obtener el departamento:', error);
+                    alert('Error al obtener el departamento.');
                     departamentoField.value = '';
                 });
         }
@@ -363,8 +457,6 @@
                 return;
             }
 
-            console.log('Obteniendo lugar de envío para:', { ouPrincipal, ouSecundaria });
-
             fetch('/AltaUsuario/GetLugarEnvio', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -372,40 +464,43 @@
             })
                 .then(response => response.json())
                 .then(data => {
-                    console.log('Respuesta de GetLugarEnvio:', data);
                     lugarEnvioField.value = data.success ? data.lugarEnvio : '';
-                    if (!data.success) {
-                        console.warn('No se pudo obtener el lugar de envío:', data.message);
-                    }
+                    if (!data.success) alert(data.message);
                 })
                 .catch(error => {
-                    console.error('Error al obtener lugar de envío:', error);
+                    console.error('Error al obtener el lugar de envío:', error);
+                    alert('Error al obtener el lugar de envío.');
                     lugarEnvioField.value = '';
                 });
         }
 
         async function generateUsername() {
+            console.log("generateUsername() ejecutada");
             const nombre = document.getElementById('nombre').value.trim();
             const apellido1 = document.getElementById('apellido1').value.trim();
             const apellido2 = document.getElementById('apellido2').value.trim();
             const usernameField = document.getElementById('username');
 
+            if (!usernameField) {
+                console.error("El campo 'username' no se encuentra en el DOM");
+                return;
+            }
+
             try {
-                const response = await fetch('/AltaUsuario/GenerateUsername', {
+                console.log("Enviando solicitud a /GestionUsuarios/GenerateUsername con datos:", { nombre, apellido1, apellido2 });
+                const response = await fetch('/GestionUsuarios/GenerateUsername', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nombre, apellido1, apellido2 })
                 });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    usernameField.value = data.username;
-                    usernameField.readOnly = true;
-                } else {
-                    alert(data.message || "Error al generar el nombre de usuario.");
-                    usernameField.value = '';
+                console.log("Respuesta del servidor:", response);
+                if (!response.ok) {
+                    throw new Error(`Error HTTP: ${response.status} ${response.statusText}`);
                 }
+                const data = await response.json();
+                console.log("Datos recibidos:", data);
+                usernameField.value = data.success ? data.username : '';
+                if (!data.success) alert(data.message || "Error al generar el nombre de usuario.");
             } catch (error) {
                 console.error("Error al generar el nombre de usuario:", error);
                 alert("Ocurrió un error inesperado.");
@@ -413,315 +508,78 @@
             }
         }
 
-        async function checkNumberIdExists() {
-            const nFuncionario = document.getElementById('nFuncionario').value.trim();
-            // Si el campo está vacío, no hacemos nada (es opcional)
-            if (!nFuncionario) {
-                return false; // No existe conflicto, ya que es opcional
+        async function checkDNIExists() {
+            const dni = document.getElementById('dni').value.trim();
+            if (!dni) {
+                alert("Por favor, ingrese un DNI.");
+                return true;
             }
 
-            if (nFuncionario != "999999") {
-                try {
-                    const response = await fetch('/AltaUsuario/CheckNumberIdExists', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ nFuncionario })
-                    });
-
-                    if (response.ok) {
-                        const data = await response.json();
-
-                        if (data.success) {
-                            if (data.exists) {
-                                alert("El número de funcionario ya existe en el Directorio Activo.");
-                                document.getElementById('nFuncionario').value = "";
-                                return true; // Existe en el Directorio Activo
-                            } else {
-                                return false; // No existe en el Directorio Activo
-                            }
-                        } else {
-                            console.error("Error en la respuesta del servidor: " + data.message);
-                            alert("Error en la respuesta del servidor");
-                            document.getElementById('nFuncionario').value = "";
-                            return true; // Asumimos que existe si hay un error en el servidor
-                        }
-                    } else {
-                        console.error("Error al verificar el número de funcionario: " + response.statusText);
-                        return true; // Asumimos que existe si no hay una respuesta válida
-                    }
-                } catch (error) {
-                    console.error("Error al verificar el número de funcionario:", error);
-                    alert("Ocurrió un error al verificar el número de funcionario.");
-                    return true; // Asumimos que existe si hay un error
+            try {
+                const response = await fetch('/AltaUsuario/CheckDniExists', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dni })
+                });
+                const data = await response.json();
+                if (data.success && data.exists) {
+                    alert("El DNI ya existe en el Directorio Activo.");
+                    document.getElementById('dni').value = "";
+                    return true;
                 }
+                return false;
+            } catch (error) {
+                console.error("Error al verificar el DNI:", error);
+                alert("Ocurrió un error al verificar el DNI.");
+                return true;
             }
-            return false;
         }
 
         async function checkTelephoneExists() {
             const nTelefono = document.getElementById("nTelefono").value.trim();
-            // Si el campo está vacío, no hacemos nada (es opcional)
-            if (!nTelefono) {
-                return false; // No existe conflicto, ya que es opcional
-            }
+            if (!nTelefono) return false;
 
             try {
-                const response = await fetch('/AltaUsuario/CheckTelephoneExists', {
+                const response = await fetch('/GestionUsuarios/CheckTelephoneExists', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nTelefono })
                 });
-
-                if (response.ok) {
-                    const data = await response.json();
-
-                    if (data.success) {
-                        if (data.exists) {
-                            alert("El número de teléfono ya existe en el directorio activo.");
-                            document.getElementById('nTelefono').value = "";
-                            return true; // Existe en el Directorio Activo
-                        } else {
-                            return false; // No existe en el Directorio Activo
-                        }
-                    } else {
-                        console.error("Error en la respuesta del servidor: " + data.message);
-                        alert("Error en la respuesta del servidor");
-                        document.getElementById('nTelefono').value = "";
-                        return true; // Asumimos que existe si hay un error en el servidor
-                    }
-                } else {
-                    console.error("Error al verificar el número de telefono: " + response.statusText);
-                    return true; // Asumimos que existe si no hay una respuesta válida
+                const data = await response.json();
+                if (data.success && data.exists) {
+                    alert("El número de teléfono ya existe en el directorio activo.");
+                    document.getElementById('nTelefono').value = "";
+                    return true;
                 }
+                return false;
             } catch (error) {
                 console.error("Error al verificar el número de teléfono:", error);
                 alert("Ocurrió un error al verificar el número de teléfono.");
-                return true; // Asumimos que existe si hay un error
+                return true;
             }
         }
 
-        async function checkOtherTelephoneExists() {
-            const numeroLargoFijo = document.getElementById("numeroLargoFijo").value.trim();
-            // Si el campo está vacío, no hacemos nada (es opcional)
-            if (!numeroLargoFijo) {
-                return false; // No existe conflicto, ya que es opcional
-            }
+        async function checkNumberIdExists() {
+            const nFuncionario = document.getElementById('nFuncionario').value.trim();
+            if (!nFuncionario || nFuncionario === "999999") return false;
 
             try {
-                const response = await fetch('/AltaUsuario/CheckOtherTelephoneExists', {
+                const response = await fetch('/GestionUsuarios/CheckNumberIdExists', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ numeroLargoFijo })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nFuncionario })
                 });
-
-                if (response.ok) {
-                    const data = await response.json();
-
-                    if (data.success) {
-                        if (data.exists) {
-                            alert("El número largo fijo ya existe en el directorio activo.");
-                            document.getElementById('numeroLargoFijo').value = "";
-                            return true; // Existe en el Directorio Activo
-                        } else {
-                            return false; // No existe en el Directorio Activo
-                        }
-                    } else {
-                        console.error("Error en la respuesta del servidor: " + data.message);
-                        alert("Error en la respuesta del servidor");
-                        document.getElementById('numeroLargoFijo').value = "";
-                        return true; // Asumimos que existe si hay un error en el servidor
-                    }
-                } else {
-                    console.error("Error al verificar el número largo fijo: " + response.statusText);
-                    return true; // Asumimos que existe si no hay una respuesta válida
+                const data = await response.json();
+                if (data.success && data.exists) {
+                    alert("El número de funcionario ya existe en el Directorio Activo.");
+                    document.getElementById('nFuncionario').value = "";
+                    return true;
                 }
+                return false;
             } catch (error) {
-                console.error("Error al verificar el número largo fijo:", error);
-                alert("Ocurrió un error al verificar el número largo fijo.");
-                return true; // Asumimos que existe si hay un error
-            }
-        }
-
-        async function checkMobileExists() {
-            const extensionMovil = document.getElementById("extensionMovil").value.trim();
-            // Si el campo está vacío, no hacemos nada (es opcional)
-            if (!extensionMovil) {
-                return false; // No existe conflicto, ya que es opcional
-            }
-
-            try {
-                const response = await fetch('/AltaUsuario/CheckMobileExists', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ extensionMovil })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-
-                    if (data.success) {
-                        if (data.exists) {
-                            alert("La extensión del móvil ya existe en el directorio activo.");
-                            document.getElementById('extensionMovil').value = "";
-                            return true; // Existe en el Directorio Activo
-                        } else {
-                            return false; // No existe en el Directorio Activo
-                        }
-                    } else {
-                        console.error("Error en la respuesta del servidor: " + data.message);
-                        alert("Error en la respuesta del servidor");
-                        document.getElementById('extensionMovil').value = "";
-                        return true; // Asumimos que existe si hay un error en el servidor
-                    }
-                } else {
-                    console.error("Error al verificar la extensión del móvil: " + response.statusText);
-                    return true; // Asumimos que existe si no hay una respuesta válida
-                }
-            } catch (error) {
-                console.error("Error al verificar la extensión del móvil:", error);
-                alert("Ocurrió un error al verificar la extensión del móvil.");
-                return true; // Asumimos que existe si hay un error
-            }
-        }
-
-        async function checkOtherMobileExists() {
-            const numeroLargoMovil = document.getElementById("numeroLargoMovil").value.trim();
-            // Si el campo está vacío, no hacemos nada (es opcional)
-            if (!numeroLargoMovil) {
-                return false; // No existe conflicto, ya que es opcional
-            }
-
-            try {
-                const response = await fetch('/AltaUsuario/CheckOtherMobileExists', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ numeroLargoMovil })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-
-                    if (data.success) {
-                        if (data.exists) {
-                            alert("El número largo del móvil ya existe en el directorio activo.");
-                            document.getElementById('numeroLargoMovil').value = "";
-                            return true; // Existe en el Directorio Activo
-                        } else {
-                            return false; // No existe en el Directorio Activo
-                        }
-                    } else {
-                        console.error("Error en la respuesta del servidor: " + data.message);
-                        alert("Error en la respuesta del servidor");
-                        document.getElementById('numeroLargoMovil').value = "";
-                        return true; // Asumimos que existe si hay un error en el servidor
-                    }
-                } else {
-                    console.error("Error al verificar el número largo del móvil: " + response.statusText);
-                    return true; // Asumimos que existe si no hay una respuesta válida
-                }
-            } catch (error) {
-                console.error("Error al verificar el número largo del móvil:", error);
-                alert("Ocurrió un error al verificar el número largo del móvil.");
-                return true; // Asumimos que existe si hay un error
-            }
-        }
-
-        async function checkTarjetaIdentificativaExists() {
-            const tarjetaIdentificativa = document.getElementById("tarjetaIdentificativa").value.trim();
-            // Si el campo está vacío, no hacemos nada (es opcional)
-            if (!tarjetaIdentificativa) {
-                return false; // No existe conflicto, ya que es opcional
-            }
-
-            try {
-                const response = await fetch('/AltaUsuario/checkTarjetaIdentificativaExists', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ tarjetaIdentificativa }) // Corrección: Usar tarjetaIdentificativa en lugar de nTelefono
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-
-                    if (data.success) {
-                        if (data.exists) {
-                            alert("La tarjeta identificativa ya existe en el directorio activo.");
-                            document.getElementById('tarjetaIdentificativa').value = "";
-                            return true; // Existe en el Directorio Activo
-                        } else {
-                            return false; // No existe en el Directorio Activo
-                        }
-                    } else {
-                        console.error("Error en la respuesta del servidor: " + data.message);
-                        alert("Error en la respuesta del servidor");
-                        document.getElementById('tarjetaIdentificativa').value = "";
-                        return true; // Asumimos que existe si hay un error en el servidor
-                    }
-                } else {
-                    console.error("Error al verificar la tarjeta identificativa: " + response.statusText);
-                    return true; // Asumimos que existe si no hay una respuesta válida
-                }
-            } catch (error) {
-                console.error("Error al verificar la tarjeta identificativa:", error);
-                alert("Ocurrió un error al verificar la tarjeta identificativa.");
-                return true; // Asumimos que existe si hay un error
-            }
-        }
-
-        // Nueva función para verificar si el DNI ya existe
-        async function checkDNIExists() {
-            const dni = document.getElementById("dni").value.trim();
-            // Si el campo está vacío, no hacemos nada (es opcional)
-            if (!dni) {
-                return false; // No existe conflicto, ya que es opcional
-            }
-
-            try {
-                const response = await fetch('/AltaUsuario/CheckDNIExists', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ dni })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-
-                    if (data.success) {
-                        if (data.exists) {
-                            alert("El DNI ya existe en el Directorio Activo.");
-                            document.getElementById('dni').value = "";
-                            return true; // Existe en el Directorio Activo
-                        } else {
-                            return false; // No existe en el Directorio Activo
-                        }
-                    } else {
-                        console.error("Error en la respuesta del servidor: " + data.message);
-                        alert("Error en la respuesta del servidor");
-                        document.getElementById('dni').value = "";
-                        return true; // Asumimos que existe si hay un error en el servidor
-                    }
-                } else {
-                    console.error("Error al verificar el DNI: " + response.statusText);
-                    return true; // Asumimos que existe si no hay una respuesta válida
-                }
-            } catch (error) {
-                console.error("Error al verificar el DNI:", error);
-                alert("Ocurrió un error al verificar el DNI.");
-                return true; // Asumimos que existe si hay un error
+                console.error("Error al verificar el número de funcionario:", error);
+                alert("Ocurrió un error al verificar el número de funcionario.");
+                return true;
             }
         }
 
@@ -730,13 +588,13 @@
             const apellido1 = document.getElementById('apellido1').value.trim();
             const apellido2 = document.getElementById('apellido2').value.trim();
             const username = document.getElementById('username').value.trim();
-            const nTelefono = document.getElementById('nTelefono').value.trim();
-            const nFuncionario = document.getElementById('nFuncionario').value.trim();
-            const numeroLargoFijo = document.getElementById('numeroLargoFijo').value.trim();
-            const extensionMovil = document.getElementById('extensionMovil').value.trim();
-            const numeroLargoMovil = document.getElementById('numeroLargoMovil').value.trim();
-            const tarjetaIdentificativa = document.getElementById('tarjetaIdentificativa').value.trim();
             const dni = document.getElementById('dni').value.trim();
+            const nTelefono = document.getElementById('nTelefono').value.trim();
+            const ddi = document.getElementById('ddi').value.trim();
+            const mobileExt = document.getElementById('mobileExt').value.trim();
+            const mobileNumber = document.getElementById('mobileNumber').value.trim();
+            const tarjetaId = document.getElementById('tarjetaId').value.trim();
+            const nFuncionario = document.getElementById('nFuncionario').value.trim();
             const ouPrincipal = document.getElementById('ouPrincipal').value;
             const ouSecundaria = document.getElementById('ouSecundaria').value;
             const departamento = document.getElementById('departamento').value;
@@ -745,91 +603,50 @@
             let fechaCaducidad = document.getElementById('fechaCaducidad').value;
             const cuota = document.getElementById('cuota').value;
 
-            // Si el usuario selecciona "no", asignamos la fecha de hoy
             if (fechaCaducidadOp === "no") {
-                fechaCaducidad = new Date().toISOString().split('T')[0];
+                fechaCaducidad = new Date().toISOString().split('T')[0]; // Corrección del error de sintaxis
             }
 
-            // Recopilar grupos seleccionados de checkboxes
             const gruposCheckbox = Array.from(document.querySelectorAll('.checkbox-group input[type="checkbox"]:checked'))
                 .map(checkbox => checkbox.value);
-
-            // Recopilar grupos seleccionados de la lista desplegable
             const gruposLista = Array.from(document.getElementById('gruposSeleccionados').options)
                 .map(option => option.value);
-
-            // Unificar ambos arrays de grupos
             const grupos = [...gruposCheckbox, ...gruposLista];
 
-            // Validar campos obligatorios (nTelefono, nFuncionario, numeroLargoFijo, extensionMovil, numeroLargoMovil, tarjetaIdentificativa y dni son opcionales)
-            if (!nombre || !apellido1 || !username || !ouPrincipal || !dni) {
-                alert('Por favor, complete todos los campos obligatorios.');
-                return;
-            }
+            if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return;
 
-            // Si el usuario selecciona "sí", se exige que se haya seleccionado una fecha de caducidad
-            if (fechaCaducidadOp === "si" && !fechaCaducidad) {
-                alert('Por favor, seleccione una fecha de caducidad.');
-                return;
-            }
-
-            // Verificar si los valores ya existen (si se proporcionaron)
+            const dniExists = await checkDNIExists();
             const telephoneExists = await checkTelephoneExists();
             const numberIdExists = await checkNumberIdExists();
-            const otherTelephoneExists = await checkOtherTelephoneExists();
-            const mobileExists = await checkMobileExists();
-            const otherMobileExists = await checkOtherMobileExists();
-            const tarjetaIdentificativaExists = await checkTarjetaIdentificativaExists();
-            const dniExists = await checkDNIExists(); // Nueva verificación
 
-            if (telephoneExists || numberIdExists || otherTelephoneExists || mobileExists || otherMobileExists || tarjetaIdentificativaExists || dniExists) {
-                return; // Detener el proceso si hay conflictos
-            }
+            if (dniExists || telephoneExists || numberIdExists) return;
 
-            // Enviar datos al controlador
             try {
                 const response = await fetch('/AltaUsuario/CreateUser', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        nombre,
-                        apellido1,
-                        apellido2,
-                        username,
-                        nTelefono,
-                        nFuncionario,
-                        numeroLargoFijo,
-                        extensionMovil,
-                        numeroLargoMovil,
-                        tarjetaIdentificativa,
-                        dni,
-                        ouPrincipal,
-                        ouSecundaria: ouSecundaria || null,
-                        departamento,
-                        lugarEnvio,
-                        fechaCaducidadOp,
-                        fechaCaducidad,
-                        cuota,
-                        grupos
+                        nombre, apellido1, apellido2, username, dni, nTelefono, ddi, mobileExt, mobileNumber, tarjetaId, nFuncionario,
+                        ouPrincipal, ouSecundaria: ouSecundaria || null, departamento, lugarEnvio,
+                        fechaCaducidadOp, fechaCaducidad, cuota, grupos
                     })
                 });
                 const data = await response.json();
                 if (data.success) {
                     alert('Usuario creado exitosamente.');
+                    window.location.reload();
                 } else {
                     alert(`Error al crear el usuario: ${data.message}`);
                 }
             } catch (error) {
                 console.error('Error al crear el usuario:', error);
-                alert('Ocurrió un error al crear el usuario: ' + error.message);
+                alert('Ocurrió un error al crear el usuario.');
             }
         }
 
-        // Función para añadir un grupo a la lista seleccionada
         function addGroup() {
             const grupoDropdown = document.getElementById('grupoDropdown');
             const gruposSeleccionados = document.getElementById('gruposSeleccionados');
-
             const grupo = grupoDropdown.value;
             const grupoTexto = grupoDropdown.options[grupoDropdown.selectedIndex].text;
 
@@ -838,57 +655,40 @@
                 return;
             }
 
-            // Evitar duplicados
             const opcionesExistentes = Array.from(gruposSeleccionados.options).map(option => option.value);
             if (opcionesExistentes.includes(grupo)) {
                 alert("Este grupo ya está en la lista.");
                 return;
             }
 
-            // Añadir el grupo a la lista de seleccionados
             const opcion = document.createElement('option');
             opcion.value = grupo;
             opcion.textContent = grupoTexto;
             gruposSeleccionados.appendChild(opcion);
-
-            // Limpiar el dropdown
             grupoDropdown.value = "";
         }
 
-        // Función para eliminar el grupo seleccionado al hacer clic en el botón
         function removeSelectedGroup() {
             const gruposSeleccionados = document.getElementById('gruposSeleccionados');
-
             if (gruposSeleccionados.selectedIndex === -1) {
                 alert("Por favor, seleccione un grupo para eliminar.");
                 return;
             }
-
-            const opcionSeleccionada = gruposSeleccionados.options[gruposSeleccionados.selectedIndex];
-            const confirmar = confirm(`¿Está seguro de que desea eliminar el grupo "${opcionSeleccionada.text}" de la lista?`);
-
-            if (confirmar) {
-                gruposSeleccionados.remove(gruposSeleccionados.selectedIndex);
-            }
+            gruposSeleccionados.remove(gruposSeleccionados.selectedIndex);
         }
 
-        // Función para actualizar el estado del campo de fecha según la opción seleccionada
         function updateFechaCaducidadField() {
             const fechaSelect = document.getElementById('fechaCaducidadOp');
             const fechaInput = document.getElementById('fechaCaducidad');
-            if (fechaSelect.value === 'no') {
-                fechaInput.disabled = true;
-                fechaInput.value = ""; // Limpiamos el campo
-            } else {
-                fechaInput.disabled = false;
-            }
+            fechaInput.disabled = fechaSelect.value === 'no';
+            if (fechaSelect.value === 'no') fechaInput.value = "";
         }
 
-        // Asignar el event listener al select
         document.getElementById('fechaCaducidadOp').addEventListener('change', updateFechaCaducidadField);
-
-        // Al cargar la página, actualizamos el estado del campo según el valor por defecto
-        window.addEventListener('load', updateFechaCaducidadField);
+        window.addEventListener('load', () => {
+            updateStepDisplay();
+            updateFechaCaducidadField();
+        });
     </script>
 </body>
 </html>

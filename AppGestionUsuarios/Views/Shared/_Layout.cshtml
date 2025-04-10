@@ -8,41 +8,128 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/AppGestionUsuarios.styles.css" asp-append-version="true" />
     <style>
-        .footer-gray {
-            background-color: #e9ecef;
-            height: 40px; 
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
         }
 
-        .dropdown-menu a {
-            color: #000; 
+        .container {
+            max-width: 1280px;
+            margin: 50px auto;
+            background-color: #ffffff;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
         }
 
-            .dropdown-menu a:hover {
-                background-color: #f8f9fa; /* Color de fondo al pasar el cursor */
-            }
+        h1, h2 {
+            color: #960018;
+            font-weight: bold;
+        }
+
+        h1 {
+            font-size: 28px;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        h2 {
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        input[type="date"],
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background-color: #f9f9f9;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: #960018;
+            outline: none;
+            box-shadow: 0 0 5px rgba(150, 0, 24, 0.3);
+        }
+
+        button, a.btn {
+            padding: 12px 20px;
+            background-color: #960018;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover, a.btn:hover {
+            background-color: #7a0013;
+        }
+
+        .message {
+            margin-top: 15px;
+            text-align: center;
+        }
+
+        .navbar-nav .nav-link {
+            color: #333;
+            font-weight: bold;
+            padding: 10px 20px;
+            transition: color 0.3s ease;
+        }
+
+        .navbar-nav .nav-link:hover {
+            color: #960018;
+        }
+
+        .navbar-nav .nav-item.active .nav-link {
+            color: #960018;
+        }
+
+        .navbar-brand {
+            font-weight: bold;
+            color: #960018;
+            margin-right: 30px;
+        }
     </style>
+    @RenderSection("Styles", required: false)
 </head>
 <body>
     <header>
-        <!-- Menú superior -->
         <nav class="navbar navbar-expand-sm navbar-light bg-light border-bottom box-shadow mb-3">
             <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">AppGestionUsuarios</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="collapse navbar-collapse" id="navbarNavDropdown">
+                <a class="navbar-brand" asp-controller="Home" asp-action="Index">Ayuntamiento de Salamanca</a>
+                <div class="collapse navbar-collapse" id="navbarNav">
                     <ul class="navbar-nav me-auto">
-                        <!-- Lista desplegable -->
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownMenuLink" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                Opciones
-                            </a>
-                            <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
-                                <li><a class="dropdown-item" asp-area="" asp-controller="MenuPrincipal" asp-action="Index">Gestión de Usuarios</a></li>
-                                <li><a class="dropdown-item" asp-area="" asp-controller="InicioSesion" asp-action="Login">Inicio de Sesión</a></li>
-                            </ul>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="MenuPrincipal" asp-action="Index">Menú Principal</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="AltaUsuario" asp-action="AltaUsuario">Crear Usuario</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="BajaUsuario" asp-action="BajaUsuario">Baja Usuario</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="MenuPrincipal" asp-action="Index">Opciones</a>
                         </li>
                     </ul>
                 </div>
@@ -50,19 +137,14 @@
         </nav>
     </header>
 
-    <div class="container">
-        <main role="main" class="pb-3">
-            @RenderBody()
-        </main>
-    </div>
+    @RenderBody() <!-- Quitamos el <div class="container"> para que las vistas decidan su contenedor -->
 
-    <!-- Pie de página vacío -->
     <footer class="footer-gray border-top">
     </footer>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
-    @await RenderSectionAsync("Scripts", required: false)
+    @RenderSection("Scripts", required: false)
 </body>
 </html>

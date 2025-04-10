@@ -310,9 +310,9 @@ public class AltaUsuarioController : Controller
     public IActionResult CreateUser([FromBody] UserModelAltaUsuario user)
     {
         // Configuración de entorno (cambiar según el entorno: pruebas o producción)
-        string serverName = "LEONARDO"; // Cambiar a "RIBERA" en producción
-        string folderPathBase = @"C:\Users\"; // Cambiar a @"\\fs1.aytosa.inet\home\" en producción
-        string quotaPathBase = @"C:\Users\"; // Cambiar a @"G:\home\" en producción
+        string serverName = "RIBERA"; // Cambiar a "RIBERA" en producción
+        string folderPathBase = @"\\fs1.aytosa.inet\home\"; // Cambiar a @"\\fs1.aytosa.inet\home\" en producción
+        string quotaPathBase = @"G:\home\"; // Cambiar a @"G:\home\" en producción
 
         // Validar si los datos se recibieron correctamente
         if (user == null)
@@ -626,81 +626,124 @@ public class AltaUsuarioController : Controller
                         errors.Add($"Error al guardar los cambios finales del usuario: {ex.Message}");
                     }
 
-                    // Crear la carpeta personal del usuario y aplicar la cuota
+                    // Configuración de la carpeta personal y cuota
                     if (userCreated && user.OUPrincipal != "OAGER")
                     {
-                        // Construir la ruta de la carpeta manualmente
                         string folderPath = $"{folderPathBase}{user.Username}";
                         errors.Add($"Verificando existencia de la carpeta: {folderPath}");
 
-                        try
+                        // Se comprueba si el directorio del usuario ya existe y si no existe se comienza con el proceso
+                        if (!Directory.Exists(folderPath))
                         {
-                            // Crear la carpeta directamente con Directory.CreateDirectory
-                            // Este método no lanza excepción si la carpeta ya existe
-                            Directory.CreateDirectory(folderPath);
-                            errors.Add($"Carpeta creada o ya existente: {folderPath}");
-                        }
-                        catch (Exception ex)
-                        {
-                            errors.Add($"Error al crear la carpeta: {ex.Message}");
-                        }
-
-                        // Crear la cuota en el equipo LEONARDO (o RIBERA en producción) usando FSRM
-                        try
-                        {
-                            // Formatear el valor de la cuota (por ejemplo, "1 GB" -> "1GB")
-                            string quota = user.Cuota; // Valor predeterminado: "1GB"
-                            string quotaTemplate = $"HOME-{quota}"; // Ejemplo: "HOME-1GB"
-                            string quotaPath = $"{quotaPathBase}{user.Username}"; // Ruta en LEONARDO (o equipo local en pruebas)
-
-                            errors.Add($"Creando cuota para el usuario: {user.Username} en la ruta: {quotaPath} con plantilla: {quotaTemplate} en el servidor: {serverName}");
-
-                            // Usar FSRM para crear la cuota
-                            Type fsrmQuotaManagerType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", serverName);
-                            if (fsrmQuotaManagerType == null)
-                            {
-                                throw new Exception($"No se pudo crear una instancia de FsrmQuotaManager en {serverName}. Asegúrate de que FSRM esté instalado y accesible.");
-                            }
-
-                            dynamic quotaManager = Activator.CreateInstance(fsrmQuotaManagerType);
-                            if (quotaManager == null)
-                            {
-                                throw new Exception($"No se pudo instanciar FsrmQuotaManager en {serverName}.");
-                            }
-
                             try
                             {
-                                // Verificar si ya existe una cuota en la ruta
-                                dynamic existingQuota = quotaManager.GetQuota(quotaPath);
-                                if (existingQuota != null)
+                                // Crear la carpeta
+                                Directory.CreateDirectory(folderPath);
+                                errors.Add($"Carpeta creada: {folderPath}");
+
+                                // Configurar permisos NTFS usando DirectoryInfo
+                                DirectoryInfo directoryInfo = new DirectoryInfo(folderPath);
+                                DirectorySecurity directorySecurity = new DirectorySecurity();
+                                directorySecurity.AddAccessRule(new FileSystemAccessRule(
+                                    new NTAccount("aytosa\\adm_fs"),
+                                    FileSystemRights.FullControl,
+                                    InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                                    PropagationFlags.None,
+                                    AccessControlType.Allow));
+                                directorySecurity.AddAccessRule(new FileSystemAccessRule(
+                                    new NTAccount("aytosa\\adm_ds"),
+                                    FileSystemRights.FullControl,
+                                    InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                                    PropagationFlags.None,
+                                    AccessControlType.Allow));
+                                directorySecurity.AddAccessRule(new FileSystemAccessRule(
+                                    new NTAccount($"aytosa\\{user.Username}"),
+                                    FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.Write | FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize,
+                                    InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                                    PropagationFlags.None,
+                                    AccessControlType.Allow));
+                                directorySecurity.SetAccessRuleProtection(true, true);
+                                directoryInfo.SetAccessControl(directorySecurity);
+
+                                DirectorySecurity updatedSecurity = directoryInfo.GetAccessControl();
+                                updatedSecurity.RemoveAccessRuleAll(new FileSystemAccessRule(
+                                    new NTAccount("BUILTIN\\Administradores"),
+                                    FileSystemRights.FullControl,
+                                    AccessControlType.Allow));
+                                updatedSecurity.RemoveAccessRuleAll(new FileSystemAccessRule(
+                                    new NTAccount("BUILTIN\\Usuarios"),
+                                    FileSystemRights.FullControl,
+                                    AccessControlType.Allow));
+                                updatedSecurity.RemoveAccessRuleAll(new FileSystemAccessRule(
+                                    new NTAccount("CREATOR OWNER"),
+                                    FileSystemRights.FullControl,
+                                    AccessControlType.Allow));
+                                directoryInfo.SetAccessControl(updatedSecurity);
+
+                                errors.Add("Permisos NTFS configurados correctamente.");
+                            }
+                            catch (Exception ex)
+                            {
+                                errors.Add($"Error al crear la carpeta o configurar permisos NTFS: {ex.Message}. Continuando con el proceso...");
+                                // No lanzamos la excepción, permitiendo que el proceso continúe
+                            }
+
+                            // Configuración de la cuota FSRM
+                            try
+                            {
+                                string quota = user.Cuota ?? "1GB";
+                                string quotaTemplate = $"HOME-{quota}";
+                                string quotaPath = $"{quotaPathBase}{user.Username}";
+                                errors.Add($"Configurando cuota para {user.Username} en {quotaPath} con plantilla {quotaTemplate} en {serverName}");
+
+                                Type fsrmQuotaManagerType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", serverName);
+                                if (fsrmQuotaManagerType == null)
                                 {
-                                    errors.Add($"Ya existe una cuota en la ruta: {quotaPath}. Actualizando la cuota existente.");
-                                    existingQuota.ApplyTemplate(quotaTemplate);
-                                    existingQuota.Commit();
-                                    errors.Add($"Cuota actualizada exitosamente en {serverName} para el usuario: {user.Username} con plantilla: {quotaTemplate}");
+                                    throw new Exception($"No se pudo crear una instancia de FsrmQuotaManager en {serverName}.");
+                                }
+
+                                dynamic quotaManager = Activator.CreateInstance(fsrmQuotaManagerType);
+                                try
+                                {
+                                    dynamic existingQuota = null;
+                                    try
+                                    {
+                                        existingQuota = quotaManager.GetQuota(quotaPath);
+                                    }
+                                    catch { /* Ignorar si no existe */ }
+
+                                    if (existingQuota != null)
+                                    {
+                                        errors.Add($"Cuota existente encontrada en {quotaPath}. Actualizando...");
+                                        existingQuota.ApplyTemplate(quotaTemplate);
+                                        existingQuota.Commit();
+                                        errors.Add($"Cuota actualizada con plantilla {quotaTemplate}.");
+                                    }
+                                    else
+                                    {
+                                        dynamic quotaObject = quotaManager.CreateQuota(quotaPath);
+                                        quotaObject.ApplyTemplate(quotaTemplate);
+                                        quotaObject.Commit();
+                                        errors.Add($"Cuota creada con plantilla {quotaTemplate}.");
+                                    }
+                                }
+                                finally
+                                {
+                                    if (quotaManager != null)
+                                    {
+                                        Marshal.ReleaseComObject(quotaManager);
+                                    }
                                 }
                             }
                             catch (Exception ex)
                             {
-                                // Si no existe una cuota, creamos una nueva
-                                errors.Add($"No se encontró una cuota existente en la ruta: {quotaPath}. Creando una nueva cuota.");
-                                dynamic quotaObject = quotaManager.CreateQuota(quotaPath);
-                                quotaObject.ApplyTemplate(quotaTemplate);
-                                quotaObject.Commit();
-                                errors.Add($"Cuota creada exitosamente en {serverName} para el usuario: {user.Username} con plantilla: {quotaTemplate}");
-                            }
-                            finally
-                            {
-                                // Liberar el objeto COM
-                                if (quotaManager != null)
-                                {
-                                    Marshal.ReleaseComObject(quotaManager);
-                                }
+                                errors.Add($"Error al configurar la cuota FSRM: {ex.Message}. Continuando con el proceso...");
+                                // No lanzamos la excepción, permitiendo que el proceso continúe
                             }
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            errors.Add($"Error al crear o actualizar la cuota en {serverName}: {ex.Message}");
+                            errors.Add($"La carpeta {folderPath} ya existe, no se creó ni se configuró cuota.");
                         }
                     }
                     else if (user.OUPrincipal == "OAGER")
@@ -710,11 +753,7 @@ public class AltaUsuarioController : Controller
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"Error crítico al crear el usuario: {ex.Message}");
-                }
-                finally
-                {
-                    newUser?.Dispose();
+                    errors.Add($"Error al establecer los atributos opcionales del usuario: {ex.Message}");
                 }
             }
         }

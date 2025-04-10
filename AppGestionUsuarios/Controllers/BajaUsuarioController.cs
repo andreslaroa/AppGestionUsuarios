@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
+using System.IO;
+using System.Runtime.InteropServices;
 
 [Authorize]
 public class BajaUsuarioController : Controller
@@ -53,7 +55,7 @@ public class BajaUsuarioController : Controller
             return Json(new { success = false, message = "Usuario no especificado." });
 
         string input = requestData["username"];
-        string username = ExtractUsername(input); // Extraemos solo el sAMAccountName
+        string username = ExtractUsername(input);
 
         if (string.IsNullOrEmpty(username))
             return Json(new { success = false, message = "El formato del usuario seleccionado no es válido." });
@@ -96,6 +98,10 @@ public class BajaUsuarioController : Controller
                                 {
                                     Console.WriteLine($"Error al eliminar usuario del grupo {groupCN}: {ex.Message}");
                                 }
+                                finally
+                                {
+                                    groupEntry?.Dispose();
+                                }
                             }
                         }
                     }
@@ -115,20 +121,81 @@ public class BajaUsuarioController : Controller
                         Console.WriteLine($"Error al eliminar carpeta personal del usuario {username}: {ex.Message}");
                     }
 
-                    // 3. Eliminar el usuario de Active Directory a través de su contenedor
+                    // 3. Eliminar la cuota FSRM asociada
                     try
                     {
-                        DirectoryEntry parent = userEntry.Parent;
-                        parent.Children.Remove(userEntry);
-                        parent.CommitChanges();
+                        string quotaPath = $"G:\\home\\{username}";
+                        string serverName = "ribera";
+                        Type fsrmQuotaManagerType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", serverName);
+                        if (fsrmQuotaManagerType == null)
+                        {
+                            throw new Exception($"No se pudo crear una instancia de FsrmQuotaManager en {serverName}.");
+                        }
+
+                        dynamic quotaManager = Activator.CreateInstance(fsrmQuotaManagerType);
+                        try
+                        {
+                            dynamic existingQuota = null;
+                            try
+                            {
+                                existingQuota = quotaManager.GetQuota(quotaPath);
+                            }
+                            catch { /* Ignorar si no existe */ }
+
+                            if (existingQuota != null)
+                            {
+                                quotaManager.DeleteQuota(quotaPath);
+                                Console.WriteLine($"Cuota FSRM eliminada para {quotaPath}.");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"No se encontró cuota FSRM para {quotaPath}.");
+                            }
+                        }
+                        finally
+                        {
+                            if (quotaManager != null)
+                            {
+                                Marshal.ReleaseComObject(quotaManager);
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {
-                        return Json(new { success = false, message = $"Error al eliminar el usuario en AD: {ex.Message}" });
+                        Console.WriteLine($"Error al eliminar la cuota FSRM para {username}: {ex.Message}");
+                    }
+
+                    // 4. Deshabilitar al usuario
+                    try
+                    {
+                        int userAccountControl = (int)userEntry.Properties["userAccountControl"].Value;
+                        userAccountControl |= 0x2; // Establecer el bit ACCOUNT_DISABLED
+                        userEntry.Properties["userAccountControl"].Value = userAccountControl;
+                        userEntry.CommitChanges();
+                        Console.WriteLine($"Usuario {username} deshabilitado correctamente.");
+                    }
+                    catch (Exception ex)
+                    {
+                        return Json(new { success = false, message = $"Error al deshabilitar el usuario: {ex.Message}" });
+                    }
+
+                    // 5. Mover al usuario a la OU "Bajas" dentro de "AREAS"
+                    try
+                    {
+                        string newOUPath = "LDAP://OU=Bajas,OU=AREAS,DC=aytosa,DC=inet";
+                        using (DirectoryEntry newOUEntry = new DirectoryEntry(newOUPath))
+                        {
+                            userEntry.MoveTo(newOUEntry);
+                            userEntry.CommitChanges();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        return Json(new { success = false, message = $"Error al mover el usuario a la OU Bajas: {ex.Message}" });
                     }
                 }
             }
-            return Json(new { success = true, message = "Usuario eliminado correctamente." });
+            return Json(new { success = true, message = "Usuario deshabilitado, movido a la OU Bajas, retirado de todos los grupos, y carpeta personal y cuota eliminadas correctamente." });
         }
         catch (Exception ex)
         {

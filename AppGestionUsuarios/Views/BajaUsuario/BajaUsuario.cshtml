@@ -31,7 +31,7 @@
             font-weight: bold;
         }
 
-        select, input[type="text"], button {
+        select, input[type="text"], button, textarea {
             width: 100%;
             padding: 10px;
             margin-bottom: 15px;
@@ -47,19 +47,29 @@
             cursor: pointer;
         }
 
-        button:hover {
-            background-color: #c82333;
-        }
+            button:hover {
+                background-color: #c82333;
+            }
 
         .button-group {
             display: flex;
             justify-content: center;
         }
 
-        .button-group button {
-            margin-top: 10px;
-            padding: 12px 20px;
+            .button-group button {
+                margin-top: 10px;
+                padding: 12px 20px;
+            }
+
+        .checkbox-group {
+            margin-bottom: 15px;
         }
+
+            .checkbox-group label {
+                display: inline-block;
+                margin-right: 20px;
+                font-weight: normal;
+            }
     </style>
 </head>
 <body>
@@ -81,6 +91,17 @@
 
         <label for="selectedUser">Usuario Seleccionado:</label>
         <input type="text" id="selectedUser" readonly />
+
+        <!-- Checkboxes para aplicaciones predefinidas -->
+        <div class="checkbox-group">
+            <label>Enviar notificaciones para:</label>
+            <label><input type="checkbox" id="aruCheckbox" value="ARU"> ARU</label>
+            <!-- Añade más checkboxes aquí según las aplicaciones predefinidas -->
+        </div>
+
+        <!-- Campo para mensaje personalizado -->
+        <label for="customMessage">Mensaje personalizado (opcional):</label>
+        <textarea id="customMessage" rows="4" placeholder="Escribe un mensaje personalizado si deseas enviar un correo adicional..."></textarea>
 
         <!-- Botón para eliminar usuario -->
         <div class="button-group">
@@ -109,26 +130,39 @@
                 return;
             }
 
-            if (!confirm(`¿Está seguro de que desea eliminar al usuario ${username}? Esta acción no se puede deshacer.`)) {
+            if (!confirm(`¿Está seguro de que desea dar de baja al usuario ${username}? Esta acción no se puede deshacer.`)) {
                 return;
             }
+
+            // Obtener las aplicaciones seleccionadas
+            const selectedApps = [];
+            if (document.getElementById('aruCheckbox').checked) {
+                selectedApps.push('ARU');
+            }
+            // Añade más condiciones si hay más checkboxes
+
+            // Obtener el mensaje personalizado
+            const customMessage = document.getElementById('customMessage').value;
 
             try {
                 const response = await fetch('/BajaUsuario/BajaUsuario', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username })
+                    body: JSON.stringify({
+                        username: username,
+                        selectedApps: selectedApps,
+                        customMessage: customMessage
+                    })
                 });
 
                 const data = await response.json();
                 alert(data.message);
                 location.reload(); // Refrescar la página tras eliminar
             } catch (error) {
-                console.error('Error al eliminar el usuario:', error);
-                alert('Ocurrió un error al eliminar el usuario.');
+                console.error('Error al dar de baja al usuario:', error);
+                alert('Ocurrió un error al dar de baja al usuario.');
             }
         }
-
     </script>
 </body>
 </html>

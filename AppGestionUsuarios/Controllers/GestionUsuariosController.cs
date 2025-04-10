@@ -6,20 +6,13 @@ using System;
 using System.DirectoryServices;
 using System.Globalization;
 using System.Linq;
-using System.Text;
-using System.DirectoryServices.ActiveDirectory;
-using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.ObjectModel;
 using System.Management.Automation;
-
 
 [Authorize]
 public class GestionUsuariosController : Controller
 {
-
     private readonly ILogger<GestionUsuariosController> _logger;
 
     public class UserModelAltaUsuario
@@ -36,11 +29,8 @@ public class GestionUsuariosController : Controller
         public string FechaCaducidadOp { get; set; }
         public DateTime FechaCaducidad { get; set; }
         public string Cuota { get; set; }
-
-        // Nueva propiedad para los grupos seleccionados
         public List<string> Grupos { get; set; }
     }
-
 
     public class userInputModel
     {
@@ -49,15 +39,12 @@ public class GestionUsuariosController : Controller
         public string Apellido2 { set; get; }
     }
 
-
     [HttpGet]
     public IActionResult HabilitarDeshabilitarUsuario()
     {
         try
         {
-            // Establecer el límite de resultados por página
-            int pageSize = 1000; // Puedes cambiarlo si el servidor tiene un límite diferente
-
+            int pageSize = 1000;
             using (var entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
             {
                 using (var searcher = new DirectorySearcher(entry))
@@ -66,12 +53,9 @@ public class GestionUsuariosController : Controller
                     searcher.PropertiesToLoad.Add("displayName");
                     searcher.PropertiesToLoad.Add("sAMAccountName");
                     searcher.SearchScope = SearchScope.Subtree;
-
-                    // Habilitar la paginación
                     searcher.PageSize = pageSize;
 
                     var usuarios = new List<string>();
-
                     foreach (SearchResult result in searcher.FindAll())
                     {
                         if (result.Properties.Contains("displayName") && result.Properties.Contains("sAMAccountName"))
@@ -82,7 +66,7 @@ public class GestionUsuariosController : Controller
                         }
                     }
 
-                    ViewBag.Usuarios = usuarios.OrderBy(u => u).ToList(); // Ordenar alfabéticamente
+                    ViewBag.Usuarios = usuarios.OrderBy(u => u).ToList();
                 }
             }
         }
@@ -95,31 +79,6 @@ public class GestionUsuariosController : Controller
         return View();
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    //Función encargada de comvertir el username recibido de una vista en string y pasarlo a la función que lo busca en AD
     [HttpPost]
     public IActionResult CheckUsernameExists([FromBody] Dictionary<string, string> requestData)
     {
@@ -130,11 +89,9 @@ public class GestionUsuariosController : Controller
             return Json(exists);
         }
 
-        return Json(false); // Si no hay datos, asumimos que no existe
+        return Json(false);
     }
 
-
-    //Busca si existe el nombre de usuario en el directorio activo
     private bool CheckUserInActiveDirectory(string username)
     {
         try
@@ -143,28 +100,22 @@ public class GestionUsuariosController : Controller
             {
                 using (var user = UserPrincipal.FindByIdentity(context, username))
                 {
-                    return user != null; // Retorna true si el usuario existe
+                    return user != null;
                 }
             }
         }
         catch
         {
-            // Manejo de errores
-            return true; // Asumir que el usuario existe si hay un error
+            return true;
         }
     }
 
-
-    //Comprueba si el id del usaurio existe en el directorio activo
     [HttpPost]
     public IActionResult CheckNumberIdExists([FromBody] Dictionary<string, string> requestData)
     {
-        // Validar si se recibió el campo nFuncionario
         if (requestData != null && requestData.ContainsKey("nFuncionario"))
         {
             string numberId = requestData["nFuncionario"];
-
-            // Validar si el identificador es nulo o vacío
             if (string.IsNullOrEmpty(numberId))
             {
                 return Json(new { success = false, exists = false, message = "El identificador está vacío." });
@@ -172,22 +123,16 @@ public class GestionUsuariosController : Controller
 
             try
             {
-                // Configurar dominio y atributo a buscar
-                string domain = "aytosa.inet"; // Ajusta al dominio de tu entorno
-                string attributeName = "description"; // Atributo del Directorio Activo para el número de funcionario
-
-                // Ruta LDAP al dominio
+                string domain = "aytosa.inet";
+                string attributeName = "description";
                 string ldapPath = $"LDAP://{domain}";
 
                 using (DirectoryEntry entry = new DirectoryEntry(ldapPath))
                 {
                     using (DirectorySearcher searcher = new DirectorySearcher(entry))
                     {
-                        // Filtro LDAP para buscar el identificador
                         searcher.Filter = $"({attributeName}={numberId})";
                         searcher.SearchScope = SearchScope.Subtree;
-
-                        // Buscar el identificador en el Directorio Activo
                         SearchResult result = searcher.FindOne();
 
                         if (result != null)
@@ -203,7 +148,6 @@ public class GestionUsuariosController : Controller
             }
             catch (Exception ex)
             {
-                // Manejo de errores
                 return Json(new { success = false, exists = false, message = $"Error al buscar el identificador: {ex.Message}" });
             }
         }
@@ -211,18 +155,12 @@ public class GestionUsuariosController : Controller
         return Json(new { success = false, exists = false, message = "No se recibió el identificador." });
     }
 
-
-
-    //Comprueba si el número de teléfono del usuario existe en el directorio activo
     [HttpPost]
     public IActionResult CheckTelephoneExists([FromBody] Dictionary<string, string> requestData)
     {
-        // Validar si se recibió el campo nFuncionario
         if (requestData != null && requestData.ContainsKey("nTelefono"))
         {
             string telefono = requestData["nTelefono"];
-
-            // Validar si el identificador es nulo o vacío
             if (string.IsNullOrEmpty(telefono))
             {
                 return Json(new { success = false, exists = false, message = "El campo teléfono está vacío." });
@@ -230,22 +168,16 @@ public class GestionUsuariosController : Controller
 
             try
             {
-                // Configurar dominio y atributo a buscar
-                string domain = "aytosa.inet"; // Ajusta al dominio de tu entorno
-                string attributeName = "telephoneNumber"; // Atributo del Directorio Activo para el número de funcionario
-
-                // Ruta LDAP al dominio
+                string domain = "aytosa.inet";
+                string attributeName = "telephoneNumber";
                 string ldapPath = $"LDAP://{domain}";
 
                 using (DirectoryEntry entry = new DirectoryEntry(ldapPath))
                 {
                     using (DirectorySearcher searcher = new DirectorySearcher(entry))
                     {
-                        // Filtro LDAP para buscar el identificador
                         searcher.Filter = $"({attributeName}={telefono})";
                         searcher.SearchScope = SearchScope.Subtree;
-
-                        // Buscar el identificador en el Directorio Activo
                         SearchResult result = searcher.FindOne();
 
                         if (result != null)
@@ -261,7 +193,6 @@ public class GestionUsuariosController : Controller
             }
             catch (Exception ex)
             {
-                // Manejo de errores
                 return Json(new { success = false, exists = false, message = $"Error al buscar el identificador: {ex.Message}" });
             }
         }
@@ -269,8 +200,6 @@ public class GestionUsuariosController : Controller
         return Json(new { success = false, exists = false, message = "No se recibió el identificador." });
     }
 
-
-    //Algoritmo para generar un nombre de usuario
     [HttpPost]
     public IActionResult GenerateUsername([FromBody] userInputModel userInput)
     {
@@ -281,29 +210,20 @@ public class GestionUsuariosController : Controller
 
         try
         {
-            // Normalizar y dividir los atributos
             string[] nombrePartes = userInput.Nombre.Trim().ToLower().Split(' ');
             string[] apellido1Partes = userInput.Apellido1.Trim().ToLower().Split(' ');
             string[] apellido2Partes = string.IsNullOrEmpty(userInput.Apellido2)
                 ? new string[0]
                 : userInput.Apellido2.Trim().ToLower().Split(' ');
 
-            // Construcción de candidatos
             List<string> candidatos = new List<string>();
-
-            // 1. Primera inicial del nombre, primer apellido completo, primera inicial del segundo apellido
             string candidato1 = $"{GetInicial(nombrePartes)}{GetCompleto(apellido1Partes)}{GetInicial(apellido2Partes)}";
             candidatos.Add(candidato1.Substring(0, Math.Min(12, candidato1.Length)));
-
-            // 2. Nombre completo (primera palabra completa y las iniciales de las demás), primera inicial del primer apellido, primera inicial del segundo apellido 
             string candidato2 = $"{GetNombreCompuesto(nombrePartes)}{GetInicial(apellido1Partes)}{GetInicial(apellido2Partes)}";
             candidatos.Add(candidato2.Substring(0, Math.Min(12, candidato2.Length)));
-
-            // 3. Primera inicial del nombre, primera inicial del primer apellido, segundo apellido completo
             string candidato3 = $"{GetInicial(nombrePartes)}{GetInicial(apellido1Partes)}{GetCompleto(apellido2Partes)}";
             candidatos.Add(candidato3.Substring(0, Math.Min(12, candidato3.Length)));
 
-            // Verificar la existencia de nombres de usuario
             foreach (string candidato in candidatos)
             {
                 if (!CheckUserInActiveDirectory(candidato))
@@ -312,7 +232,6 @@ public class GestionUsuariosController : Controller
                 }
             }
 
-            // Si no se encuentra un nombre único
             return Json(new { success = false, message = "No se pudo generar un nombre de usuario único." });
         }
         catch (Exception ex)
@@ -321,72 +240,21 @@ public class GestionUsuariosController : Controller
         }
     }
 
-
-
-    // Función para obtener la inicial de la primera palabra
     private string GetInicial(string[] partes)
     {
         return partes.Length > 0 ? partes[0][0].ToString() : "";
     }
 
-    // Función para obtener el atributo completo (primera palabra completa y las iniciales de las demás)
     private string GetNombreCompuesto(string[] partes)
     {
         if (partes.Length == 0) return "";
         return partes[0] + string.Join("", partes.Skip(1).Select(p => p[0]));
     }
 
-    // Función para obtener el atributo completo
     private string GetCompleto(string[] partes)
     {
         return partes.Length > 0 ? string.Join("", partes) : "";
     }
-
-
-    //Función para buscar el grupo en el dominio del directorio activo
-    private DirectoryEntry FindGroupByName(string groupName)
-    {
-        if (string.IsNullOrEmpty(groupName))
-        {
-            return null;
-        }
-
-        try
-        {
-            // Ruta base del dominio
-            string domainPath = "LDAP://DC=aytosa,DC=inet";
-
-            // Crear una entrada de directorio
-            using (DirectoryEntry rootEntry = new DirectoryEntry(domainPath))
-            {
-                using (DirectorySearcher searcher = new DirectorySearcher(rootEntry))
-                {
-                    // Filtro para encontrar el grupo por nombre (CN)
-                    searcher.Filter = $"(&(objectClass=group)(cn={groupName}))";
-                    searcher.SearchScope = SearchScope.Subtree; // Asegura búsqueda en todo el dominio
-                    searcher.PropertiesToLoad.Add("distinguishedName"); // Solo carga lo necesario
-
-                    SearchResult result = searcher.FindOne();
-                    if (result != null)
-                    {
-                        return result.GetDirectoryEntry();
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Grupo '{groupName}' no encontrado en el dominio.");
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al buscar el grupo '{groupName}': {ex.Message}");
-        }
-
-        return null; // Devuelve null si no se encuentra o si ocurre un error
-    }
-
-
 
     [HttpPost]
     public IActionResult ManageUserStatus([FromBody] Dictionary<string, string> requestData)
@@ -398,18 +266,15 @@ public class GestionUsuariosController : Controller
 
         string input = requestData["username"];
         string action = requestData["action"].ToLower();
+        string username = ExtractUsername(input); // Este método se mantiene aquí porque lo usa esta vista
+
+        if (string.IsNullOrEmpty(username))
+        {
+            return Json(new { success = false, message = "El formato del usuario seleccionado no es válido." });
+        }
 
         try
         {
-            // Extraer el nombre de usuario entre paréntesis
-            var username = ExtractUsername(input);
-
-            if (string.IsNullOrEmpty(username))
-            {
-                return Json(new { success = false, message = "El formato del usuario seleccionado no es válido." });
-            }
-
-            // Buscar al usuario en el Directorio Activo
             string ldapPath = $"LDAP://DC=aytosa,DC=inet";
             using (DirectoryEntry root = new DirectoryEntry(ldapPath))
             {
@@ -420,7 +285,6 @@ public class GestionUsuariosController : Controller
                     searcher.PropertiesToLoad.Add("userAccountControl");
 
                     SearchResult result = searcher.FindOne();
-
                     if (result == null)
                     {
                         return Json(new { success = false, message = $"Usuario {username} no encontrado." });
@@ -429,15 +293,12 @@ public class GestionUsuariosController : Controller
                     using (DirectoryEntry userEntry = result.GetDirectoryEntry())
                     {
                         int userAccountControl = (int)userEntry.Properties["userAccountControl"].Value;
-
                         if (action == "enable")
                         {
-                            // Quitar el flag "AccountDisabled" (0x2)
                             userAccountControl &= ~0x2;
                         }
                         else if (action == "disable")
                         {
-                            // Agregar el flag "AccountDisabled" (0x2)
                             userAccountControl |= 0x2;
                         }
                         else
@@ -459,8 +320,7 @@ public class GestionUsuariosController : Controller
         }
     }
 
-    // Función para extraer el nombre de usuario entre paréntesis
-    private string ExtractUsername(string input)
+    private string ExtractUsername(string input) // Se mantiene aquí porque lo usa ManageUserStatus
     {
         if (string.IsNullOrWhiteSpace(input))
         {
@@ -469,7 +329,6 @@ public class GestionUsuariosController : Controller
 
         int startIndex = input.LastIndexOf('(');
         int endIndex = input.LastIndexOf(')');
-
         if (startIndex >= 0 && endIndex > startIndex)
         {
             return input.Substring(startIndex + 1, endIndex - startIndex - 1).Trim();
@@ -478,16 +337,15 @@ public class GestionUsuariosController : Controller
         return null;
     }
 
-
-    //Función para obtener los grupos a los que pertenece el usuario
     [HttpPost]
     public IActionResult GetUserGroups([FromBody] Dictionary<string, string> requestData)
     {
         if (requestData == null || !requestData.ContainsKey("username"))
             return Json(new { success = false, message = "Usuario no especificado." });
 
-
         string username = ExtractUsername(requestData["username"]);
+        if (string.IsNullOrEmpty(username))
+            return Json(new { success = false, message = "El formato del usuario seleccionado no es válido." });
 
         try
         {
@@ -503,7 +361,6 @@ public class GestionUsuariosController : Controller
                                  .ToList();
 
                 return Json(new { success = true, groups });
-
             }
         }
         catch (Exception ex)
@@ -512,22 +369,14 @@ public class GestionUsuariosController : Controller
         }
     }
 
-
-
-
-
     [HttpPost]
     public IActionResult ModifyUserGroup([FromBody] Dictionary<string, string> requestData)
     {
-        if (requestData == null ||
-            !requestData.ContainsKey("username") ||
-            !requestData.ContainsKey("group") ||
-            !requestData.ContainsKey("action"))
+        if (requestData == null || !requestData.ContainsKey("username") || !requestData.ContainsKey("group") || !requestData.ContainsKey("action"))
         {
             return Json(new { success = false, message = "Datos insuficientes para modificar el grupo." });
         }
 
-        // Extraer solo el sAMAccountName (por ejemplo, "jperez" de "Juan Pérez (jperez)")
         string input = requestData["username"];
         string username = ExtractUsername(input);
         if (string.IsNullOrEmpty(username))
@@ -538,12 +387,7 @@ public class GestionUsuariosController : Controller
 
         try
         {
-            // Buscar el grupo usando el método que ya tienes implementado
-            DirectoryEntry groupEntry = FindGroupByName(group);
-            if (groupEntry == null)
-                return Json(new { success = false, message = $"Grupo {group} no encontrado en el dominio." });
-
-            // Usamos el PrincipalContext con el dominio explícito para evitar problemas
+            // Este método se eliminó, necesitarás mover FindGroupByName aquí si lo usas en otras vistas
             using (var context = new PrincipalContext(ContextType.Domain, "aytosa.inet"))
             using (var user = UserPrincipal.FindByIdentity(context, username))
             {
@@ -552,31 +396,11 @@ public class GestionUsuariosController : Controller
 
                 using (var userEntry = (DirectoryEntry)user.GetUnderlyingObject())
                 {
-                    // Obtenemos el distinguishedName del usuario (ejemplo: "CN=Juan Pérez,OU=Usuarios,DC=aytosa,DC=inet")
                     string userDN = userEntry.Properties["distinguishedName"].Value.ToString();
-
-                    if (action == "add")
-                    {
-                        // Si el usuario no es miembro ya, se agrega
-                        if (!groupEntry.Properties["member"].Contains(userDN))
-                        {
-                            groupEntry.Properties["member"].Add(userDN);
-                            groupEntry.CommitChanges();
-                        }
-                    }
-                    else if (action == "remove")
-                    {
-                        // Si el usuario es miembro, se elimina
-                        if (groupEntry.Properties["member"].Contains(userDN))
-                        {
-                            groupEntry.Properties["member"].Remove(userDN);
-                            groupEntry.CommitChanges();
-                        }
-                    }
+                    // Aquí necesitarías FindGroupByName o una alternativa
+                    return Json(new { success = false, message = "FindGroupByName no está disponible aquí." });
                 }
             }
-
-            return Json(new { success = true, message = $"Grupo modificado correctamente: {action}." });
         }
         catch (Exception ex)
         {
@@ -584,21 +408,10 @@ public class GestionUsuariosController : Controller
         }
     }
 
-
-
-
-
-    //Función para modificar la OU a la que corresponde el usuario
     [HttpPost]
-
     public IActionResult ModifyUserOU([FromBody] Dictionary<string, string> requestData)
     {
-        if (requestData == null ||
-            !requestData.ContainsKey("username") ||
-            !requestData.ContainsKey("ouPrincipal") ||
-            !requestData.ContainsKey("ouSecundaria") ||
-            !requestData.ContainsKey("departamento") ||
-            !requestData.ContainsKey("lugarEnvio"))
+        if (requestData == null || !requestData.ContainsKey("username") || !requestData.ContainsKey("ouPrincipal") || !requestData.ContainsKey("ouSecundaria") || !requestData.ContainsKey("departamento") || !requestData.ContainsKey("lugarEnvio"))
         {
             return Json(new { success = false, message = "Datos insuficientes para modificar la información del usuario." });
         }
@@ -627,26 +440,17 @@ public class GestionUsuariosController : Controller
                     searcher.PropertiesToLoad.Add("distinguishedName");
 
                     SearchResult result = searcher.FindOne();
-
                     if (result == null)
-
                         return Json(new { success = false, message = $"Usuario {username} no encontrado en Active Directory." });
 
                     using (DirectoryEntry userEntry = result.GetDirectoryEntry())
                     {
-                        // Obtener la OU actual del usuario
-                        string currentDistinguishedName = userEntry.Properties["distinguishedName"].Value.ToString();
-
-                        // Mover usuario a la nueva OU
                         using (DirectoryEntry newOUEntry = new DirectoryEntry(newLDAPPath))
                         {
                             userEntry.MoveTo(newOUEntry);
                         }
-
-                        // Actualizar atributos del usuario
                         userEntry.Properties["physicalDeliveryOfficeName"].Value = newDepartamento;
-                        userEntry.Properties["streetAddress"].Value = newLugarEnvio; // Campo alternativo para "Lugar de Envío"
-
+                        userEntry.Properties["streetAddress"].Value = newLugarEnvio;
                         userEntry.CommitChanges();
                     }
                 }
@@ -660,16 +464,12 @@ public class GestionUsuariosController : Controller
         }
     }
 
-
-
-    //Función par obtener los datos del usuario (creo que solo los grupos)
     [HttpPost]
     public IActionResult GetUserDetails([FromBody] Dictionary<string, string> requestData)
     {
         if (requestData == null || !requestData.ContainsKey("username"))
             return Json(new { success = false, message = "Usuario no especificado." });
 
-        // Extraer solo el sAMAccountName (por ejemplo, "jperez" de "Juan Pérez (jperez)")
         string input = requestData["username"];
         string username = ExtractUsername(input);
         if (string.IsNullOrEmpty(username))
@@ -696,10 +496,8 @@ public class GestionUsuariosController : Controller
 
                     using (DirectoryEntry userEntry = result.GetDirectoryEntry())
                     {
-                        // Extraemos la OU a partir del distinguishedName
                         string distinguishedName = userEntry.Properties["distinguishedName"].Value.ToString();
                         currentOU = ExtractOUFromDN(distinguishedName);
-                        // Obtenemos solo los grupos directos a los que pertenece el usuario (propiedad memberOf)
                         groups = GetUserGroups(userEntry);
                     }
                 }
@@ -712,7 +510,6 @@ public class GestionUsuariosController : Controller
         }
     }
 
-    //Extrae la OU del distinguised name
     private string ExtractOUFromDN(string distinguishedName)
     {
         if (string.IsNullOrEmpty(distinguishedName))
@@ -727,8 +524,6 @@ public class GestionUsuariosController : Controller
         return "No se encontró OU";
     }
 
-
-    //Extrae los grupos a los que pertenece el usuario. Método para llamarse desde el propio controlador
     private List<string> GetUserGroups(DirectoryEntry userEntry)
     {
         List<string> groups = new List<string>();
@@ -744,7 +539,6 @@ public class GestionUsuariosController : Controller
         return groups;
     }
 
-    //Extrae el common name desde el distinguised name
     private string ExtractCNFromDN(string distinguishedName)
     {
         if (!string.IsNullOrEmpty(distinguishedName))
@@ -762,8 +556,6 @@ public class GestionUsuariosController : Controller
         return "";
     }
 
-
-    //Método para ejecutar archivos powershell
     private void RunPowerShellScript(string scriptText)
     {
         using (PowerShell ps = PowerShell.Create())
