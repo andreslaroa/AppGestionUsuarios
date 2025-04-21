@@ -31,5 +31,11 @@ namespace AppGestionUsuarios.Controllers
         {
             return RedirectToAction("BajaUsuario", "BajaUsuario"); // Asegúrate de tener este método en UserManagementController
         }
+
+        [HttpGet]
+        public IActionResult AltaMasiva()
+        {
+            return RedirectToAction("AltaMasiva", "AltaMasiva"); // Asegúrate de tener este método en UserManagementController
+        }
     }
 }

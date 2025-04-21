@@ -31,7 +31,7 @@
             font-weight: bold;
         }
 
-        select, input[type="text"], button, textarea {
+        select, input[type="text"], button {
             width: 100%;
             padding: 10px;
             margin-bottom: 15px;
@@ -47,29 +47,45 @@
             cursor: pointer;
         }
 
-            button:hover {
-                background-color: #c82333;
-            }
+        button:hover {
+            background-color: #c82333;
+        }
 
         .button-group {
             display: flex;
             justify-content: center;
         }
 
-            .button-group button {
-                margin-top: 10px;
-                padding: 12px 20px;
-            }
+        .button-group button {
+            margin-top: 10px;
+            padding: 12px 20px;
+        }
+
+        #message {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        #detailsList {
+            margin-top: 10px;
+            padding-left: 20px;
+        }
 
         .checkbox-group {
             margin-bottom: 15px;
         }
 
-            .checkbox-group label {
-                display: inline-block;
-                margin-right: 20px;
-                font-weight: normal;
-            }
+        .checkbox-group label {
+            font-weight: normal;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            margin-right: 10px;
+            width: auto;
+        }
     </style>
 </head>
 <body>
@@ -82,7 +98,7 @@
             <option value="">Seleccione un usuario</option>
             @foreach (var usuario in ViewBag.Usuarios as List<string>)
             {
-                <option value="@usuario">@usuario</option>
+                    <option value="@usuario">@usuario</option>
             }
         </select>
 
@@ -92,21 +108,25 @@
         <label for="selectedUser">Usuario Seleccionado:</label>
         <input type="text" id="selectedUser" readonly />
 
-        <!-- Checkboxes para aplicaciones predefinidas -->
+        <!-- Checkboxes para acciones adicionales -->
         <div class="checkbox-group">
-            <label>Enviar notificaciones para:</label>
-            <label><input type="checkbox" id="aruCheckbox" value="ARU"> ARU</label>
-            <!-- Añade más checkboxes aquí según las aplicaciones predefinidas -->
+            <label>Acciones adicionales para la baja:</label>
+            <label><input type="checkbox" name="additionalActions" value="BajaARU"> Baja de usuario en ARU</label>
+            <label><input type="checkbox" name="additionalActions" value="BajaEquipamientoPuesto"> Baja de equipamiento de puesto de trabajo del usuario</label>
+            <label><input type="checkbox" name="additionalActions" value="BajaEquipamientoMovil"> Baja de equipamiento móvil</label>
+            <label><input type="checkbox" name="additionalActions" value="BajaMytao"> Baja de usuario en Mytao</label>
+            <label><input type="checkbox" name="additionalActions" value="BajaPlataformasEstado"> Baja de usuario en Plataformas del Estado</label>
+            <label><input type="checkbox" name="additionalActions" value="RevocacionCertificados"> Revocación de certificados electrónicos municipales</label>
         </div>
-
-        <!-- Campo para mensaje personalizado -->
-        <label for="customMessage">Mensaje personalizado (opcional):</label>
-        <textarea id="customMessage" rows="4" placeholder="Escribe un mensaje personalizado si deseas enviar un correo adicional..."></textarea>
 
         <!-- Botón para eliminar usuario -->
         <div class="button-group">
             <button type="button" onclick="bajaUsuario()">Eliminar Usuario</button>
         </div>
+
+        <!-- Área para mostrar mensajes -->
+        <div id="message"></div>
+        <ul id="detailsList"></ul>
     </div>
 
     <script>
@@ -130,37 +150,67 @@
                 return;
             }
 
+            // Recolectar las acciones seleccionadas
+            const checkboxes = document.querySelectorAll('input[name="additionalActions"]:checked');
+            const selectedActions = Array.from(checkboxes).map(checkbox => checkbox.value);
+
             if (!confirm(`¿Está seguro de que desea dar de baja al usuario ${username}? Esta acción no se puede deshacer.`)) {
                 return;
             }
-
-            // Obtener las aplicaciones seleccionadas
-            const selectedApps = [];
-            if (document.getElementById('aruCheckbox').checked) {
-                selectedApps.push('ARU');
-            }
-            // Añade más condiciones si hay más checkboxes
-
-            // Obtener el mensaje personalizado
-            const customMessage = document.getElementById('customMessage').value;
 
             try {
                 const response = await fetch('/BajaUsuario/BajaUsuario', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: username,
-                        selectedApps: selectedApps,
-                        customMessage: customMessage
-                    })
+                    body: JSON.stringify({ username: username, selectedActions: selectedActions })
                 });
 
-                const data = await response.json();
-                alert(data.message);
-                location.reload(); // Refrescar la página tras eliminar
+                // Verificar si la respuesta es exitosa
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Respuesta del servidor:', errorText);
+                    throw new Error(`Error del servidor: ${response.status} ${response.statusText}. Detalles: ${errorText}`);
+                }
+
+                // Intentar parsear la respuesta como JSON
+                let data;
+                try {
+                    data = await response.json();
+                } catch (jsonError) {
+                    console.error('Error al parsear la respuesta JSON:', jsonError);
+                    throw new Error('La respuesta del servidor no es un JSON válido. Revise los logs del servidor para más detalles.');
+                }
+
+                // Mostrar el mensaje principal
+                const messageDiv = document.getElementById('message');
+                messageDiv.textContent = data.success ? 'Usuario dado de baja exitosamente.' : 'Error al dar de baja al usuario.';
+
+                // Mostrar los detalles del proceso
+                const detailsList = document.getElementById('detailsList');
+                detailsList.innerHTML = '';
+                const messages = data.messages.split('\n');
+                messages.forEach(msg => {
+                    if (msg) {
+                        const li = document.createElement('li');
+                        li.style.color = msg.startsWith('Error') ? 'red' : 'green';
+                        li.textContent = msg;
+                        detailsList.appendChild(li);
+                    }
+                });
+
+                if (data.success) {
+                    setTimeout(() => location.reload(), 3000); // Refrescar después de 3 segundos
+                }
             } catch (error) {
                 console.error('Error al dar de baja al usuario:', error);
-                alert('Ocurrió un error al dar de baja al usuario.');
+                const messageDiv = document.getElementById('message');
+                messageDiv.textContent = `Ocurrió un error al dar de baja al usuario: ${error.message}`;
+                const detailsList = document.getElementById('detailsList');
+                detailsList.innerHTML = '';
+                const li = document.createElement('li');
+                li.style.color = 'red';
+                li.textContent = error.message;
+                detailsList.appendChild(li);
             }
         }
     </script>
