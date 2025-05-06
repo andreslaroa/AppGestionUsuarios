@@ -306,13 +306,13 @@ public class AltaUsuarioController : Controller
     public IActionResult CreateUser([FromBody] UserModelAltaUsuario user)
     {
         // 1) Leemos la configuración de fichero
-        string serverName = _config["FsConfig:ServerName"];
+        string serverName     = _config["FsConfig:ServerName"];
         string folderPathBase = _config["FsConfig:ShareBase"];
-        string quotaPathBase = _config["FsConfig:QuotaPathBase"];
+        string quotaPathBase  = _config["FsConfig:QuotaPathBase"];
 
         // 2) Construimos rutas sin hard-codear ningún literal
-        string uncUserFolder = Path.Combine(folderPathBase, user.Username);
-        string localQuotaPath = Path.Combine(quotaPathBase, user.Username);
+        string uncUserFolder  = Path.Combine(folderPathBase, user.Username);
+        string localQuotaPath = Path.Combine(quotaPathBase,  user.Username);
 
 
         // Validar si los datos se recibieron correctamente

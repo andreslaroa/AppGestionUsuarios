@@ -1,351 +1,242 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
+using System.DirectoryServices.ActiveDirectory;
 using System.IO;
+using System.Linq;
 using System.Net.Mail;
 using System.Runtime.InteropServices;
-using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 [Authorize]
 public class BajaUsuarioController : Controller
 {
-    private readonly IConfiguration _configuration;
+    private readonly IConfiguration _config;
+    private readonly string _ldapBase;
+    private readonly string _domainName;
+    private readonly string _areasOu;
+    private readonly string _usersOu;
+    private readonly string _bajasOu;
+    private readonly string _fsServer;
+    private readonly string _shareBase;
+    private readonly string _quotaBase;
 
-    public BajaUsuarioController(IConfiguration configuration)
+
+    public BajaUsuarioController(IConfiguration config)
     {
-        _configuration = configuration;
+        _config = config;
+
+        // Sección Active Directory
+        var ad = _config.GetSection("ActiveDirectory");
+        _ldapBase = ad["BaseLdapPrefix"] + ad["DomainComponents"];
+        _domainName = ad["DomainName"];
+        _areasOu = ad["AreasOu"];
+        _usersOu = ad["UserAndGroupsOu"];
+        _bajasOu = ad["BajasOu"];
+
+        // Sección File Server
+        var fs = _config.GetSection("FsConfig");
+        _fsServer = fs["ServerName"];
+        _shareBase = fs["ShareBase"];
+        _quotaBase = fs["QuotaPathBase"];
     }
+
 
     [HttpGet]
     public IActionResult BajaUsuario()
     {
+        List<string> usuarios;
         try
         {
-            int pageSize = 1000;
-            using (DirectoryEntry entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
-            using (DirectorySearcher searcher = new DirectorySearcher(entry))
+            using var entry = new DirectoryEntry(_ldapBase);
+            using var search = new DirectorySearcher(entry)
             {
-                searcher.Filter = "(objectClass=user)";
-                searcher.PageSize = pageSize;
-                searcher.PropertiesToLoad.Add("displayName");
-                searcher.PropertiesToLoad.Add("sAMAccountName");
-                searcher.SearchScope = SearchScope.Subtree;
+                Filter = "(objectClass=user)",
+                PageSize = 1000,
+                SearchScope = SearchScope.Subtree
+            };
+            search.PropertiesToLoad.Add("displayName");
+            search.PropertiesToLoad.Add("sAMAccountName");
 
-                List<string> usuarios = new List<string>();
-                foreach (SearchResult result in searcher.FindAll())
-                {
-                    if (result.Properties.Contains("displayName") && result.Properties.Contains("sAMAccountName"))
-                    {
-                        string displayName = result.Properties["displayName"][0].ToString();
-                        string samAccountName = result.Properties["sAMAccountName"][0].ToString();
-                        usuarios.Add($"{displayName} ({samAccountName})");
-                    }
-                }
-
-                ViewBag.Usuarios = usuarios.OrderBy(u => u).ToList();
-            }
+            usuarios = search.FindAll()
+                             .Cast<SearchResult>()
+                             .Where(r => r.Properties.Contains("displayName")
+                                      && r.Properties.Contains("sAMAccountName"))
+                             .Select(r => $"{r.Properties["displayName"][0]} ({r.Properties["sAMAccountName"][0]})")
+                             .OrderBy(s => s)
+                             .ToList();
         }
-        catch (Exception ex)
+        catch
         {
-            ViewBag.Usuarios = new List<string>();
-            Console.WriteLine($"Error al cargar los usuarios: {ex.Message}\nStackTrace: {ex.StackTrace}");
+            usuarios = new List<string>();
         }
 
+        ViewBag.Usuarios = usuarios;
         return View();
     }
 
     [HttpPost]
     public IActionResult BajaUsuario([FromBody] Dictionary<string, object> requestData)
     {
-        // Lista para almacenar los mensajes del proceso
-        List<string> messages = new List<string>();
+        var messages = new List<string>();
         bool userDisabled = false;
+        List<string> selectedActions = new List<string>();
 
-        try
+        // 1) Validación básica
+        if (requestData == null || !requestData.ContainsKey("username"))
+            return Json(new { success = false, messages = "No se proporcionó usuario.", message = "Usuario no especificado." });
+
+        string input = requestData["username"]?.ToString();
+        string username = ExtractUsername(input);
+        if (string.IsNullOrEmpty(username))
+            return Json(new { success = false, messages = "Formato de usuario inválido.", message = "Formato de usuario inválido." });
+
+        // 1.1) Leer acciones seleccionadas
+        if (requestData.ContainsKey("selectedActions"))
         {
-            // Validar la solicitud
-            if (requestData == null || !requestData.ContainsKey("username"))
-            {
-                messages.Add("Error: Solicitud inválida. No se proporcionó el nombre de usuario.");
-                return Json(new { success = false, messages = string.Join("\n", messages), message = "Usuario no especificado." });
-            }
-
-            string input = requestData["username"]?.ToString();
-            string username = ExtractUsername(input);
-
-            if (string.IsNullOrEmpty(username))
-            {
-                messages.Add("Error: El formato del usuario seleccionado no es válido.");
-                return Json(new { success = false, messages = string.Join("\n", messages), message = "El formato del usuario seleccionado no es válido." });
-            }
-
-            // Obtener las acciones seleccionadas (si no hay, será una lista vacía)
-            List<string> selectedActions = new List<string>();
-            if (requestData.ContainsKey("selectedActions"))
-            {
-                try
-                {
-                    var selectedActionsElement = (System.Text.Json.JsonElement)requestData["selectedActions"];
-                    if (selectedActionsElement.ValueKind == System.Text.Json.JsonValueKind.Array)
-                    {
-                        selectedActions = selectedActionsElement.EnumerateArray()
-                            .Select(action => action.GetString())
-                            .Where(action => !string.IsNullOrEmpty(action))
-                            .ToList();
-                        messages.Add($"Acciones seleccionadas: {string.Join(", ", selectedActions)}.");
-                    }
-                    else
-                    {
-                        messages.Add("El campo 'selectedActions' no es un array válido.");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    messages.Add($"Error al procesar las acciones seleccionadas: {ex.Message}\nStackTrace: {ex.StackTrace}");
-                    return Json(new { success = false, messages = string.Join("\n", messages), message = "Error al procesar las acciones seleccionadas." });
-                }
-            }
-            else
-            {
-                messages.Add("No se seleccionaron acciones adicionales.");
-            }
-
-            // Variables para el correo
-            string nombreCompleto = "";
-            string dni = "";
-            string ouOriginal = "";
-            DateTime fechaBaja = DateTime.Now;
-
-            // Procesar la baja del usuario en Active Directory
             try
             {
-                using (var context = new PrincipalContext(ContextType.Domain, "aytosa.inet"))
+                var arr = (JsonElement)requestData["selectedActions"];
+                if (arr.ValueKind == JsonValueKind.Array)
                 {
-                    using (var user = UserPrincipal.FindByIdentity(context, username))
-                    {
-                        if (user == null)
-                        {
-                            messages.Add($"Error: El usuario '{username}' no fue encontrado en Active Directory.");
-                            return Json(new { success = false, messages = string.Join("\n", messages), message = "Usuario no encontrado en Active Directory." });
-                        }
-
-                        using (var userEntry = (DirectoryEntry)user.GetUnderlyingObject())
-                        {
-                            string userDN = userEntry.Properties["distinguishedName"].Value.ToString();
-                            ouOriginal = userDN.Substring(userDN.IndexOf("OU=")); // Guardar la OU original
-
-                            // Obtener datos del usuario para el correo
-                            nombreCompleto = userEntry.Properties.Contains("displayName") ? userEntry.Properties["displayName"].Value?.ToString() : "N/A";
-                            dni = userEntry.Properties.Contains("description") ? userEntry.Properties["description"].Value?.ToString() : "N/A";
-
-                            // 1. Eliminar al usuario de todos los grupos
-                            try
-                            {
-                                if (userEntry.Properties.Contains("memberOf"))
-                                {
-                                    List<string> grupos = new List<string>();
-                                    foreach (var groupDN in userEntry.Properties["memberOf"])
-                                    {
-                                        string groupCN = ExtractCNFromDN(groupDN.ToString());
-                                        grupos.Add(groupCN);
-                                    }
-                                    foreach (string groupCN in grupos)
-                                    {
-                                        DirectoryEntry groupEntry = FindGroupByName(groupCN);
-                                        if (groupEntry != null)
-                                        {
-                                            try
-                                            {
-                                                if (groupEntry.Properties["member"].Contains(userDN))
-                                                {
-                                                    groupEntry.Properties["member"].Remove(userDN);
-                                                    groupEntry.CommitChanges();
-                                                    messages.Add($"Usuario eliminado del grupo '{groupCN}' correctamente.");
-                                                }
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                messages.Add($"Error al eliminar usuario del grupo '{groupCN}': {ex.Message}\nStackTrace: {ex.StackTrace}. Continuando con el proceso...");
-                                            }
-                                            finally
-                                            {
-                                                groupEntry?.Dispose();
-                                            }
-                                        }
-                                        else
-                                        {
-                                            messages.Add($"Grupo '{groupCN}' no encontrado para eliminar al usuario.");
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    messages.Add("El usuario no pertenece a ningún grupo.");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                messages.Add($"Error al eliminar usuario de grupos: {ex.Message}\nStackTrace: {ex.StackTrace}. Continuando con el proceso...");
-                            }
-
-                            // 2) Eliminar la cuota FSRM asociada en Leonardo
-                            string serverName = "LEONARDO";
-                            string quotaPathBase = @"C:\Home";
-                            string quotaPath = Path.Combine(quotaPathBase, username);
-
-                            try
-                            {
-                                Type qmType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", serverName);
-                                if (qmType == null)
-                                {
-                                    messages.Add($"[WARN] FsrmQuotaManager no disponible en {serverName}, omito eliminación de cuota.");
-                                }
-                                else
-                                {
-                                    dynamic qm = Activator.CreateInstance(qmType);
-                                    try
-                                    {
-                                        // 3.1) Intentar obtener el objeto cuota
-                                        dynamic existingQuota = null;
-                                        try
-                                        {
-                                            existingQuota = qm.GetQuota(quotaPath);
-                                        }
-                                        catch
-                                        {
-                                            // no existía ninguna cuota en esa ruta
-                                        }
-
-                                        if (existingQuota != null)
-                                        {
-                                            messages.Add($"[DEBUG] Cuota localizada en {quotaPath}, eliminando…");
-                                            // 3.2) Llamamos a Delete() sobre el objeto cuota
-                                            existingQuota.Delete();
-                                            messages.Add($"[OK] Cuota FSRM eliminada para '{quotaPath}'.");
-                                        }
-                                        else
-                                        {
-                                            messages.Add($"[INFO] No se encontró cuota FSRM para '{quotaPath}'.");
-                                        }
-                                    }
-                                    finally
-                                    {
-                                        Marshal.ReleaseComObject(qm);
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                messages.Add($"[ERROR] Al eliminar cuota FSRM en {serverName}: {ex.Message}");
-                            }
-
-                            // 3) Ahora sí borra la carpeta personal (si no lo hiciste antes)
-                            string shareBase = $@"\\{serverName}\Home";
-                            string userFolder = Path.Combine(shareBase, username);
-                            try
-                            {
-                                if (Directory.Exists(userFolder))
-                                {
-                                    Directory.Delete(userFolder, true);
-                                    messages.Add($"[OK] Carpeta eliminada: {userFolder}");
-                                }
-                                else
-                                {
-                                    messages.Add($"[INFO] Carpeta no encontrada: {userFolder}");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                messages.Add($"[ERROR] Al eliminar carpeta {userFolder}: {ex.GetType().Name} – {ex.Message}");
-                            }
-
-
-
-                            // 4. Deshabilitar al usuario
-                            try
-                            {
-                                int userAccountControl = (int)userEntry.Properties["userAccountControl"].Value;
-                                userAccountControl |= 0x2; // Establecer el bit ACCOUNT_DISABLED
-                                userEntry.Properties["userAccountControl"].Value = userAccountControl;
-                                userEntry.CommitChanges();
-                                messages.Add($"Usuario '{username}' deshabilitado correctamente.");
-                            }
-                            catch (Exception ex)
-                            {
-                                messages.Add($"Error al deshabilitar el usuario '{username}': {ex.Message}\nStackTrace: {ex.StackTrace}.");
-                                return Json(new { success = false, messages = string.Join("\n", messages), message = $"Error al deshabilitar el usuario: {ex.Message}" });
-                            }
-
-                            // 5. Mover al usuario a la OU "Bajas" dentro de "AREAS"
-                            try
-                            {
-                                string newOUPath = "LDAP://OU=Bajas,OU=AREAS,DC=aytosa,DC=inet";
-                                using (DirectoryEntry newOUEntry = new DirectoryEntry(newOUPath))
-                                {
-                                    userEntry.MoveTo(newOUEntry);
-                                    userEntry.CommitChanges();
-                                    userDisabled = true; // Marcamos que el usuario fue deshabilitado y movido
-                                    messages.Add($"Usuario '{username}' movido a la OU 'Bajas' correctamente.");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                messages.Add($"Error al mover el usuario '{username}' a la OU 'Bajas': {ex.Message}\nStackTrace: {ex.StackTrace}.");
-                                return Json(new { success = false, messages = string.Join("\n", messages), message = $"Error al mover el usuario a la OU Bajas: {ex.Message}" });
-                            }
-                        }
-                    }
+                    selectedActions = arr.EnumerateArray()
+                                         .Select(e => e.GetString())
+                                         .Where(s => !string.IsNullOrEmpty(s))
+                                         .ToList();
+                    messages.Add($"Acciones seleccionadas: {string.Join(", ", selectedActions)}");
                 }
+                else messages.Add("El campo 'selectedActions' no es un array.");
             }
             catch (Exception ex)
             {
-                messages.Add($"Error al procesar la baja del usuario en Active Directory: {ex.Message}\nStackTrace: {ex.StackTrace}");
-                return Json(new { success = false, messages = string.Join("\n", messages), message = "Error al procesar la baja del usuario en Active Directory." });
+                messages.Add($"Error procesando acciones: {ex.Message}");
+                return Json(new { success = false, messages = string.Join("\n", messages), message = "Error procesando acciones." });
             }
+        }
+        else
+        {
+            messages.Add("No se seleccionaron acciones adicionales.");
+        }
 
-            // Enviar correos solo si hay acciones seleccionadas (checkboxes marcados)
-            if (userDisabled && selectedActions.Any())
+        try
+        {
+            // 2) Buscar y modificar usuario en AD
+            using var ctx = new PrincipalContext(ContextType.Domain, _domainName);
+            using var usr = UserPrincipal.FindByIdentity(ctx, username);
+            if (usr == null)
+                return Json(new { success = false, messages = $"Usuario '{username}' no encontrado.", message = "Usuario no encontrado en AD." });
+
+            var de = (DirectoryEntry)usr.GetUnderlyingObject();
+            string userDn = de.Properties["distinguishedName"].Value.ToString();
+            string ouOriginal = userDn.Substring(userDn.IndexOf("OU="));
+
+            // 2.1) Eliminar de grupos
+            if (de.Properties.Contains("memberOf"))
             {
+                var grupos = de.Properties["memberOf"]
+                               .Cast<object>()
+                               .Select(dn => ExtractCNFromDN(dn.ToString()))
+                               .ToList();
+                foreach (var grp in grupos)
+                {
+                    using var ge = FindGroupByName(grp);
+                    if (ge != null && ge.Properties["member"].Contains(userDn))
+                    {
+                        ge.Properties["member"].Remove(userDn);
+                        ge.CommitChanges();
+                        messages.Add($"Eliminado de grupo '{grp}'.");
+                    }
+                }
+            }
+            else messages.Add("No pertenecía a ningún grupo.");
+
+            // 3) Eliminar cuota en Leonardo
+            string quotaPath = Path.Combine(_quotaBase, username);
+            Type qmType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", _fsServer);
+            if (qmType != null)
+            {
+                dynamic qm = Activator.CreateInstance(qmType);
                 try
                 {
-                    SendEmailToAdmin(username, nombreCompleto, dni, ouOriginal, fechaBaja, messages);
-                    messages.Add("Correo de notificación enviado al administrador.");
-                }
-                catch (Exception ex)
-                {
-                    messages.Add($"Error al enviar el correo de notificación al administrador: {ex.Message}\nStackTrace: {ex.StackTrace}");
-                }
-
-                foreach (var action in selectedActions)
-                {
-                    try
+                    dynamic existing = null;
+                    try { existing = qm.GetQuota(quotaPath); } catch { }
+                    if (existing != null)
                     {
-                        SendEmailForAction(action, username, nombreCompleto, dni, ouOriginal, fechaBaja);
-                        messages.Add($"Incidencia generada: Correo enviado para '{GetActionDescription(action)}'.");
+                        messages.Add($"[DEBUG] Eliminando cuota en {quotaPath}");
+                        existing.Delete();
+                        messages.Add("Cuota FSRM eliminada.");
                     }
-                    catch (Exception ex)
-                    {
-                        messages.Add($"Error al enviar el correo para la acción '{GetActionDescription(action)}': {ex.Message}\nStackTrace: {ex.StackTrace}");
-                    }
+                    else messages.Add("No había cuota que eliminar.");
                 }
+                finally { Marshal.ReleaseComObject(qm); }
             }
+            else messages.Add("FSRM no disponible, omito cuota.");
+
+            // 4) Eliminar carpeta personal
+            string userFolder = Path.Combine(_shareBase, username);
+            if (Directory.Exists(userFolder))
+            {
+                Directory.Delete(userFolder, true);
+                messages.Add($"Carpeta eliminada: {userFolder}");
+            }
+            else messages.Add("Carpeta personal no encontrada.");
+
+            // 5) Deshabilitar cuenta
+            int uac = (int)de.Properties["userAccountControl"].Value;
+            de.Properties["userAccountControl"].Value = uac | 0x2;
+            de.CommitChanges();
+            messages.Add("Usuario deshabilitado.");
+
+            // 6) Mover a OU=Bajas
+            string newOuLdap = $"{_config["ActiveDirectory:BaseLdapPrefix"]}OU={_bajasOu},OU={_areasOu},{_config["ActiveDirectory:DomainComponents"]}";
+            using var ouEntry = new DirectoryEntry(newOuLdap);
+            de.MoveTo(ouEntry);
+            de.CommitChanges();
+            messages.Add("Usuario movido a OU 'Bajas'.");
+
+            userDisabled = true;
         }
         catch (Exception ex)
         {
-            messages.Add($"Error inesperado en el proceso de baja del usuario: {ex.Message}\nStackTrace: {ex.StackTrace}");
+            messages.Add($"Error en AD: {ex.Message}");
         }
 
-        // Construir el mensaje de respuesta
-        string finalMessage = userDisabled
-            ? "Usuario deshabilitado y movido a la OU 'Bajas' correctamente."
-            : "No se pudo deshabilitar ni mover el usuario.";
-        finalMessage += "\nDetalles del proceso:\n- " + (messages.Any() ? string.Join("\n- ", messages) : "No se registraron eventos adicionales.");
+        // 7) Envío de correos si procede
+        //if (userDisabled && selectedActions.Any())
+        //{
+        //    try
+        //    {
+        //        SendEmailToAdmin(username, /*…*/);
+        //        messages.Add("Email administrador enviado.");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        messages.Add($"Error envío email admin: {ex.Message}");
+        //    }
+        //    foreach (var action in selectedActions)
+        //    {
+        //        try
+        //        {
+        //            SendEmailForAction(action, /*…*/);
+        //            messages.Add($"Email para acción {action} enviado.");
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            messages.Add($"Error email acción {action}: {ex.Message}");
+        //        }
+        //    }
+        //}
 
-        return Json(new { success = userDisabled, messages = string.Join("\n", messages), message = finalMessage });
+        string final = userDisabled
+            ? "Baja completada."
+            : "No se completó la baja.";
+        return Json(new { success = userDisabled, messages = string.Join("\n", messages), message = final });
     }
+
 
     private string ExtractUsername(string input)
     {
@@ -403,108 +294,108 @@ public class BajaUsuarioController : Controller
         return null;
     }
 
-    private void SendEmailToAdmin(string username, string nombreCompleto, string dni, string ouOriginal, DateTime fechaBaja, List<string> processMessages)
-    {
-        // Validar la configuración SMTP
-        string smtpServer = _configuration["SmtpSettings:Server"];
-        string smtpPortStr = _configuration["SmtpSettings:Port"];
-        string smtpUsername = _configuration["SmtpSettings:Username"];
-        string smtpPassword = _configuration["SmtpSettings:Password"];
-        string fromEmail = _configuration["SmtpSettings:FromEmail"];
-        string adminEmail = _configuration["SmtpSettings:AdminEmail"];
+    //private void SendEmailToAdmin(string username, string nombreCompleto, string dni, string ouOriginal, DateTime fechaBaja, List<string> processMessages)
+    //{
+    //    // Validar la configuración SMTP
+    //    string smtpServer = _configuration["SmtpSettings:Server"];
+    //    string smtpPortStr = _configuration["SmtpSettings:Port"];
+    //    string smtpUsername = _configuration["SmtpSettings:Username"];
+    //    string smtpPassword = _configuration["SmtpSettings:Password"];
+    //    string fromEmail = _configuration["SmtpSettings:FromEmail"];
+    //    string adminEmail = _configuration["SmtpSettings:AdminEmail"];
 
-        // Validar que todas las configuraciones estén presentes
-        if (string.IsNullOrEmpty(smtpServer) || string.IsNullOrEmpty(smtpPortStr) ||
-            string.IsNullOrEmpty(smtpUsername) || string.IsNullOrEmpty(smtpPassword) ||
-            string.IsNullOrEmpty(fromEmail) || string.IsNullOrEmpty(adminEmail))
-        {
-            throw new Exception("Configuración SMTP incompleta en appsettings.json. Verifique las claves SmtpSettings.");
-        }
+    //    // Validar que todas las configuraciones estén presentes
+    //    if (string.IsNullOrEmpty(smtpServer) || string.IsNullOrEmpty(smtpPortStr) ||
+    //        string.IsNullOrEmpty(smtpUsername) || string.IsNullOrEmpty(smtpPassword) ||
+    //        string.IsNullOrEmpty(fromEmail) || string.IsNullOrEmpty(adminEmail))
+    //    {
+    //        throw new Exception("Configuración SMTP incompleta en appsettings.json. Verifique las claves SmtpSettings.");
+    //    }
 
-        if (!int.TryParse(smtpPortStr, out int smtpPort))
-        {
-            throw new Exception("El puerto SMTP en appsettings.json no es un número válido.");
-        }
+    //    if (!int.TryParse(smtpPortStr, out int smtpPort))
+    //    {
+    //        throw new Exception("El puerto SMTP en appsettings.json no es un número válido.");
+    //    }
 
-        using (var client = new SmtpClient(smtpServer, smtpPort))
-        {
-            client.EnableSsl = true; // Habilitar TLS
-            client.Credentials = new System.Net.NetworkCredential(smtpUsername, smtpPassword);
+    //    using (var client = new SmtpClient(smtpServer, smtpPort))
+    //    {
+    //        client.EnableSsl = true; // Habilitar TLS
+    //        client.Credentials = new System.Net.NetworkCredential(smtpUsername, smtpPassword);
 
-            using (var mailMessage = new MailMessage())
-            {
-                mailMessage.From = new MailAddress(fromEmail, "Sistema de Gestión de Usuarios");
-                mailMessage.To.Add(adminEmail);
-                mailMessage.Subject = $"Notificación: Baja de usuario '{username}'";
+    //        using (var mailMessage = new MailMessage())
+    //        {
+    //            mailMessage.From = new MailAddress(fromEmail, "Sistema de Gestión de Usuarios");
+    //            mailMessage.To.Add(adminEmail);
+    //            mailMessage.Subject = $"Notificación: Baja de usuario '{username}'";
 
-                // Construir el cuerpo del correo
-                string body = "Se ha dado de baja a un usuario en el sistema. A continuación, los detalles:\n\n";
-                body += $"Username: {username}\n";
-                body += $"Nombre completo: {nombreCompleto}\n";
-                body += $"DNI: {dni}\n";
-                body += $"OU original: {ouOriginal}\n";
-                body += $"Fecha y hora de la baja: {fechaBaja:dd/MM/yyyy HH:mm:ss}\n";
-                body += "\nDetalles del proceso:\n- " + (processMessages.Any() ? string.Join("\n- ", processMessages) : "No se registraron eventos adicionales.");
+    //            // Construir el cuerpo del correo
+    //            string body = "Se ha dado de baja a un usuario en el sistema. A continuación, los detalles:\n\n";
+    //            body += $"Username: {username}\n";
+    //            body += $"Nombre completo: {nombreCompleto}\n";
+    //            body += $"DNI: {dni}\n";
+    //            body += $"OU original: {ouOriginal}\n";
+    //            body += $"Fecha y hora de la baja: {fechaBaja:dd/MM/yyyy HH:mm:ss}\n";
+    //            body += "\nDetalles del proceso:\n- " + (processMessages.Any() ? string.Join("\n- ", processMessages) : "No se registraron eventos adicionales.");
 
-                mailMessage.Body = body;
-                mailMessage.IsBodyHtml = false; // Texto plano
+    //            mailMessage.Body = body;
+    //            mailMessage.IsBodyHtml = false; // Texto plano
 
-                client.Send(mailMessage);
-            }
-        }
-    }
+    //            client.Send(mailMessage);
+    //        }
+    //    }
+    //}
 
-    private void SendEmailForAction(string action, string username, string nombreCompleto, string dni, string ouOriginal, DateTime fechaBaja)
-    {
-        // Validar la configuración SMTP
-        string smtpServer = _configuration["SmtpSettings:Server"];
-        string smtpPortStr = _configuration["SmtpSettings:Port"];
-        string smtpUsername = _configuration["SmtpSettings:Username"];
-        string smtpPassword = _configuration["SmtpSettings:Password"];
-        string fromEmail = _configuration["SmtpSettings:FromEmail"];
-        string adminEmail = _configuration["SmtpSettings:AdminEmail"];
+    //private void SendEmailForAction(string action, string username, string nombreCompleto, string dni, string ouOriginal, DateTime fechaBaja)
+    //{
+    //    // Validar la configuración SMTP
+    //    string smtpServer = _configuration["SmtpSettings:Server"];
+    //    string smtpPortStr = _configuration["SmtpSettings:Port"];
+    //    string smtpUsername = _configuration["SmtpSettings:Username"];
+    //    string smtpPassword = _configuration["SmtpSettings:Password"];
+    //    string fromEmail = _configuration["SmtpSettings:FromEmail"];
+    //    string adminEmail = _configuration["SmtpSettings:AdminEmail"];
 
-        // Validar que todas las configuraciones estén presentes
-        if (string.IsNullOrEmpty(smtpServer) || string.IsNullOrEmpty(smtpPortStr) ||
-            string.IsNullOrEmpty(smtpUsername) || string.IsNullOrEmpty(smtpPassword) ||
-            string.IsNullOrEmpty(fromEmail) || string.IsNullOrEmpty(adminEmail))
-        {
-            throw new Exception("Configuración SMTP incompleta en appsettings.json. Verifique las claves SmtpSettings.");
-        }
+    //    // Validar que todas las configuraciones estén presentes
+    //    if (string.IsNullOrEmpty(smtpServer) || string.IsNullOrEmpty(smtpPortStr) ||
+    //        string.IsNullOrEmpty(smtpUsername) || string.IsNullOrEmpty(smtpPassword) ||
+    //        string.IsNullOrEmpty(fromEmail) || string.IsNullOrEmpty(adminEmail))
+    //    {
+    //        throw new Exception("Configuración SMTP incompleta en appsettings.json. Verifique las claves SmtpSettings.");
+    //    }
 
-        if (!int.TryParse(smtpPortStr, out int smtpPort))
-        {
-            throw new Exception("El puerto SMTP en appsettings.json no es un número válido.");
-        }
+    //    if (!int.TryParse(smtpPortStr, out int smtpPort))
+    //    {
+    //        throw new Exception("El puerto SMTP en appsettings.json no es un número válido.");
+    //    }
 
-        using (var client = new SmtpClient(smtpServer, smtpPort))
-        {
-            client.EnableSsl = true; // Habilitar TLS
-            client.Credentials = new System.Net.NetworkCredential(smtpUsername, smtpPassword);
+    //    using (var client = new SmtpClient(smtpServer, smtpPort))
+    //    {
+    //        client.EnableSsl = true; // Habilitar TLS
+    //        client.Credentials = new System.Net.NetworkCredential(smtpUsername, smtpPassword);
 
-            using (var mailMessage = new MailMessage())
-            {
-                mailMessage.From = new MailAddress(fromEmail, "Sistema de Gestión de Usuarios");
-                mailMessage.To.Add(adminEmail);
-                mailMessage.Subject = $"Incidencia: {GetActionDescription(action)} para el usuario '{username}'";
+    //        using (var mailMessage = new MailMessage())
+    //        {
+    //            mailMessage.From = new MailAddress(fromEmail, "Sistema de Gestión de Usuarios");
+    //            mailMessage.To.Add(adminEmail);
+    //            mailMessage.Subject = $"Incidencia: {GetActionDescription(action)} para el usuario '{username}'";
 
-                // Construir el cuerpo del correo
-                string body = $"Se ha solicitado una acción adicional para un usuario dado de baja. A continuación, los detalles:\n\n";
-                body += $"Acción solicitada: {GetActionDescription(action)}\n";
-                body += $"Username: {username}\n";
-                body += $"Nombre completo: {nombreCompleto}\n";
-                body += $"DNI: {dni}\n";
-                body += $"OU original: {ouOriginal}\n";
-                body += $"Fecha y hora de la solicitud: {fechaBaja:dd/MM/yyyy HH:mm:ss}\n";
-                body += "\nPor favor, procese esta incidencia según corresponda.";
+    //            // Construir el cuerpo del correo
+    //            string body = $"Se ha solicitado una acción adicional para un usuario dado de baja. A continuación, los detalles:\n\n";
+    //            body += $"Acción solicitada: {GetActionDescription(action)}\n";
+    //            body += $"Username: {username}\n";
+    //            body += $"Nombre completo: {nombreCompleto}\n";
+    //            body += $"DNI: {dni}\n";
+    //            body += $"OU original: {ouOriginal}\n";
+    //            body += $"Fecha y hora de la solicitud: {fechaBaja:dd/MM/yyyy HH:mm:ss}\n";
+    //            body += "\nPor favor, procese esta incidencia según corresponda.";
 
-                mailMessage.Body = body;
-                mailMessage.IsBodyHtml = false; // Texto plano
+    //            mailMessage.Body = body;
+    //            mailMessage.IsBodyHtml = false; // Texto plano
 
-                client.Send(mailMessage);
-            }
-        }
-    }
+    //            client.Send(mailMessage);
+    //        }
+    //    }
+    //}
 
     private string GetActionDescription(string action)
     {
