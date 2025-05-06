@@ -133,7 +133,7 @@
         const cuotas = @Html.Raw(Json.Serialize(ViewBag.Cuota as List<string>));
         const gruposAD = @Html.Raw(Json.Serialize(ViewBag.GruposAD as List<string>));
 
-        async function loadFile() {
+                async function loadFile() {
             const fileInput = document.getElementById('fileInput');
             if (!fileInput.files.length) {
                 alert('Por favor, seleccione un archivo Excel (.xlsx).');
@@ -157,6 +157,12 @@
                 }
 
                 usersData = data.users;
+                console.log('Datos recibidos del servidor (usersData):', usersData); // Depuración
+                if (!usersData || usersData.length === 0) {
+                    alert('No se encontraron usuarios válidos en el archivo Excel.');
+                    return;
+                }
+
                 displayUsersTable();
             } catch (error) {
                 console.error('Error al cargar el archivo:', error);
@@ -169,81 +175,115 @@
             tableBody.innerHTML = '';
             document.getElementById('usersTableContainer').style.display = 'block';
 
+            console.log('Iniciando renderizado de la tabla con usersData:', usersData); // Depuración
+
             for (let i = 0; i < usersData.length; i++) {
-                const user = usersData[i];
-                const row = document.createElement('tr');
+                try {
+                    const user = usersData[i];
+                    console.log(`Procesando usuario en índice ${i}:`, user); // Depuración
 
-                // Nombre
-                row.innerHTML += `<td><input type="text" value="${user.Nombre}" onchange="updateUser(${i}, 'Nombre', this.value)"></td>`;
-                // Apellido1
-                row.innerHTML += `<td><input type="text" value="${user.Apellido1}" onchange="updateUser(${i}, 'Apellido1', this.value)"></td>`;
-                // Apellido2
-                row.innerHTML += `<td><input type="text" value="${user.Apellido2}" onchange="updateUser(${i}, 'Apellido2', this.value)"></td>`;
-                // DNI
-                row.innerHTML += `<td><input type="text" value="${user.DNI}" onchange="updateUser(${i}, 'DNI', this.value)"></td>`;
-                // nTelefono
-                row.innerHTML += `<td><input type="text" value="${user.nTelefono}" onchange="updateUser(${i}, 'nTelefono', this.value)"></td>`;
-                // DDI
-                row.innerHTML += `<td><input type="text" value="${user.DDI}" onchange="updateUser(${i}, 'DDI', this.value)"></td>`;
-                // MobileExt
-                row.innerHTML += `<td><input type="text" value="${user.MobileExt}" onchange="updateUser(${i}, 'MobileExt', this.value)"></td>`;
-                // MobileNumber
-                row.innerHTML += `<td><input type="text" value="${user.MobileNumber}" onchange="updateUser(${i}, 'MobileNumber', this.value)"></td>`;
-                // TarjetaId
-                row.innerHTML += `<td><input type="text" value="${user.TarjetaId}" onchange="updateUser(${i}, 'TarjetaId', this.value)"></td>`;
-                // nFuncionario
-                row.innerHTML += `<td><input type="text" value="${user.nFuncionario}" onchange="updateUser(${i}, 'nFuncionario', this.value)"></td>`;
+                    // Asegurar que todas las propiedades estén definidas, proporcionando valores por defecto
+                    const safeUser = {
+                        Nombre: user.Nombre || '',
+                        Apellido1: user.Apellido1 || '',
+                        Apellido2: user.Apellido2 || '',
+                        DNI: user.DNI || '',
+                        nTelefono: user.nTelefono || '',
+                        DDI: user.DDI || '',
+                        MobileExt: user.MobileExt || '',
+                        MobileNumber: user.MobileNumber || '',
+                        TarjetaId: user.TarjetaId || '',
+                        nFuncionario: user.nFuncionario || '',
+                        OUPrincipal: user.OUPrincipal || '',
+                        OUSecundaria: user.OUSecundaria || '',
+                        FechaCaducidadOp: user.FechaCaducidadOp || 'no',
+                        FechaCaducidad: user.FechaCaducidad || '',
+                        Cuota: user.Cuota || '',
+                        Grupos: Array.isArray(user.Grupos) ? user.Grupos : [],
+                        Username: user.Username || ''
+                    };
 
-                // OU Principal
-                let ouPrincipalOptions = '<select onchange="updateOUPrincipal(' + i + ', this.value)">';
-                ouPrincipalOptions += '<option value="">Seleccione una OU Principal</option>';
-                ouPrincipales.forEach(ou => {
-                    ouPrincipalOptions += `<option value="${ou}" ${ou === user.OUPrincipal ? 'selected' : ''}>${ou}</option>`;
-                });
-                ouPrincipalOptions += '</select>';
-                row.innerHTML += `<td>${ouPrincipalOptions}</td>`;
+                    const row = document.createElement('tr');
 
-                // OU Secundaria
-                const ouSecundariaCell = document.createElement('td');
-                ouSecundariaCell.id = `ouSecundariaCell_${i}`;
-                row.appendChild(ouSecundariaCell);
-                await updateOUSecundaria(i, user.OUPrincipal, user.OUSecundaria);
+                    // Nombre
+                    row.innerHTML += `<td><input type="text" value="${safeUser.Nombre}" onchange="updateUser(${i}, 'Nombre', this.value)"></td>`;
+                    // Apellido1
+                    row.innerHTML += `<td><input type="text" value="${safeUser.Apellido1}" onchange="updateUser(${i}, 'Apellido1', this.value)"></td>`;
+                    // Apellido2
+                    row.innerHTML += `<td><input type="text" value="${safeUser.Apellido2}" onchange="updateUser(${i}, 'Apellido2', this.value)"></td>`;
+                    // DNI
+                    row.innerHTML += `<td><input type="text" value="${safeUser.DNI}" onchange="updateUser(${i}, 'DNI', this.value)"></td>`;
+                    // nTelefono
+                    row.innerHTML += `<td><input type="text" value="${safeUser.nTelefono}" onchange="updateUser(${i}, 'nTelefono', this.value)"></td>`;
+                    // DDI
+                    row.innerHTML += `<td><input type="text" value="${safeUser.DDI}" onchange="updateUser(${i}, 'DDI', this.value)"></td>`;
+                    // MobileExt
+                    row.innerHTML += `<td><input type="text" value="${safeUser.MobileExt}" onchange="updateUser(${i}, 'MobileExt', this.value)"></td>`;
+                    // MobileNumber
+                    row.innerHTML += `<td><input type="text" value="${safeUser.MobileNumber}" onchange="updateUser(${i}, 'MobileNumber', this.value)"></td>`;
+                    // TarjetaId
+                    row.innerHTML += `<td><input type="text" value="${safeUser.TarjetaId}" onchange="updateUser(${i}, 'TarjetaId', this.value)"></td>`;
+                    // nFuncionario
+                    row.innerHTML += `<td><input type="text" value="${safeUser.nFuncionario}" onchange="updateUser(${i}, 'nFuncionario', this.value)"></td>`;
 
-                // Fecha Caducidad Op
-                row.innerHTML += `<td><select onchange="updateUser(${i}, 'FechaCaducidadOp', this.value); updateFechaCaducidadField(${i})">
-                    <option value="sí" ${user.FechaCaducidadOp === 'sí' ? 'selected' : ''}>Sí</option>
-                    <option value="no" ${user.FechaCaducidadOp === 'no' ? 'selected' : ''}>No</option>
-                </select></td>`;
+                    // OU Principal
+                    let ouPrincipalOptions = '<select onchange="updateOUPrincipal(' + i + ', this.value)">';
+                    ouPrincipalOptions += '<option value="">Seleccione una OU Principal</option>';
+                    ouPrincipales.forEach(ou => {
+                        ouPrincipalOptions += `<option value="${ou}" ${ou === safeUser.OUPrincipal ? 'selected' : ''}>${ou}</option>`;
+                    });
+                    ouPrincipalOptions += '</select>';
+                    row.innerHTML += `<td>${ouPrincipalOptions}</td>`;
 
-                // Fecha Caducidad
-                row.innerHTML += `<td><input type="date" value="${user.FechaCaducidad}" onchange="updateUser(${i}, 'FechaCaducidad', this.value)" id="fechaCaducidad_${i}"></td>`;
+                    // OU Secundaria
+                    const ouSecundariaCell = document.createElement('td');
+                    ouSecundariaCell.id = `ouSecundariaCell_${i}`;
+                    row.appendChild(ouSecundariaCell);
+                    await updateOUSecundaria(i, safeUser.OUPrincipal, safeUser.OUSecundaria);
 
-                // Cuota
-                let cuotaOptions = '<select onchange="updateUser(' + i + ', \'Cuota\', this.value)">';
-                cuotaOptions += '<option value="">Seleccione la cuota</option>';
-                cuotas.forEach(cuota => {
-                    cuotaOptions += `<option value="${cuota}" ${cuota === user.Cuota ? 'selected' : ''}>${cuota}</option>`;
-                });
-                cuotaOptions += '</select>';
-                row.innerHTML += `<td>${cuotaOptions}</td>`;
+                    // Fecha Caducidad Op
+                    row.innerHTML += `<td><select onchange="updateUser(${i}, 'FechaCaducidadOp', this.value); updateFechaCaducidadField(${i})">
+                        <option value="sí" ${safeUser.FechaCaducidadOp === 'sí' ? 'selected' : ''}>Sí</option>
+                        <option value="no" ${safeUser.FechaCaducidadOp === 'no' ? 'selected' : ''}>No</option>
+                    </select></td>`;
 
-                // Grupos
-                row.innerHTML += `<td><input type="text" value="${user.Grupos.join(', ')}" onchange="updateUser(${i}, 'Grupos', this.value.split(', ').filter(g => g))"></td>`;
+                    // Fecha Caducidad
+                    row.innerHTML += `<td><input type="date" value="${safeUser.FechaCaducidad}" onchange="updateUser(${i}, 'FechaCaducidad', this.value)" id="fechaCaducidad_${i}"></td>`;
 
-                // Username (automático)
-                row.innerHTML += `<td><input type="text" value="${user.Username}" readonly></td>`;
-                // Departamento (automático)
-                const departamentoCell = document.createElement('td');
-                departamentoCell.id = `departamentoCell_${i}`;
-                row.appendChild(departamentoCell);
-                // Lugar de Envío (automático)
-                const lugarEnvioCell = document.createElement('td');
-                lugarEnvioCell.id = `lugarEnvioCell_${i}`;
-                row.appendChild(lugarEnvioCell);
+                    // Cuota
+                    let cuotaOptions = '<select onchange="updateUser(' + i + ', \'Cuota\', this.value)">';
+                    cuotaOptions += '<option value="">Seleccione la cuota</option>';
+                    cuotas.forEach(cuota => {
+                        cuotaOptions += `<option value="${cuota}" ${cuota === safeUser.Cuota ? 'selected' : ''}>${cuota}</option>`;
+                    });
+                    cuotaOptions += '</select>';
+                    row.innerHTML += `<td>${cuotaOptions}</td>`;
 
-                tableBody.appendChild(row);
-                await updateAutomaticFields(i);
-                updateFechaCaducidadField(i);
+                    // Grupos
+                    row.innerHTML += `<td><input type="text" value="${safeUser.Grupos.join(', ')}" onchange="updateUser(${i}, 'Grupos', this.value.split(', ').filter(g => g))"></td>`;
+
+                    // Username (automático)
+                    row.innerHTML += `<td><input type="text" value="${safeUser.Username}" readonly></td>`;
+                    // Departamento (automático)
+                    const departamentoCell = document.createElement('td');
+                    departamentoCell.id = `departamentoCell_${i}`;
+                    row.appendChild(departamentoCell);
+                    // Lugar de Envío (automático)
+                    const lugarEnvioCell = document.createElement('td');
+                    lugarEnvioCell.id = `lugarEnvioCell_${i}`;
+                    row.appendChild(lugarEnvioCell);
+
+                    tableBody.appendChild(row);
+                    await updateAutomaticFields(i);
+                    updateFechaCaducidadField(i);
+                } catch (error) {
+                    console.error(`Error al renderizar la fila ${i}:`, error);
+                }
+            }
+
+            if (tableBody.children.length === 0) {
+                console.warn('No se agregaron filas a la tabla. Verifique los datos en usersData.');
+                tableBody.innerHTML = '<tr><td colspan="19">No se encontraron datos para mostrar.</td></tr>';
             }
         }
 
@@ -257,7 +297,7 @@
         async function updateUsername(index) {
             const user = usersData[index];
             try {
-                const response = await fetch('/GestionUsuarios/GenerateUsername', {
+                const response = await fetch('/AltaUsuario/GenerateUsername', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -312,9 +352,36 @@
             }
         }
 
-        function updateOUSecundariaValue(index, ouSecundaria) {
-            usersData[index].OUSecundaria = ouSecundaria;
-            updateAutomaticFields(index);
+                async function updateOUSecundaria(index, ouPrincipal, selectedOUSecundaria) {
+            const ouSecundariaCell = document.getElementById(`ouSecundariaCell_${index}`);
+            ouSecundariaCell.innerHTML = '<select onchange="updateOUSecundariaValue(' + index + ', this.value)"><option value="">Seleccione una OU Secundaria (opcional)</option></select>';
+
+            if (ouPrincipal) {
+                try {
+                    const response = await fetch('/AltaMasiva/GetOUSecundarias', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ouPrincipal })
+                    });
+                    const data = await response.json();
+                    const select = ouSecundariaCell.querySelector('select');
+                    if (data.length === 0) {
+                        select.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
+                    } else {
+                        select.innerHTML = '<option value="">Seleccione una OU Secundaria (opcional)</option>';
+                        data.forEach(ou => {
+                            const option = document.createElement('option');
+                            option.value = ou;
+                            option.textContent = ou;
+                            option.selected = ou === selectedOUSecundaria;
+                            select.appendChild(option);
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error al obtener las OUs secundarias:', error);
+                    ouSecundariaCell.innerHTML = '<select><option value="">Error al cargar OU secundarias</option></select>';
+                }
+            }
         }
 
         async function updateAutomaticFields(index) {

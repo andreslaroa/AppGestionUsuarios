@@ -4,155 +4,85 @@ using System;
 using System.Collections.Generic;
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
-using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using OfficeOpenXml;
+using System.Globalization;
 
 [Authorize]
 public class AltaMasivaController : Controller
 {
-    private readonly string domainPath = "DC=aytosa,DC=inet"; // Dominio base para construir las rutas de las OUs
+    private readonly string domainPath = "DC=aytosa,DC=inet";
+
+    // Clase para el resultado de las verificaciones
+    private class CheckResult
+    {
+        public bool Success { get; set; }
+        public bool Exists { get; set; }
+        public string Message { get; set; }
+    }
 
     [HttpGet]
     public IActionResult AltaMasiva()
     {
-        // Configurar la licencia de EPPlus (requerido para uso no comercial)
-        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-        // Cargar las OUs principales (solo nombres)
-        List<string> ouPrincipales = new List<string>();
         try
         {
-            using (DirectoryEntry entry = new DirectoryEntry($"LDAP://{domainPath}"))
-            using (DirectorySearcher searcher = new DirectorySearcher(entry))
-            {
-                searcher.Filter = "(objectClass=organizationalUnit)";
-                searcher.PropertiesToLoad.Add("name");
-                searcher.PropertiesToLoad.Add("distinguishedName");
-                searcher.SearchScope = SearchScope.OneLevel; // Solo OUs de nivel superior
-
-                foreach (SearchResult result in searcher.FindAll())
-                {
-                    if (result.Properties.Contains("name"))
-                    {
-                        string name = result.Properties["name"][0].ToString();
-                        ouPrincipales.Add(name);
-                    }
-                }
-            }
+            return View("AltaMasiva");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error al cargar las OUs: {ex.Message}");
+            return Json(new { success = false, message = $"Error al cargar la página de alta masiva: {ex.Message}" });
         }
-
-        // Cargar las cuotas
-        List<string> cuotas = new List<string> { "5GB", "10GB", "20GB" }; // Ajusta según tu lógica
-
-        // Cargar los grupos disponibles
-        List<string> grupos = new List<string>();
-        try
-        {
-            using (DirectoryEntry entry = new DirectoryEntry($"LDAP://{domainPath}"))
-            using (DirectorySearcher searcher = new DirectorySearcher(entry))
-            {
-                searcher.Filter = "(objectClass=group)";
-                searcher.PropertiesToLoad.Add("cn");
-                searcher.SearchScope = SearchScope.Subtree;
-
-                foreach (SearchResult result in searcher.FindAll())
-                {
-                    if (result.Properties.Contains("cn"))
-                    {
-                        string cn = result.Properties["cn"][0].ToString();
-                        grupos.Add(cn);
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al cargar los grupos: {ex.Message}");
-        }
-
-        ViewBag.OUPrincipales = ouPrincipales.OrderBy(ou => ou).ToList();
-        ViewBag.Cuota = cuotas.OrderBy(c => c).ToList();
-        ViewBag.GruposAD = grupos.OrderBy(g => g).ToList();
-        return View();
     }
 
     [HttpPost]
-    public async Task<IActionResult> LoadFile(IFormFile file)
+    public async Task<IActionResult> ProcessUsers(IFormFile file)
     {
         if (file == null || file.Length == 0)
-            return Json(new { success = false, message = "No se ha proporcionado un archivo válido." });
+            return Json(new { success = false, message = "No se ha proporcionado un archivo Excel válido." });
 
         List<Dictionary<string, object>> users = new List<Dictionary<string, object>>();
-        string[] expectedHeaders = new[] { "Nombre", "Apellido1", "Apellido2", "DNI", "nTelefono", "DDI", "MobileExt", "MobileNumber", "TarjetaId", "nFuncionario", "OUPrincipal", "OUSecundaria", "FechaCaducidadOp", "FechaCaducidad", "Cuota", "Grupos" };
+        List<string> messages = new List<string>();
+        bool overallSuccess = true;
 
         try
         {
+            // Configurar EPPlus para uso no comercial
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
             using (var stream = new MemoryStream())
             {
                 await file.CopyToAsync(stream);
-                stream.Position = 0;
-
                 using (var package = new ExcelPackage(stream))
                 {
-                    var worksheet = package.Workbook.Worksheets[0]; // Primera hoja
-                    if (worksheet == null || worksheet.Dimension == null)
-                        return Json(new { success = false, message = "El archivo Excel está vacío o no tiene datos." });
+                    var worksheet = package.Workbook.Worksheets[0];
+                    int rowCount = worksheet.Dimension.Rows;
+                    int colCount = worksheet.Dimension.Columns;
 
-                    // Leer el encabezado (primera fila)
+                    // Obtener encabezados
                     var headers = new List<string>();
-                    for (int col = 1; col <= worksheet.Dimension.Columns; col++)
+                    for (int col = 1; col <= colCount; col++)
                     {
-                        var header = worksheet.Cells[1, col].Text?.Trim();
-                        if (string.IsNullOrEmpty(header)) break;
-                        headers.Add(header);
+                        headers.Add(worksheet.Cells[1, col].Text.Trim());
                     }
 
-                    if (headers.Count != expectedHeaders.Length || !headers.SequenceEqual(expectedHeaders))
-                        return Json(new { success = false, message = "El encabezado del archivo Excel no coincide con el formato esperado: " + string.Join(",", expectedHeaders) });
-
-                    // Leer las filas de datos (a partir de la fila 2)
-                    for (int row = 2; row <= worksheet.Dimension.Rows; row++)
+                    // Validar encabezados requeridos
+                    if (!headers.Contains("Nombre") || !headers.Contains("Apellido1") || !headers.Contains("Apellido2") ||
+                        !headers.Contains("DNI") || !headers.Contains("OUPrincipal"))
                     {
-                        // Verificar si la fila está vacía
-                        bool isRowEmpty = true;
-                        for (int col = 1; col <= worksheet.Dimension.Columns; col++)
+                        return Json(new { success = false, message = "El archivo Excel debe contener las columnas 'Nombre', 'Apellido1', 'Apellido2', 'DNI' y 'OUPrincipal'." });
+                    }
+
+                    // Leer datos
+                    for (int row = 2; row <= rowCount; row++)
+                    {
+                        var user = new Dictionary<string, object>();
+                        for (int col = 1; col <= colCount; col++)
                         {
-                            if (!string.IsNullOrWhiteSpace(worksheet.Cells[row, col].Text))
-                            {
-                                isRowEmpty = false;
-                                break;
-                            }
+                            user[headers[col - 1]] = worksheet.Cells[row, col].Text.Trim();
                         }
-                        if (isRowEmpty) continue; // Ignorar filas vacías
-
-                        var userData = new Dictionary<string, object>();
-                        for (int col = 1; col <= headers.Count; col++)
-                        {
-                            string key = headers[col - 1];
-                            string value = worksheet.Cells[row, col].Text?.Trim() ?? "";
-                            if (key == "Grupos")
-                            {
-                                userData[key] = value.Split(',').Select(g => g.Trim()).Where(g => !string.IsNullOrEmpty(g)).ToList();
-                            }
-                            else
-                            {
-                                userData[key] = value;
-                            }
-                        }
-
-                        // Generar el nombre de usuario automáticamente
-                        string username = await GenerateUsername(userData["Nombre"].ToString(), userData["Apellido1"].ToString(), userData["Apellido2"].ToString());
-                        if (string.IsNullOrEmpty(username))
-                            return Json(new { success = false, message = $"Fila {row}: Error al generar el nombre de usuario." });
-
-                        userData["Username"] = username;
-                        users.Add(userData);
+                        users.Add(user);
                     }
                 }
             }
@@ -162,29 +92,14 @@ public class AltaMasivaController : Controller
             return Json(new { success = false, message = $"Error al procesar el archivo Excel: {ex.Message}" });
         }
 
-        if (!users.Any())
-            return Json(new { success = false, message = "El archivo Excel no contiene datos válidos." });
-
-        return Json(new { success = true, users });
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> ProcessUsers([FromBody] List<Dictionary<string, object>> users)
-    {
-        if (users == null || !users.Any())
-            return Json(new { success = false, message = "No se han proporcionado datos de usuarios." });
-
-        List<string> messages = new List<string>();
-        bool overallSuccess = true;
-
         for (int i = 0; i < users.Count; i++)
         {
             var user = users[i];
-            int lineNumber = i + 2; // +2 para contar el encabezado y empezar desde la fila 2
+            int lineNumber = i + 2;
 
             try
             {
-                // Extraer datos del usuario
+                // Extraer datos
                 string nombre = user.GetValueOrDefault("Nombre", "").ToString();
                 string apellido1 = user.GetValueOrDefault("Apellido1", "").ToString();
                 string apellido2 = user.GetValueOrDefault("Apellido2", "").ToString();
@@ -197,27 +112,50 @@ public class AltaMasivaController : Controller
                 string nFuncionario = user.GetValueOrDefault("nFuncionario", "").ToString();
                 string ouPrincipalName = user.GetValueOrDefault("OUPrincipal", "").ToString();
                 string ouSecundariaName = user.GetValueOrDefault("OUSecundaria", "").ToString();
-                string fechaCaducidadOp = user.GetValueOrDefault("FechaCaducidadOp", "").ToString();
                 string fechaCaducidad = user.GetValueOrDefault("FechaCaducidad", "").ToString();
-                string cuota = user.GetValueOrDefault("Cuota", "").ToString();
-                List<string> grupos = user.GetValueOrDefault("Grupos", new List<string>()) as List<string> ?? new List<string>();
-                string username = user.GetValueOrDefault("Username", "").ToString();
 
-                // Mapear nombres de OUs a rutas completas
-                string ouPrincipalPath = string.Empty;
-                string ouSecundariaPath = string.Empty;
-
-                if (!string.IsNullOrEmpty(ouPrincipalName))
+                // Validaciones obligatorias
+                if (string.IsNullOrEmpty(nombre))
                 {
-                    ouPrincipalPath = await GetOUPath(ouPrincipalName, null);
-                    if (string.IsNullOrEmpty(ouPrincipalPath))
-                    {
-                        messages.Add($"Fila {lineNumber}: La OU principal '{ouPrincipalName}' no existe.");
-                        overallSuccess = false;
-                        continue;
-                    }
+                    messages.Add($"Fila {lineNumber}: El campo 'Nombre' es obligatorio.");
+                    overallSuccess = false;
+                    continue;
+                }
+                if (string.IsNullOrEmpty(apellido1))
+                {
+                    messages.Add($"Fila {lineNumber}: El campo 'Apellido1' es obligatorio.");
+                    overallSuccess = false;
+                    continue;
+                }
+                if (string.IsNullOrEmpty(apellido2))
+                {
+                    messages.Add($"Fila {lineNumber}: El campo 'Apellido2' es obligatorio.");
+                    overallSuccess = false;
+                    continue;
+                }
+                if (string.IsNullOrEmpty(dni))
+                {
+                    messages.Add($"Fila {lineNumber}: El campo 'DNI' es obligatorio.");
+                    overallSuccess = false;
+                    continue;
+                }
+                if (string.IsNullOrEmpty(ouPrincipalName))
+                {
+                    messages.Add($"Fila {lineNumber}: El campo 'OUPrincipal' es obligatorio.");
+                    overallSuccess = false;
+                    continue;
                 }
 
+                // Validar OUs y construir path LDAP
+                string ouPrincipalPath = await GetOUPath(ouPrincipalName, null);
+                if (string.IsNullOrEmpty(ouPrincipalPath))
+                {
+                    messages.Add($"Fila {lineNumber}: La OU principal '{ouPrincipalName}' no existe.");
+                    overallSuccess = false;
+                    continue;
+                }
+
+                string ouSecundariaPath = string.Empty;
                 if (!string.IsNullOrEmpty(ouSecundariaName))
                 {
                     ouSecundariaPath = await GetOUPath(ouSecundariaName, ouPrincipalName);
@@ -229,156 +167,152 @@ public class AltaMasivaController : Controller
                     }
                 }
 
-                string targetOU = !string.IsNullOrEmpty(ouSecundariaPath) ? ouSecundariaPath : ouPrincipalPath;
+                // Obtener atributos de la OU (st y department)
+                string targetOUPath = !string.IsNullOrEmpty(ouSecundariaPath) ? ouSecundariaPath : ouPrincipalPath;
+                string physicalDeliveryOfficeName = await GetOUAttribute(targetOUPath, "st");
+                string division = await GetOUAttribute(targetOUPath, "department");
 
-                // Validaciones
-                if (string.IsNullOrEmpty(nombre) || string.IsNullOrEmpty(apellido1) || string.IsNullOrEmpty(dni) || string.IsNullOrEmpty(ouPrincipalName))
+                string ldapPath = !string.IsNullOrEmpty(ouSecundariaPath)
+                    ? $"LDAP://OU={ouSecundariaName},OU=Usuarios y Grupos,OU={ouPrincipalName},OU=AREAS,DC=aytosa,DC=inet"
+                    : $"LDAP://OU=Usuarios y Grupos,OU={ouPrincipalName},OU=AREAS,DC=aytosa,DC=inet";
+
+                // Generar username
+                string username = await GenerateUsername(nombre, apellido1, apellido2);
+                if (string.IsNullOrEmpty(username))
                 {
-                    messages.Add($"Fila {lineNumber}: Faltan datos obligatorios (Nombre, Apellido1, DNI, OUPrincipal).");
+                    messages.Add($"Fila {lineNumber}: No se pudo generar un nombre de usuario único para '{nombre} {apellido1} {apellido2}'.");
                     overallSuccess = false;
                     continue;
                 }
 
-                if (fechaCaducidadOp == "sí" && string.IsNullOrEmpty(fechaCaducidad))
+                // Validar FechaCaducidad
+                long? accountExpires = null;
+                if (!string.IsNullOrEmpty(fechaCaducidad))
                 {
-                    messages.Add($"Fila {lineNumber}: Debe especificar una fecha de caducidad.");
-                    overallSuccess = false;
-                    continue;
-                }
-
-                // Validar duplicados
-                if (await CheckDniExists(dni))
-                {
-                    messages.Add($"Fila {lineNumber}: El DNI '{dni}' ya existe.");
-                    overallSuccess = false;
-                    continue;
-                }
-
-                if (!string.IsNullOrEmpty(nTelefono) && await CheckTelephoneExists(nTelefono))
-                {
-                    messages.Add($"Fila {lineNumber}: El número de teléfono '{nTelefono}' ya existe.");
-                    overallSuccess = false;
-                    continue;
-                }
-
-                if (!string.IsNullOrEmpty(nFuncionario) && nFuncionario != "999999" && await CheckNumberIdExists(nFuncionario))
-                {
-                    messages.Add($"Fila {lineNumber}: El número de funcionario '{nFuncionario}' ya existe.");
-                    overallSuccess = false;
-                    continue;
-                }
-
-                // Crear el usuario en Active Directory
-                using (var context = new PrincipalContext(ContextType.Domain, "aytosa.inet"))
-                {
-                    using (var userPrincipal = new UserPrincipal(context))
+                    if (DateTime.TryParseExact(fechaCaducidad, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime expiryDate))
                     {
-                        userPrincipal.SamAccountName = username;
-                        userPrincipal.DisplayName = $"{nombre} {apellido1} {apellido2}".Trim();
-                        userPrincipal.GivenName = nombre;
-                        userPrincipal.Surname = $"{apellido1} {apellido2}".Trim();
-                        userPrincipal.SetPassword("P@ssw0rd"); // Contraseña por defecto
-                        userPrincipal.Enabled = true;
-
-                        if (!string.IsNullOrEmpty(dni))
-                            userPrincipal.Description = dni;
-
-                        if (!string.IsNullOrEmpty(nTelefono))
-                            userPrincipal.VoiceTelephoneNumber = nTelefono;
-
-                        userPrincipal.Save();
-
-                        // Acceder al objeto subyacente para establecer propiedades personalizadas
-                        using (var userEntry = (DirectoryEntry)userPrincipal.GetUnderlyingObject())
-                        {
-                            // Establecer propiedades personalizadas
-                            if (!string.IsNullOrEmpty(ddi))
-                                userEntry.Properties["otherTelephone"].Value = ddi;
-
-                            if (!string.IsNullOrEmpty(mobileExt))
-                                userEntry.Properties["otherMobile"].Value = mobileExt;
-
-                            if (!string.IsNullOrEmpty(mobileNumber))
-                                userEntry.Properties["mobile"].Value = mobileNumber;
-
-                            if (!string.IsNullOrEmpty(tarjetaId))
-                                userEntry.Properties["extensionAttribute1"].Value = tarjetaId;
-
-                            if (!string.IsNullOrEmpty(nFuncionario))
-                                userEntry.Properties["employeeID"].Value = nFuncionario;
-
-                            userEntry.CommitChanges();
-
-                            // Mover a la OU seleccionada
-                            using (var ouEntry = new DirectoryEntry($"LDAP://{targetOU}"))
-                            {
-                                userEntry.MoveTo(ouEntry);
-                                userEntry.CommitChanges();
-                            }
-
-                            // Asignar a grupos
-                            foreach (var grupo in grupos)
-                            {
-                                try
-                                {
-                                    using (var groupEntry = new DirectoryEntry($"LDAP://CN={grupo},DC=aytosa,DC=inet"))
-                                    {
-                                        groupEntry.Properties["member"].Add(userEntry.Properties["distinguishedName"].Value);
-                                        groupEntry.CommitChanges();
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    messages.Add($"Fila {lineNumber}: Error al asignar al grupo '{grupo}': {ex.Message}");
-                                }
-                            }
-                        }
-
-                        // Configurar fecha de caducidad
-                        if (fechaCaducidadOp == "sí" && !string.IsNullOrEmpty(fechaCaducidad))
-                        {
-                            userPrincipal.AccountExpirationDate = DateTime.Parse(fechaCaducidad);
-                            userPrincipal.Save();
-                        }
+                        // Convertir a formato de Active Directory (FILETIME)
+                        accountExpires = expiryDate.ToFileTimeUtc();
+                    }
+                    else
+                    {
+                        messages.Add($"Fila {lineNumber}: El formato de 'FechaCaducidad' debe ser dd/mm/aaaa.");
+                        overallSuccess = false;
+                        continue;
                     }
                 }
 
-                // Crear carpeta personal (si aplica)
-                if (!ouPrincipalName.Contains("OAGER"))
+                bool userCreated = false;
+
+                using (DirectoryEntry ouEntry = new DirectoryEntry(ldapPath))
                 {
+                    if (ouEntry == null)
+                    {
+                        messages.Add($"Fila {lineNumber}: No se pudo conectar a la OU especificada.");
+                        overallSuccess = false;
+                        continue;
+                    }
+
+                    DirectoryEntry newUser = null;
+
                     try
                     {
-                        string userFolderPath = $"\\\\fs1.aytosa.inet\\home\\{username}";
-                        if (!Directory.Exists(userFolderPath))
+                        // Normalizar nombre
+                        string nombreCompleto = $"{nombre} {apellido1} {apellido2}";
+                        string displayName = RemoveAccents(nombreCompleto).ToUpperInvariant();
+
+                        // Crear el usuario
+                        newUser = ouEntry.Children.Add($"CN={displayName}", "user");
+                        messages.Add($"Fila {lineNumber}: Usuario creado en la OU: CN={displayName}");
+
+                        // Establecer atributos
+                        try
                         {
-                            Directory.CreateDirectory(userFolderPath);
-                            messages.Add($"Fila {lineNumber}: Carpeta personal '{userFolderPath}' creada correctamente.");
+                            newUser.Properties["givenName"].Value = nombre;
+                            newUser.Properties["sn"].Value = $"{apellido1} {apellido2}";
+                            newUser.Properties["sAMAccountName"].Value = username;
+                            newUser.Properties["userPrincipalName"].Value = $"{username}@aytosa.inet";
+                            newUser.Properties["displayName"].Value = displayName;
+                            newUser.Properties["employeeNumber"].Value = dni; // Usar employeeNumber para DNI
+
+                            if (!string.IsNullOrEmpty(nTelefono))
+                                newUser.Properties["telephoneNumber"].Value = nTelefono;
+                            if (!string.IsNullOrEmpty(mobileNumber))
+                                newUser.Properties["mobile"].Value = $"{mobileExt} {mobileNumber}".Trim();
+                            if (!string.IsNullOrEmpty(nFuncionario))
+                                newUser.Properties["employeeID"].Value = nFuncionario;
+                            if (!string.IsNullOrEmpty(ddi))
+                                newUser.Properties["extensionAttribute1"].Value = ddi;
+                            if (!string.IsNullOrEmpty(tarjetaId))
+                                newUser.Properties["extensionAttribute2"].Value = tarjetaId;
+                            if (!string.IsNullOrEmpty(physicalDeliveryOfficeName))
+                                newUser.Properties["physicalDeliveryOfficeName"].Value = physicalDeliveryOfficeName;
+                            if (!string.IsNullOrEmpty(division))
+                                newUser.Properties["division"].Value = division;
+                            if (accountExpires.HasValue)
+                                newUser.Properties["accountExpires"].Value = accountExpires.Value;
+
+                            messages.Add($"Fila {lineNumber}: Atributos establecidos - givenName: '{nombre}', sn: '{apellido1} {apellido2}', sAMAccountName: '{username}', userPrincipalName: '{username}@aytosa.inet', displayName: '{displayName}', employeeNumber: '{dni}'" +
+                                (string.IsNullOrEmpty(nTelefono) ? "" : $", telephoneNumber: '{nTelefono}'") +
+                                (string.IsNullOrEmpty(mobileNumber) ? "" : $", mobile: '{mobileExt} {mobileNumber}'") +
+                                (string.IsNullOrEmpty(nFuncionario) ? "" : $", employeeID: '{nFuncionario}'") +
+                                (string.IsNullOrEmpty(ddi) ? "" : $", extensionAttribute1: '{ddi}'") +
+                                (string.IsNullOrEmpty(tarjetaId) ? "" : $", extensionAttribute2: '{tarjetaId}'") +
+                                (string.IsNullOrEmpty(physicalDeliveryOfficeName) ? "" : $", physicalDeliveryOfficeName: '{physicalDeliveryOfficeName}'") +
+                                (string.IsNullOrEmpty(division) ? "" : $", division: '{division}'") +
+                                (accountExpires.HasValue ? $", accountExpires: '{fechaCaducidad}'" : ""));
+                        }
+                        catch (Exception ex)
+                        {
+                            messages.Add($"Fila {lineNumber}: Error al establecer atributos: {ex.Message}");
+                            throw;
+                        }
+
+                        // Guardar cambios iniciales
+                        try
+                        {
+                            newUser.CommitChanges();
+                            messages.Add($"Fila {lineNumber}: Cambios iniciales guardados.");
+                        }
+                        catch (Exception ex)
+                        {
+                            messages.Add($"Fila {lineNumber}: Error al guardar cambios iniciales: {ex.Message}");
+                            throw;
+                        }
+
+                        // Configurar contraseña y activar cuenta
+                        try
+                        {
+                            newUser.Invoke("SetPassword", new object[] { "Temporal2024" });
+                            newUser.Properties["userAccountControl"].Value = 0x200; // Cuenta normal activada
+                            newUser.Properties["pwdLastSet"].Value = 0; // Forzar cambio de contraseña
+                            newUser.CommitChanges();
+                            userCreated = true;
+                            messages.Add($"Fila {lineNumber}: Contraseña configurada y cuenta activada.");
+                        }
+                        catch (Exception ex)
+                        {
+                            messages.Add($"Fila {lineNumber}: Error al configurar contraseña: {ex.Message}");
+                            throw;
                         }
                     }
                     catch (Exception ex)
                     {
-                        messages.Add($"Fila {lineNumber}: Error al crear carpeta personal para '{username}': {ex.Message}");
+                        messages.Add($"Fila {lineNumber}: Error al crear el usuario: {ex.Message}");
                     }
-
-                    // Configurar cuota FSRM (si aplica)
-                    if (!string.IsNullOrEmpty(cuota))
+                    finally
                     {
-                        try
-                        {
-                            messages.Add($"Fila {lineNumber}: Cuota '{cuota}' configurada correctamente para '{username}'.");
-                        }
-                        catch (Exception ex)
-                        {
-                            messages.Add($"Fila {lineNumber}: Error al configurar la cuota para '{username}': {ex.Message}");
-                        }
+                        newUser?.Dispose();
                     }
                 }
 
-                messages.Add($"Fila {lineNumber}: Usuario '{username}' creado correctamente.");
+                messages.Add(userCreated
+                    ? $"Fila {lineNumber}: Usuario '{username}' creado exitosamente en la OU especificada."
+                    : $"Fila {lineNumber}: No se pudo crear el usuario '{username}'.");
             }
             catch (Exception ex)
             {
-                messages.Add($"Fila {lineNumber}: Error al crear el usuario: {ex.Message}");
+                messages.Add($"Fila {lineNumber}: Error general: {ex.Message}");
                 overallSuccess = false;
             }
         }
@@ -391,137 +325,149 @@ public class AltaMasivaController : Controller
         return Json(new { success = overallSuccess, messages = string.Join("\n", messages), message = finalMessage });
     }
 
+    private async Task<string> GetOUPath(string ouName, string parentOU)
+    {
+        try
+        {
+            using (var rootEntry = new DirectoryEntry($"LDAP://{domainPath}"))
+            {
+                using (var searcher = new DirectorySearcher(rootEntry))
+                {
+                    string filter;
+                    if (!string.IsNullOrEmpty(parentOU))
+                    {
+                        // Buscar OU secundaria dentro de OU principal
+                        filter = $"(&(objectClass=organizationalUnit)(ou={ouName})(distinguishedName=OU={ouName},OU=Usuarios y Grupos,OU={parentOU},OU=AREAS,DC=aytosa,DC=inet))";
+                    }
+                    else
+                    {
+                        // Buscar OU principal bajo AREAS
+                        filter = $"(&(objectClass=organizationalUnit)(ou={ouName})(distinguishedName=OU={ouName},OU=AREAS,DC=aytosa,DC=inet))";
+                    }
+
+                    searcher.Filter = filter;
+                    searcher.SearchScope = SearchScope.Subtree;
+                    searcher.PropertiesToLoad.Add("distinguishedName");
+
+                    var result = searcher.FindOne();
+                    if (result != null && result.Properties["distinguishedName"].Count > 0)
+                    {
+                        return result.Properties["distinguishedName"][0]?.ToString();
+                    }
+                    return null;
+                }
+            }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<string> GetOUAttribute(string ouPath, string attribute)
+    {
+        try
+        {
+            using (var ouEntry = new DirectoryEntry($"LDAP://{ouPath}"))
+            {
+                using (var searcher = new DirectorySearcher(ouEntry))
+                {
+                    searcher.Filter = "(objectClass=organizationalUnit)";
+                    searcher.PropertiesToLoad.Add(attribute);
+                    var result = searcher.FindOne();
+                    if (result != null && result.Properties[attribute].Count > 0)
+                    {
+                        return result.Properties[attribute][0]?.ToString();
+                    }
+                    return null;
+                }
+            }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private async Task<string> GenerateUsername(string nombre, string apellido1, string apellido2)
     {
         try
         {
-            string baseUsername = $"{nombre[0]}{apellido1}".ToLower();
-            string username = baseUsername;
-            int suffix = 1;
+            // Normalizar entradas
+            nombre = RemoveAccents(nombre.Trim().ToLower());
+            apellido1 = RemoveAccents(apellido1.Trim().ToLower());
+            apellido2 = RemoveAccents(apellido2.Trim().ToLower());
 
-            while (await CheckUsernameExists(username))
+            // Construir candidatos
+            List<string> candidatos = new List<string>();
+
+            // 1. Inicial del nombre + apellido1 + inicial del apellido2
+            string candidato1 = $"{nombre[0]}{apellido1}{apellido2[0]}";
+            candidatos.Add(candidato1.Substring(0, Math.Min(12, candidato1.Length)));
+
+            // 2. Inicial del nombre + apellido1
+            string candidato2 = $"{nombre[0]}{apellido1}";
+            candidatos.Add(candidato2.Substring(0, Math.Min(12, candidato2.Length)));
+
+            // 3. Apellido1 + inicial del apellido2
+            string candidato3 = $"{apellido1}{apellido2[0]}";
+            candidatos.Add(candidato3.Substring(0, Math.Min(12, candidato3.Length)));
+
+            // Verificar existencia
+            foreach (string candidato in candidatos)
             {
-                username = $"{baseUsername}{suffix}";
-                suffix++;
+                if (!await CheckUserInActiveDirectory(candidato))
+                {
+                    return candidato;
+                }
             }
 
-            return username;
+            // Intentar con sufijos numéricos
+            for (int i = 1; i <= 100; i++)
+            {
+                string candidatoConNumero = $"{candidatos[0]}{i}";
+                if (!await CheckUserInActiveDirectory(candidatoConNumero))
+                {
+                    return candidatoConNumero.Substring(0, Math.Min(12, candidatoConNumero.Length));
+                }
+            }
+
+            return null;
         }
-        catch (Exception ex)
+        catch
         {
-            Console.WriteLine($"Error al generar nombre de usuario: {ex.Message}");
             return null;
         }
     }
 
-    private async Task<bool> CheckUsernameExists(string username)
+    private async Task<bool> CheckUserInActiveDirectory(string username)
     {
         try
         {
-            using (var context = new PrincipalContext(ContextType.Domain, "aytosa.inet"))
+            using (var context = new PrincipalContext(ContextType.Domain))
             {
-                return UserPrincipal.FindByIdentity(context, username) != null;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al verificar nombre de usuario: {ex.Message}");
-            return true; // Asumimos que existe para evitar crear duplicados
-        }
-    }
-
-    private async Task<bool> CheckDniExists(string dni)
-    {
-        try
-        {
-            using (DirectoryEntry entry = new DirectoryEntry($"LDAP://{domainPath}"))
-            using (DirectorySearcher searcher = new DirectorySearcher(entry))
-            {
-                searcher.Filter = $"(&(objectClass=user)(description={dni}))";
-                searcher.SearchScope = SearchScope.Subtree;
-                return searcher.FindOne() != null;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al verificar DNI: {ex.Message}");
-            return true;
-        }
-    }
-
-    private async Task<bool> CheckTelephoneExists(string nTelefono)
-    {
-        try
-        {
-            using (DirectoryEntry entry = new DirectoryEntry($"LDAP://{domainPath}"))
-            using (DirectorySearcher searcher = new DirectorySearcher(entry))
-            {
-                searcher.Filter = $"(&(objectClass=user)(telephoneNumber={nTelefono}))";
-                searcher.SearchScope = SearchScope.Subtree;
-                return searcher.FindOne() != null;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al verificar número de teléfono: {ex.Message}");
-            return true;
-        }
-    }
-
-    private async Task<bool> CheckNumberIdExists(string nFuncionario)
-    {
-        try
-        {
-            using (DirectoryEntry entry = new DirectoryEntry($"LDAP://{domainPath}"))
-            using (DirectorySearcher searcher = new DirectorySearcher(entry))
-            {
-                searcher.Filter = $"(&(objectClass=user)(employeeID={nFuncionario}))";
-                searcher.SearchScope = SearchScope.Subtree;
-                return searcher.FindOne() != null;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al verificar número de funcionario: {ex.Message}");
-            return true;
-        }
-    }
-
-    private async Task<string> GetOUPath(string ouName, string parentOUName)
-    {
-        try
-        {
-            using (DirectoryEntry entry = new DirectoryEntry($"LDAP://{domainPath}"))
-            using (DirectorySearcher searcher = new DirectorySearcher(entry))
-            {
-                if (string.IsNullOrEmpty(parentOUName))
+                using (var user = UserPrincipal.FindByIdentity(context, username))
                 {
-                    // Buscar OU principal
-                    searcher.Filter = $"(&(objectClass=organizationalUnit)(name={ouName}))";
-                    searcher.SearchScope = SearchScope.OneLevel; // Solo nivel superior
+                    return user != null;
                 }
-                else
-                {
-                    // Buscar OU secundaria dentro de la OU principal
-                    string parentOUPath = await GetOUPath(parentOUName, null);
-                    if (string.IsNullOrEmpty(parentOUPath)) return null;
-
-                    searcher.SearchRoot = new DirectoryEntry($"LDAP://{parentOUPath}");
-                    searcher.Filter = $"(&(objectClass=organizationalUnit)(name={ouName}))";
-                    searcher.SearchScope = SearchScope.OneLevel; // Solo sub-OUs
-                }
-
-                searcher.PropertiesToLoad.Add("distinguishedName");
-                var result = searcher.FindOne();
-                return result?.Properties["distinguishedName"]?.Count > 0
-                    ? result.Properties["distinguishedName"][0].ToString()
-                    : null;
             }
         }
-        catch (Exception ex)
+        catch
         {
-            Console.WriteLine($"Error al buscar OU '{ouName}': {ex.Message}");
-            return null;
+            return true; // Asumir que existe en caso de error
         }
+    }
+
+    private static string RemoveAccents(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+
+        text = text.Normalize(NormalizationForm.FormD);
+        char[] chars = text
+            .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+            .ToArray();
+
+        return new string(chars).Normalize(NormalizationForm.FormC);
     }
 }
