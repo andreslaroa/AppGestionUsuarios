@@ -191,70 +191,78 @@ public class BajaUsuarioController : Controller
                                 messages.Add($"Error al eliminar usuario de grupos: {ex.Message}\nStackTrace: {ex.StackTrace}. Continuando con el proceso...");
                             }
 
-                            // 2. Eliminar la carpeta personal del usuario (si existe)
-                            string userFolderPath = $"\\\\fs1.aytosa.inet\\home\\{username}";
-                            try
-                            {
-                                if (Directory.Exists(userFolderPath))
-                                {
-                                    Directory.Delete(userFolderPath, true);
-                                    messages.Add($"Carpeta de usuario '{userFolderPath}' eliminada correctamente.");
-                                }
-                                else
-                                {
-                                    messages.Add($"Carpeta de usuario '{userFolderPath}' no encontrada, no se eliminó.");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                messages.Add($"Error al eliminar carpeta personal del usuario '{username}': {ex.Message}\nStackTrace: {ex.StackTrace}. Continuando con el proceso...");
-                            }
+                            // 2) Eliminar la cuota FSRM asociada en Leonardo
+                            string serverName = "LEONARDO";
+                            string quotaPathBase = @"C:\Home";
+                            string quotaPath = Path.Combine(quotaPathBase, username);
 
-                            // 3. Eliminar la cuota FSRM asociada
-                            string quotaPath = $"G:\\home\\{username}";
-                            string serverName = "ribera";
                             try
                             {
-                                Type fsrmQuotaManagerType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", serverName);
-                                if (fsrmQuotaManagerType == null)
+                                Type qmType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", serverName);
+                                if (qmType == null)
                                 {
-                                    messages.Add($"No se pudo crear una instancia de FsrmQuotaManager en {serverName}. Continuando con el proceso...");
+                                    messages.Add($"[WARN] FsrmQuotaManager no disponible en {serverName}, omito eliminación de cuota.");
                                 }
                                 else
                                 {
-                                    dynamic quotaManager = Activator.CreateInstance(fsrmQuotaManagerType);
+                                    dynamic qm = Activator.CreateInstance(qmType);
                                     try
                                     {
+                                        // 3.1) Intentar obtener el objeto cuota
                                         dynamic existingQuota = null;
                                         try
                                         {
-                                            existingQuota = quotaManager.GetQuota(quotaPath);
+                                            existingQuota = qm.GetQuota(quotaPath);
                                         }
-                                        catch { /* Ignorar si no existe */ }
+                                        catch
+                                        {
+                                            // no existía ninguna cuota en esa ruta
+                                        }
 
                                         if (existingQuota != null)
                                         {
-                                            quotaManager.DeleteQuota(quotaPath);
-                                            messages.Add($"Cuota FSRM eliminada para '{quotaPath}'.");
+                                            messages.Add($"[DEBUG] Cuota localizada en {quotaPath}, eliminando…");
+                                            // 3.2) Llamamos a Delete() sobre el objeto cuota
+                                            existingQuota.Delete();
+                                            messages.Add($"[OK] Cuota FSRM eliminada para '{quotaPath}'.");
                                         }
                                         else
                                         {
-                                            messages.Add($"No se encontró cuota FSRM para '{quotaPath}'.");
+                                            messages.Add($"[INFO] No se encontró cuota FSRM para '{quotaPath}'.");
                                         }
                                     }
                                     finally
                                     {
-                                        if (quotaManager != null)
-                                        {
-                                            Marshal.ReleaseComObject(quotaManager);
-                                        }
+                                        Marshal.ReleaseComObject(qm);
                                     }
                                 }
                             }
                             catch (Exception ex)
                             {
-                                messages.Add($"Error al eliminar la cuota FSRM para '{username}': {ex.Message}\nStackTrace: {ex.StackTrace}. Continuando con el proceso...");
+                                messages.Add($"[ERROR] Al eliminar cuota FSRM en {serverName}: {ex.Message}");
                             }
+
+                            // 3) Ahora sí borra la carpeta personal (si no lo hiciste antes)
+                            string shareBase = $@"\\{serverName}\Home";
+                            string userFolder = Path.Combine(shareBase, username);
+                            try
+                            {
+                                if (Directory.Exists(userFolder))
+                                {
+                                    Directory.Delete(userFolder, true);
+                                    messages.Add($"[OK] Carpeta eliminada: {userFolder}");
+                                }
+                                else
+                                {
+                                    messages.Add($"[INFO] Carpeta no encontrada: {userFolder}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                messages.Add($"[ERROR] Al eliminar carpeta {userFolder}: {ex.GetType().Name} – {ex.Message}");
+                            }
+
+
 
                             // 4. Deshabilitar al usuario
                             try

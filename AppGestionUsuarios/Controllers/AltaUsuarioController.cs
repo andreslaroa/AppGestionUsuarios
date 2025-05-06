@@ -22,6 +22,12 @@ using System.Runtime.InteropServices; // Para COM
 public class AltaUsuarioController : Controller
 {
 
+    private readonly IConfiguration _config;
+
+    public AltaUsuarioController(IConfiguration config)
+    {
+        _config = config;
+    }
 
     public class UserModelAltaUsuario
     {
@@ -73,33 +79,23 @@ public class AltaUsuarioController : Controller
     private List<string> GetGruposFromAD()
     {
         var grupos = new List<string>();
+        string baseLdap = _config["ActiveDirectory:BaseLdapPrefix"]
+                        + _config["ActiveDirectory:DomainComponents"];
 
-        try
+        using (var entry = new DirectoryEntry(baseLdap))
         {
-            using (var entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
+            using (var searcher = new DirectorySearcher(entry))
             {
-                using (var searcher = new DirectorySearcher(entry))
-                {
-                    searcher.Filter = "(objectClass=group)";
-                    searcher.PropertiesToLoad.Add("cn");
-                    searcher.SearchScope = SearchScope.Subtree;
-                    searcher.PageSize = 1000;
+                searcher.Filter = "(objectClass=group)";
+                searcher.PropertiesToLoad.Add("cn");
+                searcher.SearchScope = SearchScope.Subtree;
+                searcher.PageSize = 1000;
 
-                    foreach (SearchResult result in searcher.FindAll())
-                    {
-                        if (result.Properties.Contains("cn"))
-                        {
-                            grupos.Add(result.Properties["cn"][0].ToString());
-                        }
-                    }
-                }
+                foreach (SearchResult result in searcher.FindAll())
+                    if (result.Properties.Contains("cn"))
+                        grupos.Add(result.Properties["cn"][0].ToString());
             }
         }
-        catch (Exception ex)
-        {
-            throw new Exception("Error al obtener los grupos del Active Directory: " + ex.Message, ex);
-        }
-
         return grupos;
     }
 
@@ -309,11 +305,14 @@ public class AltaUsuarioController : Controller
     [HttpPost]
     public IActionResult CreateUser([FromBody] UserModelAltaUsuario user)
     {
-        // Configuración de entorno (cambiar según el entorno: pruebas o producción)
-        string serverName = "LEONARDO"; // Cambiar a "RIBERA" en producción
-        string folderPathBase = @"\\LEONARDO\Home"; // Cambiar a @"\\fs1.aytosa.inet\home\" en producción
-        string quotaPathBase = @"C:\Home"; // Cambiar a @"G:\home\" en producción
+        // 1) Leemos la configuración de fichero
+        string serverName = _config["FsConfig:ServerName"];
+        string folderPathBase = _config["FsConfig:ShareBase"];
+        string quotaPathBase = _config["FsConfig:QuotaPathBase"];
 
+        // 2) Construimos rutas sin hard-codear ningún literal
+        string uncUserFolder = Path.Combine(folderPathBase, user.Username);
+        string localQuotaPath = Path.Combine(quotaPathBase, user.Username);
 
 
         // Validar si los datos se recibieron correctamente
@@ -662,6 +661,13 @@ public class AltaUsuarioController : Controller
                                 ds.AddAccessRule(new FileSystemAccessRule(
                                     new NTAccount($"aytosa\\{user.Username}"),
                                     FileSystemRights.ReadAndExecute | FileSystemRights.Write | FileSystemRights.DeleteSubdirectoriesAndFiles,
+                                    InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                                    PropagationFlags.None,
+                                    AccessControlType.Allow));
+
+                                ds.AddAccessRule(new FileSystemAccessRule(
+                                    new NTAccount("AYTOSA\\adm_andres"),
+                                    FileSystemRights.FullControl,
                                     InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                     PropagationFlags.None,
                                     AccessControlType.Allow));
