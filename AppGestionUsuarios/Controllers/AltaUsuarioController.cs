@@ -311,8 +311,10 @@ public class AltaUsuarioController : Controller
     {
         // Configuración de entorno (cambiar según el entorno: pruebas o producción)
         string serverName = "LEONARDO"; // Cambiar a "RIBERA" en producción
-        string folderPathBase = @"\\LEONARDO\Home\"; // Cambiar a @"\\fs1.aytosa.inet\home\" en producción
-        string quotaPathBase = @"C:\Home\"; // Cambiar a @"G:\home\" en producción
+        string folderPathBase = @"\\LEONARDO\Home"; // Cambiar a @"\\fs1.aytosa.inet\home\" en producción
+        string quotaPathBase = @"C:\Home"; // Cambiar a @"G:\home\" en producción
+
+
 
         // Validar si los datos se recibieron correctamente
         if (user == null)
@@ -743,7 +745,20 @@ public class AltaUsuarioController : Controller
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"Error al establecer los atributos opcionales del usuario: {ex.Message}");
+                    errors.Add($"[FATAL] Excepción inesperada en CreateUser: {ex.Message}");
+                }
+                finally
+                {
+                    // **Aquí sólo escribimos el log, sin devolver nada**
+                    try
+                    {
+                        System.IO.File.WriteAllText(@"C:\Temp\AltaUsuario.log",
+                            string.Join(Environment.NewLine, errors));
+                    }
+                    catch
+                    {
+                        // ignorar fallos al escribir el log
+                    }
                 }
             }
         }
