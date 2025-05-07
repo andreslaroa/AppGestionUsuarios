@@ -1250,7 +1250,7 @@ public class AltaUsuarioController : Controller
 
 
     //Función para buscar el grupo en el dominio del directorio activo
-    private DirectoryEntry FindGroupByName(string groupName)
+    public DirectoryEntry FindGroupByName(string groupName)
     {
         if (string.IsNullOrEmpty(groupName))
         {

@@ -92,7 +92,7 @@ public class AltaMasivaController : Controller
     [HttpPost]
     public JsonResult ProcessUsers([FromBody] List<Dictionary<string, object>> usersRaw)
     {
-        var messages = new List<string>();
+        var summaryMessages = new List<string>();
         bool overallSuccess = true;
 
         // 1) Validación inicial
@@ -102,16 +102,16 @@ public class AltaMasivaController : Controller
             {
                 success = false,
                 message = "No se han enviado usuarios para procesar.",
-                messages
+                messages = summaryMessages
             });
         }
-        messages.Add($"▶ ProcessUsers: recibidas {usersRaw.Count} filas.");
+        summaryMessages.Add($"▶ ProcessUsers: recibidas {usersRaw.Count} filas.");
 
-        // 2) Iteramos cada fila del Excel
+        // 2) Iterar cada fila
         for (int i = 0; i < usersRaw.Count; i++)
         {
-            int fila = i + 2;
-            messages.Add($"-- Fila {fila} --");
+            int rowNumber = i + 2;
+            summaryMessages.Add($"-- Fila {rowNumber} --");
 
             var dict = usersRaw[i];
             string get(string key) =>
@@ -119,130 +119,198 @@ public class AltaMasivaController : Controller
                     ? v.ToString().Trim()
                     : "";
 
-            try
+            // 2.1) Mapear modelo básico
+            var model = new AltaUsuarioController.UserModelAltaUsuario
             {
-                // 2.1) Mapear campos
-                var model = new AltaUsuarioController.UserModelAltaUsuario
-                {
-                    Nombre = get("Nombre"),
-                    Apellido1 = get("Apellido1"),
-                    Apellido2 = get("Apellido2"),
-                    DNI = get("DNI"),
-                    OUPrincipal = get("OUPrincipal"),
-                    OUSecundaria = get("OUSecundaria"),
-                    Cuota = get("Cuota"),
-                    // Opcionales
-                    NTelefono = string.IsNullOrEmpty(get("nTelefono")) ? null : get("nTelefono"),
-                    ExtensionMovil = string.IsNullOrEmpty(get("MobileExt")) ? null : get("MobileExt"),
-                    NumeroLargoMovil = string.IsNullOrEmpty(get("MobileNumber")) ? null : get("MobileNumber"),
-                    TarjetaIdentificativa = string.IsNullOrEmpty(get("TarjetaId")) ? null : get("TarjetaId"),
-                    NFuncionario = string.IsNullOrEmpty(get("nFuncionario")) ? null : get("nFuncionario"),
-                    // Grupos separados por espacio
-                    Grupos = get("Grupos")
-                                                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                                                .ToList()
-                };
-                messages.Add($"  Modelo mapeado: {model.Nombre} {model.Apellido1} {model.Apellido2}");
+                Nombre = get("Nombre"),
+                Apellido1 = get("Apellido1"),
+                Apellido2 = get("Apellido2"),
+                DNI = get("DNI"),
+                OUPrincipal = get("OUPrincipal"),
+                OUSecundaria = get("OUSecundaria"),
+                Cuota = get("Cuota"),
+                NTelefono = string.IsNullOrEmpty(get("nTelefono")) ? null : get("nTelefono"),
+                ExtensionMovil = string.IsNullOrEmpty(get("MobileExt")) ? null : get("MobileExt"),
+                NumeroLargoMovil = string.IsNullOrEmpty(get("MobileNumber")) ? null : get("MobileNumber"),
+                TarjetaIdentificativa = string.IsNullOrEmpty(get("TarjetaId")) ? null : get("TarjetaId"),
+                NFuncionario = string.IsNullOrEmpty(get("nFuncionario")) ? null : get("nFuncionario")
+            };
 
-                // 2.2) Parsear fecha de caducidad dd/MM/yyyy
-                var rawFecha = get("FechaCaducidad");
-                if (DateTime.TryParseExact(rawFecha, "dd/MM/yyyy",
-                                           CultureInfo.InvariantCulture,
-                                           DateTimeStyles.None,
-                                           out var fechaCad))
+            // 2.2) Validar OU principal
+            if (!OuPrincipalExiste(model.OUPrincipal))
+            {
+                summaryMessages.Add($"Fila {rowNumber}: Error: la OU principal '{model.OUPrincipal}' no existe.");
+                overallSuccess = false;
+                continue;
+            }
+
+            // 2.3) Validar OU secundaria (si se indicó)
+            if (!string.IsNullOrEmpty(model.OUSecundaria)
+                && !OuSecundariaExiste(model.OUPrincipal, model.OUSecundaria))
+            {
+                summaryMessages.Add($"Fila {rowNumber}: Error: la OU secundaria '{model.OUSecundaria}' no existe bajo '{model.OUPrincipal}'.");
+                overallSuccess = false;
+                continue;
+            }
+
+            // 2.4) Unicidad: DNI
+            if (!string.IsNullOrEmpty(model.DNI))
+            {
+                dynamic dniData = (_altaUsuarioController.CheckDNIExists(
+                    new Dictionary<string, string> { ["dni"] = model.DNI }) as JsonResult)?.Value;
+                if (dniData?.success == true && (bool)dniData.exists)
+                {
+                    summaryMessages.Add($"Fila {rowNumber}: Error: el DNI '{model.DNI}' ya existe.");
+                    overallSuccess = false;
+                    continue;
+                }
+            }
+
+            // 2.5) Unicidad: Teléfono fijo
+            if (!string.IsNullOrEmpty(model.NTelefono))
+            {
+                dynamic telData = (_altaUsuarioController.CheckTelephoneExists(
+                    new Dictionary<string, string> { ["nTelefono"] = model.NTelefono }) as JsonResult)?.Value;
+                if (telData?.success == true && (bool)telData.exists)
+                {
+                    summaryMessages.Add($"Fila {rowNumber}: Error: el teléfono '{model.NTelefono}' ya existe.");
+                    overallSuccess = false;
+                    continue;
+                }
+            }
+
+            // 2.6) Unicidad: Nº Funcionario
+            if (!string.IsNullOrEmpty(model.NFuncionario))
+            {
+                dynamic funData = (_altaUsuarioController.CheckNumberIdExists(
+                    new Dictionary<string, string> { ["nFuncionario"] = model.NFuncionario }) as JsonResult)?.Value;
+                if (funData?.success == true && (bool)funData.exists)
+                {
+                    summaryMessages.Add($"Fila {rowNumber}: Error: el número de funcionario '{model.NFuncionario}' ya existe.");
+                    overallSuccess = false;
+                    continue;
+                }
+            }
+
+            // 2.7) Parseo y validación de Grupos
+            var grupos = get("Grupos")
+                .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => s.Length > 0)
+                .ToList();
+            model.Grupos = grupos;
+
+            var missing = GetMissingGroups(grupos);
+            if (missing.Any())
+            {
+                summaryMessages.Add($"Fila {rowNumber}: Error: no existen en AD los grupos [{string.Join(", ", missing)}].");
+                overallSuccess = false;
+                continue;
+            }
+
+            // 2.8) Parseo de FechaCaducidad (dd/MM/yyyy o ISO yyyy-MM-dd)
+            var rawFecha = get("FechaCaducidad");
+            if (!string.IsNullOrEmpty(rawFecha))
+            {
+                DateTime parsedDate;
+                if (DateTime.TryParseExact(rawFecha, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedDate)
+                 || DateTime.TryParse(rawFecha, out parsedDate))
                 {
                     model.FechaCaducidadOp = "si";
-                    model.FechaCaducidad = fechaCad;
-                    messages.Add($"  FechaCaducidad parseada: {fechaCad:dd/MM/yyyy}");
+                    model.FechaCaducidad = parsedDate;
                 }
                 else
                 {
                     model.FechaCaducidadOp = "no";
-                    messages.Add("  Sin FechaCaducidad");
                 }
+            }
+            else
+            {
+                model.FechaCaducidadOp = "no";
+            }
 
-                // 2.3) Generar Username automáticamente
-                messages.Add("  Generando Username...");
-                var userInput = new userInputModel
+            // 2.9) Generar Username
+            dynamic genData = (_altaUsuarioController.GenerateUsername(
+                new userInputModel
                 {
                     Nombre = model.Nombre,
                     Apellido1 = model.Apellido1,
                     Apellido2 = model.Apellido2
-                };
-                var genJson = _altaUsuarioController.GenerateUsername(userInput) as JsonResult;
-                dynamic genData = genJson?.Value;
-                model.Username = (genData?.success == true) ? genData.username : null;
-                messages.Add($"  Username generado: '{model.Username}'");
-                if (string.IsNullOrEmpty(model.Username))
-                    messages.Add("  ⚠️ Username vacío, CreateUser podría fallar.");
-
-                // 2.4) Obtener Departamento desde AltaUsuarioController
-                messages.Add("  Obteniendo Departamento...");
-                var depJson = _altaUsuarioController.GetDepartamento(
-                    new Dictionary<string, string>
-                    {
-                        ["ouPrincipal"] = model.OUPrincipal,
-                        ["ouSecundaria"] = model.OUSecundaria
-                    }) as JsonResult;
-                dynamic depData = depJson?.Value;
-                model.Departamento = (depData?.success == true) ? depData.departamento : null;
-                messages.Add($"  Departamento: '{model.Departamento}'");
-
-                // 2.5) Obtener LugarEnvio
-                messages.Add("  Obteniendo LugarEnvio...");
-                var lugJson = _altaUsuarioController.GetLugarEnvio(
-                    new Dictionary<string, string>
-                    {
-                        ["ouPrincipal"] = model.OUPrincipal,
-                        ["ouSecundaria"] = model.OUSecundaria
-                    }) as JsonResult;
-                dynamic lugData = lugJson?.Value;
-                model.LugarEnvio = (lugData?.success == true) ? lugData.lugarEnvio : null;
-                messages.Add($"  LugarEnvio: '{model.LugarEnvio}'");
-
-                // 2.6) Llamar a CreateUser
-                messages.Add("  Llamando a CreateUser...");
-                var createJson = _altaUsuarioController.CreateUser(model) as JsonResult;
-                dynamic createData = createJson?.Value;
-                bool created = createData?.success ?? false;
-                string msg = createData?.message ?? "[sin mensaje]";
-                messages.Add($"  CreateUser → success={created}, message='{msg}'");
-                if (!created) overallSuccess = false;
-            }
-            catch (Exception ex)
+                }) as JsonResult)?.Value;
+            model.Username = genData?.success == true ? genData.username : null;
+            if (string.IsNullOrEmpty(model.Username))
             {
-                messages.Add($"  ❌ Excepción fila {fila}: {ex.GetType().Name}: {ex.Message}");
+                summaryMessages.Add($"Fila {rowNumber}: Error: no se pudo generar nombre de usuario.");
+                overallSuccess = false;
+                continue;
+            }
+
+            // 2.10) Obtener Departamento y LugarEnvio
+            dynamic depData = (_altaUsuarioController.GetDepartamento(
+                new Dictionary<string, string>
+                {
+                    ["ouPrincipal"] = model.OUPrincipal,
+                    ["ouSecundaria"] = model.OUSecundaria
+                }) as JsonResult)?.Value;
+            model.Departamento = depData?.success == true ? depData.departamento : null;
+
+            dynamic lugData = (_altaUsuarioController.GetLugarEnvio(
+                new Dictionary<string, string>
+                {
+                    ["ouPrincipal"] = model.OUPrincipal,
+                    ["ouSecundaria"] = model.OUSecundaria
+                }) as JsonResult)?.Value;
+            model.LugarEnvio = lugData?.success == true ? lugData.lugarEnvio : null;
+
+            // 2.11) Crear usuario
+            dynamic createData = (_altaUsuarioController.CreateUser(model) as JsonResult)?.Value;
+            bool created = createData?.success ?? false;
+            if (created)
+            {
+                summaryMessages.Add($"Fila {rowNumber}: Éxito");
+            }
+            else
+            {
+                summaryMessages.Add($"Fila {rowNumber}: Error: {createData?.message ?? "desconocido"}");
                 overallSuccess = false;
             }
         }
 
-        messages.Add("▶ Fin de ProcessUsers");
-
+        // 3) Devolver resultado
         return Json(new
         {
             success = overallSuccess,
             message = overallSuccess
-                       ? "Alta masiva completada con éxito (ver detalles)."
-                       : "Se produjeron errores en la alta masiva (ver detalles).",
-            messages
+                       ? "Alta masiva completada con éxito."
+                       : "Se produjeron errores en algunas filas.",
+            messages = summaryMessages
         });
     }
 
 
 
-    // ---------------------------------------------------
-    // Helper para convertir la cadena de grupos en List<string>
-    // ---------------------------------------------------
-    private List<string> ParseGrupos(string raw)
+
+
+
+
+
+
+    /// Divide la cadena cruda de grupos separada por ';' y devuelve la lista limpia.
+    /// Si la cadena está vacía, devuelve lista vacía.
+    /// </summary>
+    private List<string> ParseGrupos(string rawGrupos)
     {
-        if (string.IsNullOrWhiteSpace(raw))
+        if (string.IsNullOrWhiteSpace(rawGrupos))
             return new List<string>();
-        return raw
-            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+
+        return rawGrupos
+            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(g => g.Trim())
-            .Where(g => g.Length > 0)
+            .Where(g => !string.IsNullOrEmpty(g))
             .ToList();
     }
+
+
 
     private async Task<string> GetOUPath(string ouName, string parentOU)
     {
@@ -388,5 +456,103 @@ public class AltaMasivaController : Controller
             .ToArray();
 
         return new string(chars).Normalize(NormalizationForm.FormC);
+    }
+
+    /// <summary>
+    /// Comprueba si existe la OU principal bajo OU=AREAS,DC=aytosa,DC=inet
+    /// </summary>
+    private bool OuPrincipalExiste(string ouPrincipal)
+    {
+        if (string.IsNullOrWhiteSpace(ouPrincipal))
+            return false;
+
+        // Base de búsqueda: OU=AREAS,DC=aytosa,DC=inet
+        using var entry = new DirectoryEntry("LDAP://OU=AREAS,DC=aytosa,DC=inet");
+        using var searcher = new DirectorySearcher(entry)
+        {
+            Filter = $"(&(objectClass=organizationalUnit)(ou={ouPrincipal}))",
+            SearchScope = SearchScope.OneLevel
+        };
+
+        return searcher.FindOne() != null;
+    }
+
+    /// <summary>
+    /// Comprueba si existe la OU secundaria bajo
+    ///     OU=Usuarios y Grupos,OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet
+    /// </summary>
+    private bool OuSecundariaExiste(string ouPrincipal, string ouSecundaria)
+    {
+        if (string.IsNullOrWhiteSpace(ouSecundaria))
+            return true;  // no es obligatorio
+
+        // Base de búsqueda: OU=Usuarios y Grupos bajo la OU principal
+        string ldapPath = $"LDAP://OU=Usuarios y Grupos,OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+        using var entry = new DirectoryEntry(ldapPath);
+        using var searcher = new DirectorySearcher(entry)
+        {
+            Filter = $"(&(objectClass=organizationalUnit)(ou={ouSecundaria}))",
+            SearchScope = SearchScope.OneLevel
+        };
+
+        return searcher.FindOne() != null;
+    }
+
+    /// <summary>
+    /// Escapa los caracteres especiales según RFC2254 para usar en filtros LDAP.
+    /// </summary>
+    private string EscapeLdapSearchFilter(string input)
+    {
+        if (input == null) return null;
+        return input
+            .Replace("\\", "\\5c")
+            .Replace("*", "\\2a")
+            .Replace("(", "\\28")
+            .Replace(")", "\\29")
+            .Replace("\0", "\\00");
+    }
+
+
+    /// <summary>
+    /// Devuelve la lista de grupos que NO se encontraron en el AD.
+    /// </summary>
+    private List<string> GetMissingGroups(IEnumerable<string> grupos)
+    {
+        var missing = new List<string>();
+        if (grupos == null || !grupos.Any())
+            return missing;
+
+        // 1) Obtén el contexto de naming (dominio) dinámicamente
+        string namingContext;
+        using (var rootDse = new DirectoryEntry("LDAP://RootDSE"))
+        {
+            namingContext = rootDse.Properties["defaultNamingContext"][0].ToString();
+        }
+
+        // 2) Crea el DirectoryEntry raíz
+        using var domainEntry = new DirectoryEntry($"LDAP://{namingContext}");
+        using var searcher = new DirectorySearcher(domainEntry)
+        {
+            SearchScope = SearchScope.Subtree
+        };
+
+        // 3) Solo necesitamos buscar por cn y objectCategory=group
+        searcher.PropertiesToLoad.Clear();
+        searcher.PropertiesToLoad.Add("cn");
+
+        foreach (var grupo in grupos)
+        {
+            if (string.IsNullOrWhiteSpace(grupo))
+                continue;
+
+            var esc = EscapeLdapSearchFilter(grupo);
+            searcher.Filter = $"(&(objectCategory=group)(cn={esc}))";
+
+            var result = searcher.FindOne();
+            if (result == null)
+                missing.Add(grupo);
+        }
+
+        return missing;
     }
 }

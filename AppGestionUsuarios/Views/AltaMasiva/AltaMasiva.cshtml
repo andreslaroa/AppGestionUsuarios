@@ -4,11 +4,63 @@
 }
 
 @section Styles {
-        <style>
-        .container { max-width:1200px; margin:20px auto; background:#fff; padding:20px; }
-        /* tus estilos… */
-        </style>
+      <style>
+        .container {
+          max-width: 100%;
+          padding: 10px;
+          font-family: 'Segoe UI', Tahoma, sans-serif;
+        }
+
+        /* TABLA: layout fijo, ancho al 100%, letra algo más grande */
+        #usersTable {
+          width: 100%;
+          table-layout: fixed;
+          border-collapse: collapse;
+          font-size: 12px;      /* aumentado */
+        }
+
+        /* Celdas: permiten wrap, vertical-align top para que empiece en la parte superior */
+        #usersTable th,
+        #usersTable td {
+          border: 1px solid #ddd;
+          padding: 6px;         /* un poco más de padding para altura */
+          overflow: visible;    /* mostrar todo el contenido */
+          white-space: normal;  /* permitir salto de línea */
+          vertical-align: top;  /* alinea arriba si hay varias líneas */
+        }
+
+        /* Inputs y selects: fuente más grande y permiten texto multilínea */
+        #usersTable input[type="text"],
+        #usersTable input[type="date"],
+        #usersTable select {
+          width: 100%;
+          font-size: 11px;      /* aumentado */
+          padding: 4px;         /* más espacio interno */
+          margin: 0;
+          box-sizing: border-box;
+          white-space: normal;  /* si el valor es largo, se envuelve */
+          height: auto;         /* altura automática según contenido */
+        }
+
+        /* Botones un poco más grandes */
+        button {
+          font-size: 12px;
+          padding: 8px 12px;
+        }
+
+        /* Mensajes y lista de detalles */
+        #message {
+          font-size: 12px;
+          margin-top: 8px;
+        }
+        #detailsList {
+          font-size: 11px;
+          margin-top: 4px;
+          padding-left: 16px;
+        }
+      </style>
 }
+
 
 <div class="container">
     <h1>@ViewBag.Title</h1>
