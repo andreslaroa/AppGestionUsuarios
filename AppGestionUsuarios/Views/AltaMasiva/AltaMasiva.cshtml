@@ -1,468 +1,185 @@
 ﻿@{
     ViewBag.Title = "Alta Masiva de Usuarios";
+    Layout = "_Layout";
 }
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@ViewBag.Title</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #F5F5F5;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background-color: #FFFFFF;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #A42327;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: #333;
-        }
-        input[type="file"], button {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid #CCC;
-            border-radius: 6px;
-            background-color: #F9F9F9;
-        }
-        button {
-            background-color: #A42327;
-            color: #FFFFFF;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover:not(:disabled) {
-            background-color: #7E1C20;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        select, input[type="text"], input[type="date"] {
-            width: 100%;
-            padding: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        input[readonly] {
-            background-color: #e9ecef;
-        }
-        #message {
-            margin-top: 20px;
-            font-weight: bold;
-        }
-        #detailsList {
-            margin-top: 10px;
-            padding-left: 20px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>@ViewBag.Title</h1>
+@section Styles {
+        <style>
+        .container { max-width:1200px; margin:20px auto; background:#fff; padding:20px; }
+        /* tus estilos… */
+        </style>
+}
 
-        <div>
-            <label for="fileInput">Cargar archivo Excel (.xlsx):</label>
-            <input type="file" id="fileInput" accept=".xlsx" />
-            <button type="button" onclick="loadFile()">Cargar Datos</button>
-        </div>
+<div class="container">
+    <h1>@ViewBag.Title</h1>
 
-        <div id="usersTableContainer" style="display: none;">
-            <table id="usersTable">
-                <thead>
-                    <tr>
-                        <th>Nombre</th>
-                        <th>Apellido1</th>
-                        <th>Apellido2</th>
-                        <th>DNI</th>
-                        <th>Ext. Teléfono</th>
-                        <th>DDI</th>
-                        <th>Ext. Móvil</th>
-                        <th>Número Móvil</th>
-                        <th>Tarjeta Id</th>
-                        <th>Nº Funcionario</th>
-                        <th>OU Principal</th>
-                        <th>OU Secundaria</th>
-                        <th>Fecha Caducidad Op</th>
-                        <th>Fecha Caducidad</th>
-                        <th>Cuota</th>
-                        <th>Grupos</th>
-                        <th>Username</th>
-                        <th>Departamento</th>
-                        <th>Lugar de Envío</th>
-                    </tr>
-                </thead>
-                <tbody id="usersTableBody"></tbody>
-            </table>
-            <button type="button" onclick="processUsers()">Confirmar Alta Masiva</button>
-        </div>
+    <div class="form-group">
+        <label for="file">Selecciona el archivo Excel (.xlsx):</label>
+        <input type="file"
+               id="file"
+               name="file"
+               accept=".xlsx"
+               class="form-control" />
+    </div>
+    <button type="button"
+            id="btnLoad"
+            class="btn btn-primary mb-3">
+        Cargar Datos
+    </button>
 
-        <div id="message"></div>
-        <ul id="detailsList"></ul>
+    <div id="usersTableContainer" style="display:none;">
+        <table id="usersTable" class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Apellido1</th>
+                    <th>Apellido2</th>
+                    <th>DNI</th>
+                    <th>OU Principal</th>
+                    <th>OU Secundaria</th>
+                    <th>FechaCaducidad</th>
+                    <th>nTelefono</th>
+                    <th>MobileExt</th>
+                    <th>MobileNumber</th>
+                    <th>TarjetaId</th>
+                    <th>nFuncionario</th>
+                    <th>Grupos</th>
+                </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+        </table>
+        <button type="button"
+                id="btnProcess"
+                class="btn btn-success">
+            Confirmar Alta Masiva
+        </button>
     </div>
 
-    <script>
-        let usersData = [];
-        const ouPrincipales = @Html.Raw(Json.Serialize(ViewBag.OUPrincipales as List<string>));
-        const cuotas = @Html.Raw(Json.Serialize(ViewBag.Cuota as List<string>));
-        const gruposAD = @Html.Raw(Json.Serialize(ViewBag.GruposAD as List<string>));
+    <div id="message" class="mt-3 font-weight-bold"></div>
+    <ul id="detailsList"></ul>
+</div>
 
-                async function loadFile() {
-            const fileInput = document.getElementById('fileInput');
-            if (!fileInput.files.length) {
-                alert('Por favor, seleccione un archivo Excel (.xlsx).');
+@section Scripts {
+        <script>
+        let usersData = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('btnLoad')
+                    .addEventListener('click', loadFile);
+            document.getElementById('btnProcess')
+                    .addEventListener('click', processUsers);
+        });
+
+        async function loadFile() {
+            const input = document.getElementById('file');
+            if (!input.files.length) {
+                alert('Seleccione un archivo .xlsx antes de continuar.');
                 return;
             }
-
-            const file = fileInput.files[0];
-            const formData = new FormData();
-            formData.append('file', file);
+            const fd = new FormData();
+            fd.append('file', input.files[0]);
 
             try {
-                const response = await fetch('/AltaMasiva/LoadFile', {
+                const res = await fetch('/AltaMasiva/LoadFile', {
                     method: 'POST',
-                    body: formData
+                    body: fd
                 });
-
-                const data = await response.json();
+                const data = await res.json();
                 if (!data.success) {
                     alert(data.message);
                     return;
                 }
-
                 usersData = data.users;
-                console.log('Datos recibidos del servidor (usersData):', usersData); // Depuración
-                if (!usersData || usersData.length === 0) {
-                    alert('No se encontraron usuarios válidos en el archivo Excel.');
-                    return;
-                }
-
                 displayUsersTable();
-            } catch (error) {
-                console.error('Error al cargar el archivo:', error);
-                alert('Ocurrió un error al cargar el archivo.');
+            } catch (e) {
+                console.error(e);
+                alert('Error al cargar el archivo.');
             }
         }
 
-        async function displayUsersTable() {
-            const tableBody = document.getElementById('usersTableBody');
-            tableBody.innerHTML = '';
+        function displayUsersTable() {
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
             document.getElementById('usersTableContainer').style.display = 'block';
 
-            console.log('Iniciando renderizado de la tabla con usersData:', usersData); // Depuración
+            usersData.forEach((u, i) => {
+                const row = document.createElement('tr');
 
-            for (let i = 0; i < usersData.length; i++) {
-                try {
-                    const user = usersData[i];
-                    console.log(`Procesando usuario en índice ${i}:`, user); // Depuración
+                // función helper para inputs
+                const inp = (val, field) =>
+                    `<input type="text" value="${val||''}" onchange="updateUser(${i},'${field}',this.value)" />`;
 
-                    // Asegurar que todas las propiedades estén definidas, proporcionando valores por defecto
-                    const safeUser = {
-                        Nombre: user.Nombre || '',
-                        Apellido1: user.Apellido1 || '',
-                        Apellido2: user.Apellido2 || '',
-                        DNI: user.DNI || '',
-                        nTelefono: user.nTelefono || '',
-                        DDI: user.DDI || '',
-                        MobileExt: user.MobileExt || '',
-                        MobileNumber: user.MobileNumber || '',
-                        TarjetaId: user.TarjetaId || '',
-                        nFuncionario: user.nFuncionario || '',
-                        OUPrincipal: user.OUPrincipal || '',
-                        OUSecundaria: user.OUSecundaria || '',
-                        FechaCaducidadOp: user.FechaCaducidadOp || 'no',
-                        FechaCaducidad: user.FechaCaducidad || '',
-                        Cuota: user.Cuota || '',
-                        Grupos: Array.isArray(user.Grupos) ? user.Grupos : [],
-                        Username: user.Username || ''
-                    };
+                row.innerHTML =
+                    `<td>${inp(u.Nombre, 'Nombre')}</td>` +
+                    `<td>${inp(u.Apellido1, 'Apellido1')}</td>` +
+                    `<td>${inp(u.Apellido2, 'Apellido2')}</td>` +
+                    `<td>${inp(u.DNI, 'DNI')}</td>` +
+                    `<td>${inp(u.OUPrincipal, 'OUPrincipal')}</td>` +
+                    `<td>${inp(u.OUSecundaria, 'OUSecundaria')}</td>` +
+                    `<td><input type="date" value="${u.FechaCaducidad||''}" onchange="updateUser(${i},'FechaCaducidad',this.value)" /></td>` +
+                    `<td>${inp(u.nTelefono, 'nTelefono')}</td>` +
+                    `<td>${inp(u.MobileExt, 'MobileExt')}</td>` +
+                    `<td>${inp(u.MobileNumber, 'MobileNumber')}</td>` +
+                    `<td>${inp(u.TarjetaId, 'TarjetaId')}</td>` +
+                    `<td>${inp(u.nFuncionario, 'nFuncionario')}</td>` +
+                    `<td><input type="text" value="${(u.Grupos||[]).join(' ')}" onchange="updateUser(${i},'Grupos',this.value.split(' ').filter(s=>s))" /></td>`;
 
-                    const row = document.createElement('tr');
-
-                    // Nombre
-                    row.innerHTML += `<td><input type="text" value="${safeUser.Nombre}" onchange="updateUser(${i}, 'Nombre', this.value)"></td>`;
-                    // Apellido1
-                    row.innerHTML += `<td><input type="text" value="${safeUser.Apellido1}" onchange="updateUser(${i}, 'Apellido1', this.value)"></td>`;
-                    // Apellido2
-                    row.innerHTML += `<td><input type="text" value="${safeUser.Apellido2}" onchange="updateUser(${i}, 'Apellido2', this.value)"></td>`;
-                    // DNI
-                    row.innerHTML += `<td><input type="text" value="${safeUser.DNI}" onchange="updateUser(${i}, 'DNI', this.value)"></td>`;
-                    // nTelefono
-                    row.innerHTML += `<td><input type="text" value="${safeUser.nTelefono}" onchange="updateUser(${i}, 'nTelefono', this.value)"></td>`;
-                    // DDI
-                    row.innerHTML += `<td><input type="text" value="${safeUser.DDI}" onchange="updateUser(${i}, 'DDI', this.value)"></td>`;
-                    // MobileExt
-                    row.innerHTML += `<td><input type="text" value="${safeUser.MobileExt}" onchange="updateUser(${i}, 'MobileExt', this.value)"></td>`;
-                    // MobileNumber
-                    row.innerHTML += `<td><input type="text" value="${safeUser.MobileNumber}" onchange="updateUser(${i}, 'MobileNumber', this.value)"></td>`;
-                    // TarjetaId
-                    row.innerHTML += `<td><input type="text" value="${safeUser.TarjetaId}" onchange="updateUser(${i}, 'TarjetaId', this.value)"></td>`;
-                    // nFuncionario
-                    row.innerHTML += `<td><input type="text" value="${safeUser.nFuncionario}" onchange="updateUser(${i}, 'nFuncionario', this.value)"></td>`;
-
-                    // OU Principal
-                    let ouPrincipalOptions = '<select onchange="updateOUPrincipal(' + i + ', this.value)">';
-                    ouPrincipalOptions += '<option value="">Seleccione una OU Principal</option>';
-                    ouPrincipales.forEach(ou => {
-                        ouPrincipalOptions += `<option value="${ou}" ${ou === safeUser.OUPrincipal ? 'selected' : ''}>${ou}</option>`;
-                    });
-                    ouPrincipalOptions += '</select>';
-                    row.innerHTML += `<td>${ouPrincipalOptions}</td>`;
-
-                    // OU Secundaria
-                    const ouSecundariaCell = document.createElement('td');
-                    ouSecundariaCell.id = `ouSecundariaCell_${i}`;
-                    row.appendChild(ouSecundariaCell);
-                    await updateOUSecundaria(i, safeUser.OUPrincipal, safeUser.OUSecundaria);
-
-                    // Fecha Caducidad Op
-                    row.innerHTML += `<td><select onchange="updateUser(${i}, 'FechaCaducidadOp', this.value); updateFechaCaducidadField(${i})">
-                        <option value="sí" ${safeUser.FechaCaducidadOp === 'sí' ? 'selected' : ''}>Sí</option>
-                        <option value="no" ${safeUser.FechaCaducidadOp === 'no' ? 'selected' : ''}>No</option>
-                    </select></td>`;
-
-                    // Fecha Caducidad
-                    row.innerHTML += `<td><input type="date" value="${safeUser.FechaCaducidad}" onchange="updateUser(${i}, 'FechaCaducidad', this.value)" id="fechaCaducidad_${i}"></td>`;
-
-                    // Cuota
-                    let cuotaOptions = '<select onchange="updateUser(' + i + ', \'Cuota\', this.value)">';
-                    cuotaOptions += '<option value="">Seleccione la cuota</option>';
-                    cuotas.forEach(cuota => {
-                        cuotaOptions += `<option value="${cuota}" ${cuota === safeUser.Cuota ? 'selected' : ''}>${cuota}</option>`;
-                    });
-                    cuotaOptions += '</select>';
-                    row.innerHTML += `<td>${cuotaOptions}</td>`;
-
-                    // Grupos
-                    row.innerHTML += `<td><input type="text" value="${safeUser.Grupos.join(', ')}" onchange="updateUser(${i}, 'Grupos', this.value.split(', ').filter(g => g))"></td>`;
-
-                    // Username (automático)
-                    row.innerHTML += `<td><input type="text" value="${safeUser.Username}" readonly></td>`;
-                    // Departamento (automático)
-                    const departamentoCell = document.createElement('td');
-                    departamentoCell.id = `departamentoCell_${i}`;
-                    row.appendChild(departamentoCell);
-                    // Lugar de Envío (automático)
-                    const lugarEnvioCell = document.createElement('td');
-                    lugarEnvioCell.id = `lugarEnvioCell_${i}`;
-                    row.appendChild(lugarEnvioCell);
-
-                    tableBody.appendChild(row);
-                    await updateAutomaticFields(i);
-                    updateFechaCaducidadField(i);
-                } catch (error) {
-                    console.error(`Error al renderizar la fila ${i}:`, error);
-                }
-            }
-
-            if (tableBody.children.length === 0) {
-                console.warn('No se agregaron filas a la tabla. Verifique los datos en usersData.');
-                tableBody.innerHTML = '<tr><td colspan="19">No se encontraron datos para mostrar.</td></tr>';
-            }
+                tbody.appendChild(row);
+            });
         }
 
-        function updateUser(index, field, value) {
-            usersData[index][field] = value;
-            if (field === 'Nombre' || field === 'Apellido1' || field === 'Apellido2') {
-                updateUsername(index);
-            }
+        function updateUser(idx, field, val) {
+            usersData[idx][field] = val;
         }
 
-        async function updateUsername(index) {
-            const user = usersData[index];
-            try {
-                const response = await fetch('/AltaUsuario/GenerateUsername', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        nombre: user.Nombre,
-                        apellido1: user.Apellido1,
-                        apellido2: user.Apellido2
-                    })
-                });
-                const data = await response.json();
-                usersData[index].Username = data.success ? data.username : '';
-                document.querySelector(`#usersTableBody tr:nth-child(${index + 1}) td:nth-child(17) input`).value = data.success ? data.username : '';
-            } catch (error) {
-                console.error('Error al generar nombre de usuario:', error);
-            }
+                async function processUsers() {
+        if (!confirm('¿Procesar alta masiva?')) return;
+
+        try {
+          const res = await fetch('/AltaMasiva/ProcessUsers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(usersData)
+          });
+          const data = await res.json();
+
+          // Construimos la lista de detalles
+          let details = '— Sin detalles —';
+          if (Array.isArray(data.messages) && data.messages.length > 0) {
+            details = data.messages.join('\n');
+          }
+
+          // Mostramos un alert con resumen + detalles
+          if (data.success) {
+            alert(
+              "✅ Alta masiva completada con éxito!\n\n" +
+              "Detalles:\n" +
+              details
+            );
+          } else {
+            alert(
+              "❌ Se produjeron errores en la alta masiva:\n\n" +
+              details
+            );
+          }
+
+          // También volcamos los detalles en la lista bajo la tabla
+          const ul = document.getElementById('detailsList');
+          ul.innerHTML = '';
+          (data.messages || []).forEach(m => {
+            const li = document.createElement('li');
+            li.textContent = m;
+            li.style.color = m.startsWith('Error') ? 'red' : 'green';
+            ul.appendChild(li);
+          });
+        } catch (err) {
+          console.error('Error en processUsers:', err);
+          alert("❌ Ocurrió un error al procesar la alta masiva.");
         }
+      }
 
-        async function updateOUPrincipal(index, ouPrincipal) {
-            usersData[index].OUPrincipal = ouPrincipal;
-            await updateOUSecundaria(index, ouPrincipal, '');
-            usersData[index].OUSecundaria = '';
-            await updateAutomaticFields(index);
-        }
-
-        async function updateOUSecundaria(index, ouPrincipal, selectedOUSecundaria) {
-            const ouSecundariaCell = document.getElementById(`ouSecundariaCell_${index}`);
-            ouSecundariaCell.innerHTML = '<select onchange="updateOUSecundariaValue(' + index + ', this.value)"><option value="">Seleccione una OU Secundaria (opcional)</option></select>';
-
-            if (ouPrincipal) {
-                try {
-                    const response = await fetch('/AltaUsuario/GetOUSecundarias', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ouPrincipal })
-                    });
-                    const data = await response.json();
-                    const select = ouSecundariaCell.querySelector('select');
-                    if (data.length === 0) {
-                        select.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
-                    } else {
-                        data.forEach(ou => {
-                            const option = document.createElement('option');
-                            option.value = ou;
-                            option.textContent = ou;
-                            option.selected = ou === selectedOUSecundaria;
-                            select.appendChild(option);
-                        });
-                    }
-                } catch (error) {
-                    console.error('Error al obtener las OUs secundarias:', error);
-                    ouSecundariaCell.innerHTML = '<select><option value="">Error al cargar OU secundarias</option></select>';
-                }
-            }
-        }
-
-                async function updateOUSecundaria(index, ouPrincipal, selectedOUSecundaria) {
-            const ouSecundariaCell = document.getElementById(`ouSecundariaCell_${index}`);
-            ouSecundariaCell.innerHTML = '<select onchange="updateOUSecundariaValue(' + index + ', this.value)"><option value="">Seleccione una OU Secundaria (opcional)</option></select>';
-
-            if (ouPrincipal) {
-                try {
-                    const response = await fetch('/AltaMasiva/GetOUSecundarias', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ouPrincipal })
-                    });
-                    const data = await response.json();
-                    const select = ouSecundariaCell.querySelector('select');
-                    if (data.length === 0) {
-                        select.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
-                    } else {
-                        select.innerHTML = '<option value="">Seleccione una OU Secundaria (opcional)</option>';
-                        data.forEach(ou => {
-                            const option = document.createElement('option');
-                            option.value = ou;
-                            option.textContent = ou;
-                            option.selected = ou === selectedOUSecundaria;
-                            select.appendChild(option);
-                        });
-                    }
-                } catch (error) {
-                    console.error('Error al obtener las OUs secundarias:', error);
-                    ouSecundariaCell.innerHTML = '<select><option value="">Error al cargar OU secundarias</option></select>';
-                }
-            }
-        }
-
-        async function updateAutomaticFields(index) {
-            const user = usersData[index];
-            const ouPrincipal = user.OUPrincipal;
-            const ouSecundaria = user.OUSecundaria;
-
-            if (ouPrincipal) {
-                try {
-                    // Actualizar Departamento
-                    const departamentoResponse = await fetch('/AltaUsuario/GetDepartamento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ouPrincipal, ouSecundaria })
-                    });
-                    const departamentoData = await departamentoResponse.json();
-                    const departamentoCell = document.getElementById(`departamentoCell_${index}`);
-                    departamentoCell.innerHTML = `<input type="text" value="${departamentoData.success ? departamentoData.departamento : ''}" readonly>`;
-
-                    // Actualizar Lugar de Envío
-                    const lugarEnvioResponse = await fetch('/AltaUsuario/GetLugarEnvio', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ouPrincipal, ouSecundaria })
-                    });
-                    const lugarEnvioData = await lugarEnvioResponse.json();
-                    const lugarEnvioCell = document.getElementById(`lugarEnvioCell_${index}`);
-                    lugarEnvioCell.innerHTML = `<input type="text" value="${lugarEnvioData.success ? lugarEnvioData.lugarEnvio : ''}" readonly>`;
-                } catch (error) {
-                    console.error('Error al actualizar campos automáticos:', error);
-                }
-            } else {
-                document.getElementById(`departamentoCell_${index}`).innerHTML = '<input type="text" value="" readonly>';
-                document.getElementById(`lugarEnvioCell_${index}`).innerHTML = '<input type="text" value="" readonly>';
-            }
-        }
-
-        function updateFechaCaducidadField(index) {
-            const fechaCaducidadOp = usersData[index].FechaCaducidadOp;
-            const fechaInput = document.getElementById(`fechaCaducidad_${index}`);
-            fechaInput.disabled = fechaCaducidadOp === 'no';
-            if (fechaCaducidadOp === 'no') fechaInput.value = '';
-        }
-
-        async function processUsers() {
-            if (!confirm('¿Está seguro de que desea procesar el alta masiva? Esta acción no se puede deshacer.')) {
-                return;
-            }
-
-            try {
-                const response = await fetch('/AltaMasiva/ProcessUsers', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(usersData)
-                });
-
-                const data = await response.json();
-
-                const messageDiv = document.getElementById('message');
-                messageDiv.textContent = data.success ? 'Alta masiva completada.' : 'Error en la alta masiva.';
-
-                const detailsList = document.getElementById('detailsList');
-                detailsList.innerHTML = '';
-                const messages = data.messages.split('\n');
-                messages.forEach(msg => {
-                    if (msg) {
-                        const li = document.createElement('li');
-                        li.style.color = msg.startsWith('Error') ? 'red' : 'green';
-                        li.textContent = msg;
-                        detailsList.appendChild(li);
-                    }
-                });
-
-                if (data.success) {
-                    setTimeout(() => location.reload(), 5000);
-                }
-            } catch (error) {
-                console.error('Error al procesar los usuarios:', error);
-                document.getElementById('message').textContent = 'Ocurrió un error al procesar los usuarios.';
-            }
-        }
-    </script>
-</body>
-</html>
+      document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('btnProcess').addEventListener('click', processUsers);
+      });
+        </script>
+}

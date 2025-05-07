@@ -9,10 +9,22 @@ using System.Text;
 using System.Threading.Tasks;
 using OfficeOpenXml;
 using System.Globalization;
+using static GestionUsuariosController;
 
 [Authorize]
 public class AltaMasivaController : Controller
 {
+
+    private readonly AltaUsuarioController _altaUsuarioController;
+
+    public AltaMasivaController(AltaUsuarioController altaUsuarioController)
+    {
+        Console.WriteLine("Ctor AltaMasivaController invocado");
+        _altaUsuarioController = altaUsuarioController
+            ?? throw new ArgumentNullException(nameof(altaUsuarioController));
+    }
+
+
     private readonly string domainPath = "DC=aytosa,DC=inet";
 
     // Clase para el resultado de las verificaciones
@@ -36,293 +48,200 @@ public class AltaMasivaController : Controller
         }
     }
 
+    // POST: /AltaMasiva/LoadFile
+    // Sólo lee el Excel y devuelve usersData
     [HttpPost]
-    public async Task<IActionResult> ProcessUsers(IFormFile file)
+    public async Task<JsonResult> LoadFile(IFormFile file)
     {
         if (file == null || file.Length == 0)
             return Json(new { success = false, message = "No se ha proporcionado un archivo Excel válido." });
 
-        List<Dictionary<string, object>> users = new List<Dictionary<string, object>>();
-        List<string> messages = new List<string>();
-        bool overallSuccess = true;
-
+        var users = new List<Dictionary<string, string>>();
         try
         {
-            // Configurar EPPlus para uso no comercial
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms);
+            using var pkg = new ExcelPackage(ms);
+            var ws = pkg.Workbook.Worksheets.First();
+            int rows = ws.Dimension.End.Row;
+            int cols = ws.Dimension.End.Column;
 
-            using (var stream = new MemoryStream())
+            var headers = Enumerable.Range(1, cols)
+                                    .Select(c => ws.Cells[1, c].Text.Trim())
+                                    .ToList();
+
+            for (int r = 2; r <= rows; r++)
             {
-                await file.CopyToAsync(stream);
-                using (var package = new ExcelPackage(stream))
-                {
-                    var worksheet = package.Workbook.Worksheets[0];
-                    int rowCount = worksheet.Dimension.Rows;
-                    int colCount = worksheet.Dimension.Columns;
-
-                    // Obtener encabezados
-                    var headers = new List<string>();
-                    for (int col = 1; col <= colCount; col++)
-                    {
-                        headers.Add(worksheet.Cells[1, col].Text.Trim());
-                    }
-
-                    // Validar encabezados requeridos
-                    if (!headers.Contains("Nombre") || !headers.Contains("Apellido1") || !headers.Contains("Apellido2") ||
-                        !headers.Contains("DNI") || !headers.Contains("OUPrincipal"))
-                    {
-                        return Json(new { success = false, message = "El archivo Excel debe contener las columnas 'Nombre', 'Apellido1', 'Apellido2', 'DNI' y 'OUPrincipal'." });
-                    }
-
-                    // Leer datos
-                    for (int row = 2; row <= rowCount; row++)
-                    {
-                        var user = new Dictionary<string, object>();
-                        for (int col = 1; col <= colCount; col++)
-                        {
-                            user[headers[col - 1]] = worksheet.Cells[row, col].Text.Trim();
-                        }
-                        users.Add(user);
-                    }
-                }
+                var dict = new Dictionary<string, string>();
+                for (int c = 1; c <= cols; c++)
+                    dict[headers[c - 1]] = ws.Cells[r, c].Text.Trim();
+                users.Add(dict);
             }
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = $"Error al procesar el archivo Excel: {ex.Message}" });
+            return Json(new { success = false, message = $"Error al procesar el Excel: {ex.Message}" });
         }
 
-        for (int i = 0; i < users.Count; i++)
+        return Json(new { success = true, users });
+    }
+
+    // POST: /AltaMasiva/ProcessUsers
+    // Mapea cada fila a UserModelAltaUsuario, inyecta Departamento y LugarEnvio y llama a CreateUser
+    [HttpPost]
+    public JsonResult ProcessUsers([FromBody] List<Dictionary<string, object>> usersRaw)
+    {
+        var messages = new List<string>();
+        bool overallSuccess = true;
+
+        // 1) Validación inicial
+        if (usersRaw == null || usersRaw.Count == 0)
         {
-            var user = users[i];
-            int lineNumber = i + 2;
+            return Json(new
+            {
+                success = false,
+                message = "No se han enviado usuarios para procesar.",
+                messages
+            });
+        }
+        messages.Add($"▶ ProcessUsers: recibidas {usersRaw.Count} filas.");
+
+        // 2) Iteramos cada fila del Excel
+        for (int i = 0; i < usersRaw.Count; i++)
+        {
+            int fila = i + 2;
+            messages.Add($"-- Fila {fila} --");
+
+            var dict = usersRaw[i];
+            string get(string key) =>
+                dict.TryGetValue(key, out var v) && v != null
+                    ? v.ToString().Trim()
+                    : "";
 
             try
             {
-                // Extraer datos
-                string nombre = user.GetValueOrDefault("Nombre", "").ToString();
-                string apellido1 = user.GetValueOrDefault("Apellido1", "").ToString();
-                string apellido2 = user.GetValueOrDefault("Apellido2", "").ToString();
-                string dni = user.GetValueOrDefault("DNI", "").ToString();
-                string nTelefono = user.GetValueOrDefault("nTelefono", "").ToString();
-                string ddi = user.GetValueOrDefault("DDI", "").ToString();
-                string mobileExt = user.GetValueOrDefault("MobileExt", "").ToString();
-                string mobileNumber = user.GetValueOrDefault("MobileNumber", "").ToString();
-                string tarjetaId = user.GetValueOrDefault("TarjetaId", "").ToString();
-                string nFuncionario = user.GetValueOrDefault("nFuncionario", "").ToString();
-                string ouPrincipalName = user.GetValueOrDefault("OUPrincipal", "").ToString();
-                string ouSecundariaName = user.GetValueOrDefault("OUSecundaria", "").ToString();
-                string fechaCaducidad = user.GetValueOrDefault("FechaCaducidad", "").ToString();
+                // 2.1) Mapear campos
+                var model = new AltaUsuarioController.UserModelAltaUsuario
+                {
+                    Nombre = get("Nombre"),
+                    Apellido1 = get("Apellido1"),
+                    Apellido2 = get("Apellido2"),
+                    DNI = get("DNI"),
+                    OUPrincipal = get("OUPrincipal"),
+                    OUSecundaria = get("OUSecundaria"),
+                    Cuota = get("Cuota"),
+                    // Opcionales
+                    NTelefono = string.IsNullOrEmpty(get("nTelefono")) ? null : get("nTelefono"),
+                    ExtensionMovil = string.IsNullOrEmpty(get("MobileExt")) ? null : get("MobileExt"),
+                    NumeroLargoMovil = string.IsNullOrEmpty(get("MobileNumber")) ? null : get("MobileNumber"),
+                    TarjetaIdentificativa = string.IsNullOrEmpty(get("TarjetaId")) ? null : get("TarjetaId"),
+                    NFuncionario = string.IsNullOrEmpty(get("nFuncionario")) ? null : get("nFuncionario"),
+                    // Grupos separados por espacio
+                    Grupos = get("Grupos")
+                                                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                                                .ToList()
+                };
+                messages.Add($"  Modelo mapeado: {model.Nombre} {model.Apellido1} {model.Apellido2}");
 
-                // Validaciones obligatorias
-                if (string.IsNullOrEmpty(nombre))
+                // 2.2) Parsear fecha de caducidad dd/MM/yyyy
+                var rawFecha = get("FechaCaducidad");
+                if (DateTime.TryParseExact(rawFecha, "dd/MM/yyyy",
+                                           CultureInfo.InvariantCulture,
+                                           DateTimeStyles.None,
+                                           out var fechaCad))
                 {
-                    messages.Add($"Fila {lineNumber}: El campo 'Nombre' es obligatorio.");
-                    overallSuccess = false;
-                    continue;
+                    model.FechaCaducidadOp = "si";
+                    model.FechaCaducidad = fechaCad;
+                    messages.Add($"  FechaCaducidad parseada: {fechaCad:dd/MM/yyyy}");
                 }
-                if (string.IsNullOrEmpty(apellido1))
+                else
                 {
-                    messages.Add($"Fila {lineNumber}: El campo 'Apellido1' es obligatorio.");
-                    overallSuccess = false;
-                    continue;
-                }
-                if (string.IsNullOrEmpty(apellido2))
-                {
-                    messages.Add($"Fila {lineNumber}: El campo 'Apellido2' es obligatorio.");
-                    overallSuccess = false;
-                    continue;
-                }
-                if (string.IsNullOrEmpty(dni))
-                {
-                    messages.Add($"Fila {lineNumber}: El campo 'DNI' es obligatorio.");
-                    overallSuccess = false;
-                    continue;
-                }
-                if (string.IsNullOrEmpty(ouPrincipalName))
-                {
-                    messages.Add($"Fila {lineNumber}: El campo 'OUPrincipal' es obligatorio.");
-                    overallSuccess = false;
-                    continue;
+                    model.FechaCaducidadOp = "no";
+                    messages.Add("  Sin FechaCaducidad");
                 }
 
-                // Validar OUs y construir path LDAP
-                string ouPrincipalPath = await GetOUPath(ouPrincipalName, null);
-                if (string.IsNullOrEmpty(ouPrincipalPath))
+                // 2.3) Generar Username automáticamente
+                messages.Add("  Generando Username...");
+                var userInput = new userInputModel
                 {
-                    messages.Add($"Fila {lineNumber}: La OU principal '{ouPrincipalName}' no existe.");
-                    overallSuccess = false;
-                    continue;
-                }
+                    Nombre = model.Nombre,
+                    Apellido1 = model.Apellido1,
+                    Apellido2 = model.Apellido2
+                };
+                var genJson = _altaUsuarioController.GenerateUsername(userInput) as JsonResult;
+                dynamic genData = genJson?.Value;
+                model.Username = (genData?.success == true) ? genData.username : null;
+                messages.Add($"  Username generado: '{model.Username}'");
+                if (string.IsNullOrEmpty(model.Username))
+                    messages.Add("  ⚠️ Username vacío, CreateUser podría fallar.");
 
-                string ouSecundariaPath = string.Empty;
-                if (!string.IsNullOrEmpty(ouSecundariaName))
-                {
-                    ouSecundariaPath = await GetOUPath(ouSecundariaName, ouPrincipalName);
-                    if (string.IsNullOrEmpty(ouSecundariaPath))
+                // 2.4) Obtener Departamento desde AltaUsuarioController
+                messages.Add("  Obteniendo Departamento...");
+                var depJson = _altaUsuarioController.GetDepartamento(
+                    new Dictionary<string, string>
                     {
-                        messages.Add($"Fila {lineNumber}: La OU secundaria '{ouSecundariaName}' no existe dentro de '{ouPrincipalName}'.");
-                        overallSuccess = false;
-                        continue;
-                    }
-                }
+                        ["ouPrincipal"] = model.OUPrincipal,
+                        ["ouSecundaria"] = model.OUSecundaria
+                    }) as JsonResult;
+                dynamic depData = depJson?.Value;
+                model.Departamento = (depData?.success == true) ? depData.departamento : null;
+                messages.Add($"  Departamento: '{model.Departamento}'");
 
-                // Obtener atributos de la OU (st y department)
-                string targetOUPath = !string.IsNullOrEmpty(ouSecundariaPath) ? ouSecundariaPath : ouPrincipalPath;
-                string physicalDeliveryOfficeName = await GetOUAttribute(targetOUPath, "st");
-                string division = await GetOUAttribute(targetOUPath, "department");
-
-                string ldapPath = !string.IsNullOrEmpty(ouSecundariaPath)
-                    ? $"LDAP://OU={ouSecundariaName},OU=Usuarios y Grupos,OU={ouPrincipalName},OU=AREAS,DC=aytosa,DC=inet"
-                    : $"LDAP://OU=Usuarios y Grupos,OU={ouPrincipalName},OU=AREAS,DC=aytosa,DC=inet";
-
-                // Generar username
-                string username = await GenerateUsername(nombre, apellido1, apellido2);
-                if (string.IsNullOrEmpty(username))
-                {
-                    messages.Add($"Fila {lineNumber}: No se pudo generar un nombre de usuario único para '{nombre} {apellido1} {apellido2}'.");
-                    overallSuccess = false;
-                    continue;
-                }
-
-                // Validar FechaCaducidad
-                long? accountExpires = null;
-                if (!string.IsNullOrEmpty(fechaCaducidad))
-                {
-                    if (DateTime.TryParseExact(fechaCaducidad, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime expiryDate))
+                // 2.5) Obtener LugarEnvio
+                messages.Add("  Obteniendo LugarEnvio...");
+                var lugJson = _altaUsuarioController.GetLugarEnvio(
+                    new Dictionary<string, string>
                     {
-                        // Convertir a formato de Active Directory (FILETIME)
-                        accountExpires = expiryDate.ToFileTimeUtc();
-                    }
-                    else
-                    {
-                        messages.Add($"Fila {lineNumber}: El formato de 'FechaCaducidad' debe ser dd/mm/aaaa.");
-                        overallSuccess = false;
-                        continue;
-                    }
-                }
+                        ["ouPrincipal"] = model.OUPrincipal,
+                        ["ouSecundaria"] = model.OUSecundaria
+                    }) as JsonResult;
+                dynamic lugData = lugJson?.Value;
+                model.LugarEnvio = (lugData?.success == true) ? lugData.lugarEnvio : null;
+                messages.Add($"  LugarEnvio: '{model.LugarEnvio}'");
 
-                bool userCreated = false;
-
-                using (DirectoryEntry ouEntry = new DirectoryEntry(ldapPath))
-                {
-                    if (ouEntry == null)
-                    {
-                        messages.Add($"Fila {lineNumber}: No se pudo conectar a la OU especificada.");
-                        overallSuccess = false;
-                        continue;
-                    }
-
-                    DirectoryEntry newUser = null;
-
-                    try
-                    {
-                        // Normalizar nombre
-                        string nombreCompleto = $"{nombre} {apellido1} {apellido2}";
-                        string displayName = RemoveAccents(nombreCompleto).ToUpperInvariant();
-
-                        // Crear el usuario
-                        newUser = ouEntry.Children.Add($"CN={displayName}", "user");
-                        messages.Add($"Fila {lineNumber}: Usuario creado en la OU: CN={displayName}");
-
-                        // Establecer atributos
-                        try
-                        {
-                            newUser.Properties["givenName"].Value = nombre;
-                            newUser.Properties["sn"].Value = $"{apellido1} {apellido2}";
-                            newUser.Properties["sAMAccountName"].Value = username;
-                            newUser.Properties["userPrincipalName"].Value = $"{username}@aytosa.inet";
-                            newUser.Properties["displayName"].Value = displayName;
-                            newUser.Properties["employeeNumber"].Value = dni; // Usar employeeNumber para DNI
-
-                            if (!string.IsNullOrEmpty(nTelefono))
-                                newUser.Properties["telephoneNumber"].Value = nTelefono;
-                            if (!string.IsNullOrEmpty(mobileNumber))
-                                newUser.Properties["mobile"].Value = $"{mobileExt} {mobileNumber}".Trim();
-                            if (!string.IsNullOrEmpty(nFuncionario))
-                                newUser.Properties["employeeID"].Value = nFuncionario;
-                            if (!string.IsNullOrEmpty(ddi))
-                                newUser.Properties["extensionAttribute1"].Value = ddi;
-                            if (!string.IsNullOrEmpty(tarjetaId))
-                                newUser.Properties["extensionAttribute2"].Value = tarjetaId;
-                            if (!string.IsNullOrEmpty(physicalDeliveryOfficeName))
-                                newUser.Properties["physicalDeliveryOfficeName"].Value = physicalDeliveryOfficeName;
-                            if (!string.IsNullOrEmpty(division))
-                                newUser.Properties["division"].Value = division;
-                            if (accountExpires.HasValue)
-                                newUser.Properties["accountExpires"].Value = accountExpires.Value;
-
-                            messages.Add($"Fila {lineNumber}: Atributos establecidos - givenName: '{nombre}', sn: '{apellido1} {apellido2}', sAMAccountName: '{username}', userPrincipalName: '{username}@aytosa.inet', displayName: '{displayName}', employeeNumber: '{dni}'" +
-                                (string.IsNullOrEmpty(nTelefono) ? "" : $", telephoneNumber: '{nTelefono}'") +
-                                (string.IsNullOrEmpty(mobileNumber) ? "" : $", mobile: '{mobileExt} {mobileNumber}'") +
-                                (string.IsNullOrEmpty(nFuncionario) ? "" : $", employeeID: '{nFuncionario}'") +
-                                (string.IsNullOrEmpty(ddi) ? "" : $", extensionAttribute1: '{ddi}'") +
-                                (string.IsNullOrEmpty(tarjetaId) ? "" : $", extensionAttribute2: '{tarjetaId}'") +
-                                (string.IsNullOrEmpty(physicalDeliveryOfficeName) ? "" : $", physicalDeliveryOfficeName: '{physicalDeliveryOfficeName}'") +
-                                (string.IsNullOrEmpty(division) ? "" : $", division: '{division}'") +
-                                (accountExpires.HasValue ? $", accountExpires: '{fechaCaducidad}'" : ""));
-                        }
-                        catch (Exception ex)
-                        {
-                            messages.Add($"Fila {lineNumber}: Error al establecer atributos: {ex.Message}");
-                            throw;
-                        }
-
-                        // Guardar cambios iniciales
-                        try
-                        {
-                            newUser.CommitChanges();
-                            messages.Add($"Fila {lineNumber}: Cambios iniciales guardados.");
-                        }
-                        catch (Exception ex)
-                        {
-                            messages.Add($"Fila {lineNumber}: Error al guardar cambios iniciales: {ex.Message}");
-                            throw;
-                        }
-
-                        // Configurar contraseña y activar cuenta
-                        try
-                        {
-                            newUser.Invoke("SetPassword", new object[] { "Temporal2024" });
-                            newUser.Properties["userAccountControl"].Value = 0x200; // Cuenta normal activada
-                            newUser.Properties["pwdLastSet"].Value = 0; // Forzar cambio de contraseña
-                            newUser.CommitChanges();
-                            userCreated = true;
-                            messages.Add($"Fila {lineNumber}: Contraseña configurada y cuenta activada.");
-                        }
-                        catch (Exception ex)
-                        {
-                            messages.Add($"Fila {lineNumber}: Error al configurar contraseña: {ex.Message}");
-                            throw;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        messages.Add($"Fila {lineNumber}: Error al crear el usuario: {ex.Message}");
-                    }
-                    finally
-                    {
-                        newUser?.Dispose();
-                    }
-                }
-
-                messages.Add(userCreated
-                    ? $"Fila {lineNumber}: Usuario '{username}' creado exitosamente en la OU especificada."
-                    : $"Fila {lineNumber}: No se pudo crear el usuario '{username}'.");
+                // 2.6) Llamar a CreateUser
+                messages.Add("  Llamando a CreateUser...");
+                var createJson = _altaUsuarioController.CreateUser(model) as JsonResult;
+                dynamic createData = createJson?.Value;
+                bool created = createData?.success ?? false;
+                string msg = createData?.message ?? "[sin mensaje]";
+                messages.Add($"  CreateUser → success={created}, message='{msg}'");
+                if (!created) overallSuccess = false;
             }
             catch (Exception ex)
             {
-                messages.Add($"Fila {lineNumber}: Error general: {ex.Message}");
+                messages.Add($"  ❌ Excepción fila {fila}: {ex.GetType().Name}: {ex.Message}");
                 overallSuccess = false;
             }
         }
 
-        string finalMessage = overallSuccess
-            ? "Alta masiva completada con éxito."
-            : "Alta masiva completada con errores.";
-        finalMessage += "\nDetalles:\n" + string.Join("\n", messages);
+        messages.Add("▶ Fin de ProcessUsers");
 
-        return Json(new { success = overallSuccess, messages = string.Join("\n", messages), message = finalMessage });
+        return Json(new
+        {
+            success = overallSuccess,
+            message = overallSuccess
+                       ? "Alta masiva completada con éxito (ver detalles)."
+                       : "Se produjeron errores en la alta masiva (ver detalles).",
+            messages
+        });
+    }
+
+
+
+    // ---------------------------------------------------
+    // Helper para convertir la cadena de grupos en List<string>
+    // ---------------------------------------------------
+    private List<string> ParseGrupos(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return new List<string>();
+        return raw
+            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(g => g.Trim())
+            .Where(g => g.Length > 0)
+            .ToList();
     }
 
     private async Task<string> GetOUPath(string ouName, string parentOU)

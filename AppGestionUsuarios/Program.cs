@@ -1,56 +1,52 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using AppGestionUsuarios.Controllers;
 
-internal class Program
+var builder = WebApplication.CreateBuilder(args);
+
+// 1) Kestrel
+builder.WebHost.ConfigureKestrel(options =>
 {
-    private static void Main(string[] args)
+    options.ListenAnyIP(8081, lo => lo.Protocols = HttpProtocols.Http1);
+    options.ListenAnyIP(8082, lo =>
     {
-        var builder = WebApplication.CreateBuilder(args);
+        lo.Protocols = HttpProtocols.Http1;
+        lo.UseHttps();
+    });
+});
 
-        // Configurar Kestrel para escuchar en puertos específicos
-        builder.WebHost.ConfigureKestrel(options =>
-        {
-            options.ListenAnyIP(8081, listenOptions =>
-            {
-                listenOptions.Protocols = HttpProtocols.Http1;
-            });
-            options.ListenAnyIP(8082, listenOptions =>
-            {
-                listenOptions.Protocols = HttpProtocols.Http1;
-                listenOptions.UseHttps(); // Habilitar HTTPS en el puerto 8082
-            });
-        });
+// 2) AuthN / AuthZ
+builder.Services.AddAuthentication("CookieAuth")
+    .AddCookie("CookieAuth", opts =>
+    {
+        opts.LoginPath = "/InicioSesion/Login";
+        opts.AccessDeniedPath = "/InicioSesion/Error";
+    });
+builder.Services.AddAuthorization();
 
-        // Agregar servicios de autenticación por cookies
-        builder.Services.AddAuthentication("CookieAuth")
-            .AddCookie("CookieAuth", options =>
-            {
-                options.LoginPath = "/InicioSesion/Login"; // Ruta a la página de inicio de sesión
-                options.AccessDeniedPath = "/InicioSesion/Error"; // Ruta en caso de acceso denegado
-            });
+// 3) MVC + controladores en DI
+builder.Services.AddControllersWithViews();
+builder.Services.AddScoped<AltaUsuarioController>();
+builder.Services.AddScoped<AltaMasivaController>();
 
-        builder.Services.AddAuthorization(); // Usar autenticación en la aplicación
-        builder.Services.AddControllersWithViews();
+var app = builder.Build();
 
+// 4) Middlewares
+if (app.Environment.IsDevelopment())
+    app.UseDeveloperExceptionPage();
 
-        var app = builder.Build();
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
 
-        // Middleware
-        app.UseHttpsRedirection();
-        app.UseStaticFiles();
+// 5) Routing
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=InicioSesion}/{action=Login}/{id?}"
+);
 
-        app.UseRouting();
-
-        // Agregar los middleware de autenticación y autorización
-        app.UseAuthentication();
-        app.UseAuthorization();
-
-        app.MapControllerRoute(
-            name: "default",
-            pattern: "{controller=InicioSesion}/{action=Login}/{id?}");
-
-        app.Run();
-
-        builder.Logging.AddEventLog(); // Registro del proveedor del visor de eventos
-    }
-}
+app.Run();
