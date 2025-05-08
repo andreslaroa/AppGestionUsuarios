@@ -193,17 +193,35 @@ public class AltaMasivaController : Controller
             }
 
             // 2.7) Parseo y validación de Grupos
-            var grupos = get("Grupos")
-                .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
+            var raw = get("Grupos")?.Replace("\u00A0", " ").Trim() ?? "";
+
+            // 1) Si viene en formato JSON array ["A";"B"], quita corchetes
+            if (raw.StartsWith("[") && raw.EndsWith("]"))
+            {
+                raw = raw.Substring(1, raw.Length - 2);
+            }
+
+            var grupos = raw
+                // 2) Separa solo por punto y coma (o por lo que realmente uses)
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s =>
+                    s
+                    .Trim()                 // quita espacios
+                    .Trim('"', '\'')        // quita comillas simples o dobles sobrantes
+                )
                 .Where(s => s.Length > 0)
                 .ToList();
+
+            summaryMessages.Add($"Parsed Grupos ({rowNumber}): [{string.Join("], [", grupos)}]");
+
             model.Grupos = grupos;
 
-            var missing = GetMissingGroups(grupos);
+            var missing = GetMissingGroups(model.Grupos);
             if (missing.Any())
             {
-                summaryMessages.Add($"Fila {rowNumber}: Error: no existen en AD los grupos [{string.Join(", ", missing)}].");
+                summaryMessages.Add(
+                  $"Fila {rowNumber}: Error: no existen en AD los grupos [{string.Join(", ", missing)}]."
+                );
                 overallSuccess = false;
                 continue;
             }
@@ -514,45 +532,45 @@ public class AltaMasivaController : Controller
 
 
     /// <summary>
-    /// Devuelve la lista de grupos que NO se encontraron en el AD.
+    /// Comprueba si existe un grupo en AD usando PrincipalContext en el dominio aytosa.inet
+    /// </summary>
+    private bool GroupExists(string groupName)
+    {
+        if (string.IsNullOrWhiteSpace(groupName))
+            return false;
+
+        using var ctx = new PrincipalContext(ContextType.Domain, "aytosa.inet");
+
+        // Primero comprueba por SamAccountName
+        var grp = GroupPrincipal.FindByIdentity(
+            ctx,
+            IdentityType.SamAccountName,
+            groupName
+        );
+        if (grp != null) return true;
+
+        // Luego por CN
+        grp = GroupPrincipal.FindByIdentity(
+            ctx,
+            IdentityType.Name,
+            groupName
+        );
+        return grp != null;
+    }
+
+
+    /// <summary>
+    /// Dada una lista de nombres de grupo, devuelve aquellos que NO existen en AD.
     /// </summary>
     private List<string> GetMissingGroups(IEnumerable<string> grupos)
     {
         var missing = new List<string>();
-        if (grupos == null || !grupos.Any())
-            return missing;
-
-        // 1) Obtén el contexto de naming (dominio) dinámicamente
-        string namingContext;
-        using (var rootDse = new DirectoryEntry("LDAP://RootDSE"))
+        foreach (var g in grupos)
         {
-            namingContext = rootDse.Properties["defaultNamingContext"][0].ToString();
+            if (!GroupExists(g))
+                missing.Add(g);
         }
-
-        // 2) Crea el DirectoryEntry raíz
-        using var domainEntry = new DirectoryEntry($"LDAP://{namingContext}");
-        using var searcher = new DirectorySearcher(domainEntry)
-        {
-            SearchScope = SearchScope.Subtree
-        };
-
-        // 3) Solo necesitamos buscar por cn y objectCategory=group
-        searcher.PropertiesToLoad.Clear();
-        searcher.PropertiesToLoad.Add("cn");
-
-        foreach (var grupo in grupos)
-        {
-            if (string.IsNullOrWhiteSpace(grupo))
-                continue;
-
-            var esc = EscapeLdapSearchFilter(grupo);
-            searcher.Filter = $"(&(objectCategory=group)(cn={esc}))";
-
-            var result = searcher.FindOne();
-            if (result == null)
-                missing.Add(grupo);
-        }
-
         return missing;
     }
+
 }
