@@ -9,138 +9,157 @@
     <link rel="stylesheet" href="~/AppGestionUsuarios.styles.css" asp-append-version="true" />
     <style>
         body {
+            margin: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f5f5;
-            color: #333;
+            background-color: #f5f5f5; /* back to original */
+            color: #333;             /* back to original */
         }
-
-        .container {
-            max-width: 1280px;
-            margin: 50px auto;
-            background-color: #ffffff;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        .app-container {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            height: 100vh;
         }
-
-        h1, h2 {
-            color: #960018;
+        /* Sidebar styling */
+        .app-sidebar {
+            background: #003478; /* blue reemplaza rojo */
+            color: white;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header {
+            padding: 20px;
+            font-size: 1.2rem;
             font-weight: bold;
-        }
-
-        h1 {
-            font-size: 28px;
             text-align: center;
-            margin-bottom: 25px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
         }
-
-        h2 {
-            font-size: 20px;
-            margin-bottom: 15px;
+        .sidebar-nav {
+            flex: 1;
+            overflow-y: auto;
         }
-
-        label {
-            display: block;
+        .sidebar-nav .nav-link {
+            color: white;
+            padding: 12px 20px;
+            transition: background 0.3s;
+        }
+        .sidebar-nav .nav-link:hover,
+        .sidebar-nav .nav-item.active .nav-link {
+            background: rgba(0,0,0,0.1);
+            color: white;
+        }
+        /* Main content styling */
+        .app-main {
+            display: flex;
+            flex-direction: column;
+        }
+        .app-header {
+            background: #ffffff;
+            border-bottom: 1px solid #ddd;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .app-header .navbar-brand {
             font-weight: bold;
-            margin-bottom: 5px;
-            color: #333;
+            color: #003478; /* blue reemplaza rojo */
+            margin: 0;
         }
-
-        input[type="text"],
-        input[type="password"],
-        input[type="number"],
-        input[type="date"],
-        select {
-            width: 100%;
-            padding: 10px;
+        .app-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px;
+        }
+        .app-footer {
+            background: #f1f1f1;
+            padding: 10px 20px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #666;
+            border-top: 1px solid #ddd;
+        }
+        /* Typography overrides */
+        .app-content h1,
+        .app-content h2 {
+            color: #003478; /* blue reemplaza rojo */
+            font-weight: bold;
+        }
+        /* Form focus */
+        .app-content input,
+        .app-content select {
             border: 1px solid #ccc;
             border-radius: 6px;
             background-color: #f9f9f9;
-            font-size: 16px;
             transition: border-color 0.3s ease;
         }
-
-        input:focus,
-        select:focus {
-            border-color: #960018;
-            outline: none;
-            box-shadow: 0 0 5px rgba(150, 0, 24, 0.3);
+        .app-content input:focus,
+        .app-content select:focus {
+            border-color: #003478; /* blue */
+            box-shadow: 0 0 5px rgba(0,52,120,0.3); /* blue shadow */
         }
-
-        button, a.btn {
-            padding: 12px 20px;
-            background-color: #960018;
-            color: white;
-            font-weight: bold;
+        /* Button colors */
+        .app-content button {
+            background-color: #003478; /* blue */
             border: none;
+            color: white;
+            padding: 10px 20px;
             border-radius: 6px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
             transition: background-color 0.3s ease;
         }
-
-        button:hover, a.btn:hover {
-            background-color: #7a0013;
-        }
-
-        .message {
-            margin-top: 15px;
-            text-align: center;
-        }
-
-        .navbar-nav .nav-link {
-            color: #333;
-            font-weight: bold;
-            padding: 10px 20px;
-            transition: color 0.3s ease;
-        }
-
-        .navbar-nav .nav-link:hover {
-            color: #960018;
-        }
-
-        .navbar-nav .nav-item.active .nav-link {
-            color: #960018;
-        }
-
-        .navbar-brand {
-            font-weight: bold;
-            color: #960018;
-            margin-right: 30px;
+        .app-content button:hover {
+            background-color: #002a58; /* darker blue */
         }
     </style>
     @RenderSection("Styles", required: false)
 </head>
 <body>
-    <header>
-        <nav class="navbar navbar-expand-sm navbar-light bg-light border-bottom box-shadow mb-3">
-            <div class="container-fluid">
-                <a class="navbar-brand" asp-controller="Home" asp-action="Index">Ayuntamiento de Salamanca</a>
-                <div class="collapse navbar-collapse" id="navbarNav">
-                    <ul class="navbar-nav me-auto">
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="MenuPrincipal" asp-action="Index">Menú Principal</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="AltaUsuario" asp-action="AltaUsuario">Crear Usuario</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="BajaUsuario" asp-action="BajaUsuario">Baja Usuario</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="MenuPrincipal" asp-action="Index">Opciones</a>
-                        </li>
-                    </ul>
-                </div>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="app-sidebar">
+            <div class="sidebar-header">
+                Ayuntamiento Salamanca
             </div>
+            <ul class="nav flex-column sidebar-nav">
+                <li class="nav-item @(ViewBag.Active=="MenuPrincipal"?"active":"")">
+                    <a class="nav-link" asp-controller="MenuPrincipal" asp-action="Index">Menú Principal</a>
+                </li>
+                <li class="nav-item @(ViewBag.Active=="AltaUsuario"?"active":"")">
+                    <a class="nav-link" asp-controller="AltaUsuario" asp-action="AltaUsuario">Crear Usuario</a>
+                </li>
+                <li class="nav-item @(ViewBag.Active=="AltaMasiva"?"active":"")">
+                    <a class="nav-link" asp-controller="AltaMasiva" asp-action="AltaMasiva">Alta Masiva</a>
+                </li>
+                <li class="nav-item @(ViewBag.Active=="ModificarUsuario"?"active":"")">
+                    <a class="nav-link" asp-controller="GestionUsuarios" asp-action="ModificarUsuario">Modificar Usuario</a>
+                </li>
+                <li class="nav-item @(ViewBag.Active=="HabilitarDeshabilitarUsuario"?"active":"")">
+                    <a class="nav-link" asp-controller="GestionUsuarios" asp-action="HabilitarDeshabilitarUsuario">Habilitar/Deshabilitar</a>
+                </li>
+                <li class="nav-item @(ViewBag.Active=="BajaUsuario"?"active":"")">
+                    <a class="nav-link" asp-controller="BajaUsuario" asp-action="BajaUsuario">Baja Usuario</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" asp-controller="MenuPrincipal" asp-action="Index">Opciones</a>
+                </li>
+            </ul>
         </nav>
-    </header>
-
-    @RenderBody() <!-- Quitamos el <div class="container"> para que las vistas decidan su contenedor -->
-
-    <footer class="footer-gray border-top">
-    </footer>
+        <!-- Main area -->
+        <div class="app-main">
+            <header class="app-header">
+                <span class="navbar-brand">@ViewData["Title"]</span>
+                <div>
+                    <a href="#" class="text-muted me-3"><i class="bi bi-search"></i></a>
+                    <a href="#" class="text-muted"><i class="bi bi-question-circle"></i></a>
+                </div>
+            </header>
+            <section class="app-content">
+                @RenderBody()
+            </section>
+            <footer class="app-footer">
+                © 2025 Ayuntamiento de Salamanca
+            </footer>
+        </div>
+    </div>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>

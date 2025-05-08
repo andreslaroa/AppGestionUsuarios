@@ -76,7 +76,7 @@ public class AltaUsuarioController : Controller
         }
     }
 
-    private List<string> GetGruposFromAD()
+    public List<string> GetGruposFromAD()
     {
         var grupos = new List<string>();
         string baseLdap = _config["ActiveDirectory:BaseLdapPrefix"]

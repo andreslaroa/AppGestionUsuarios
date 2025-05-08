@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using OfficeOpenXml;
 using System.Globalization;
 using static GestionUsuariosController;
+using System.Text.Json;
 
 [Authorize]
 public class AltaMasivaController : Controller
@@ -40,6 +41,11 @@ public class AltaMasivaController : Controller
     {
         try
         {
+            // traemos todos los grupos de AD para poblar los <select> en la vista
+            ViewBag.GruposAD = _altaUsuarioController
+                       .GetGruposFromAD()
+                       .OrderBy(g => g)
+                       .ToList();
             return View("AltaMasiva");
         }
         catch (Exception ex)
@@ -192,39 +198,16 @@ public class AltaMasivaController : Controller
                 }
             }
 
-            // 2.7) Parseo y validación de Grupos
-            var raw = get("Grupos")?.Replace("\u00A0", " ").Trim() ?? "";
-
-            // 1) Si viene en formato JSON array ["A";"B"], quita corchetes
-            if (raw.StartsWith("[") && raw.EndsWith("]"))
+            // 2.7) Leer directamente el array enviado desde el cliente
+            List<string> grupos = new List<string>();
+            if (dict.TryGetValue("Grupos", out var grObj) && grObj is JsonElement grEl && grEl.ValueKind == JsonValueKind.Array)
             {
-                raw = raw.Substring(1, raw.Length - 2);
+                foreach (var item in grEl.EnumerateArray())
+                    if (item.ValueKind == JsonValueKind.String)
+                        grupos.Add(item.GetString());
             }
-
-            var grupos = raw
-                // 2) Separa solo por punto y coma (o por lo que realmente uses)
-                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s =>
-                    s
-                    .Trim()                 // quita espacios
-                    .Trim('"', '\'')        // quita comillas simples o dobles sobrantes
-                )
-                .Where(s => s.Length > 0)
-                .ToList();
-
-            summaryMessages.Add($"Parsed Grupos ({rowNumber}): [{string.Join("], [", grupos)}]");
-
             model.Grupos = grupos;
 
-            var missing = GetMissingGroups(model.Grupos);
-            if (missing.Any())
-            {
-                summaryMessages.Add(
-                  $"Fila {rowNumber}: Error: no existen en AD los grupos [{string.Join(", ", missing)}]."
-                );
-                overallSuccess = false;
-                continue;
-            }
 
             // 2.8) Parseo de FechaCaducidad (dd/MM/yyyy o ISO yyyy-MM-dd)
             var rawFecha = get("FechaCaducidad");
