@@ -17,14 +17,21 @@ namespace AppGestionUsuarios.Controllers
         [HttpGet]
         public IActionResult AltaUsuario()
         {
-            return RedirectToAction("AltaUsuario", "AltaUsuario"); // Redirige al método que maneja la creación
+            return RedirectToAction("AltaUsuario", "AltaUsuario"); 
         }
 
         [HttpGet]
-        public IActionResult EditUser()
+        public IActionResult HabilitarDeshabilitarUsuario()
         {
-            return RedirectToAction("EditUser", "UserManagement"); // Asegúrate de tener este método en UserManagementController
+            return RedirectToAction("HabilitarDeshabilitarUsuario", "GestionUsuarios"); 
         }
+
+        [HttpGet]
+        public IActionResult ModificarUsuario()
+        {
+            return RedirectToAction("ModificarUsuario", "GestionUsuarios");
+        }
+
 
         [HttpGet]
         public IActionResult DeleteUser()

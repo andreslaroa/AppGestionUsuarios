@@ -88,36 +88,9 @@
             <label for="selectedUser">Usuario Seleccionado:</label>
             <input type="text" id="selectedUser" readonly />
 
-            <button type="button" onclick="loadUserInfo()">Cargar Información</button>
+            <button type="button" onclick="loadUserGroups()">Cargar grupos de usuario</button>
 
-            <h3>Modificar OU del Usuario</h3>
-            <label for="newOUPrincipal">Nueva OU Principal:</label>
-            <select id="newOUPrincipal" onchange="fetchOUSecundarias(); fetchDepartamentos();">
-                <option value="">Seleccione una nueva OU Principal</option>
-                @foreach (var ou in ViewBag.OUPrincipales as List<string>)
-                {
-                    <option value="@ou">@ou</option>
-                }
-            </select>
-
-            <label for="newOUSecundaria">Nueva OU Secundaria:</label>
-            <select id="newOUSecundaria">
-                <option value="">Seleccione una OU Secundaria</option>
-            </select>
-
-            <label for="newDepartamento">Nuevo Departamento:</label>
-            <select id="newDepartamento" onchange="fetchLugarEnvio();">
-                <option value="">Seleccione un departamento</option>
-            </select>
-
-            <label for="newLugarEnvio">Nuevo Lugar de Envío:</label>
-            <select id="newLugarEnvio">
-                <option value="">Seleccione un lugar de envío</option>
-            </select>
-
-            <button type="button" onclick="modifyUserOU()">Guardar Cambios</button>
-
-            <h3>Modificar Grupos del Usuario</h3>
+            
 
             <!-- Lista de grupos actuales -->
             <label for="currentGroups">Grupos Actuales:</label>
@@ -137,6 +110,43 @@
             </select>
             <button type="button" onclick="addUserToGroup()">Añadir Grupo</button>
 
+            <h3>Modificar OU del Usuario</h3>
+             <div class="field-group">
+                    <label for="ouPrincipal">OU Principal:</label>
+                    <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamento(); fetchLugarEnvio();" required>
+                        <option value="">Seleccione una OU Principal</option>
+                    @if (ViewBag.OUPrincipales != null)
+
+                    {
+
+                        foreach (var ou in ViewBag.OUPrincipales as List<string>)
+
+                        {
+                                                <option value="@ou">@ou</option>
+                        }
+
+                    }
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="ouSecundaria">OU Secundaria:</label>
+                    <select id="ouSecundaria" name="ouSecundaria" onchange="fetchDepartamento(); fetchLugarEnvio();">
+                        <option value="">Seleccione una OU Secundaria (opcional)</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="departamento">Departamento:</label>
+                    <input type="text" id="departamento" name="departamento" readonly required />
+                </div>
+                <div class="field-group">
+                    <label for="lugarEnvio">Lugar de Envío:</label>
+                    <input type="text" id="lugarEnvio" name="lugarEnvio" readonly />
+                </div>
+
+            <button type="button" onclick="modifyUserOU()">Guardar Cambios</button>
+
+            <h3>Modificar Grupos del Usuario</h3>
+
 
         </form>
 
@@ -154,143 +164,167 @@
                 document.getElementById('selectedUser').value = selectedUser;
             }
 
-            async function loadUserInfo() {
-                const selectedUser = document.getElementById("selectedUser").value;
-                if (!selectedUser) {
-                    alert("Seleccione y confirme un usuario antes de cargar la información.");
-                    return;
+              async function loadUserGroups() {
+              // 1) Obtén el valor seleccionado (formato "Nombre (samAccountName)")
+              const input = document.getElementById("selectedUser").value;
+              if (!input) {
+                alert("Por favor, selecciona primero un usuario.");
+                return;
+              }
+
+              try {
+                // 2) Llamada POST a GetUserGroups
+                const resp = await fetch('/GestionUsuarios/GetUserGroups', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ username: input })
+                });
+                const data = await resp.json();
+
+                // 3) Si hay error, avisar
+                if (!data.success) {
+                  alert(data.message);
+                  return;
                 }
 
-                try {
-                    const response = await fetch('/GestionUsuarios/GetUserDetails', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: selectedUser })
-                    });
+                // 4) Volcar la lista de grupos en el <select>
+                const groupSelect = document.getElementById("currentGroups");
+                groupSelect.innerHTML = "";  // limpiar opciones previas
+                data.groups.forEach(g => {
+                  const opt = document.createElement("option");
+                  opt.value = g;
+                  opt.textContent = g;
+                  groupSelect.appendChild(opt);
+                });
 
-                    const data = await response.json();
-                    if (data.success) {
-                        document.getElementById("newOUPrincipal").value = data.ouPrincipal;
-                        fetchOUSecundarias();
-                        fetchDepartamentos();
-
-                        document.getElementById("newDepartamento").value = data.departamento;
-                        fetchLugarEnvio();
-
-                        document.getElementById("newLugarEnvio").value = data.lugarEnvio;
-                    } else {
-                        alert(data.message);
-                    }
-                } catch (error) {
-                    alert("Error al obtener información del usuario.");
-                }
+              } catch (err) {
+                console.error(err);
+                alert("Error al cargar los grupos del usuario.");
+              }
             }
 
-            // Obtener las OUs Secundarias según la OU Principal seleccionada
             function fetchOUSecundarias() {
-                const ouPrincipal = document.getElementById('newOUPrincipal').value;
-                const ouSecundaria = document.getElementById('newOUSecundaria');
-                ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria</option>';
+            const ouPrincipal = document.getElementById('ouPrincipal').value;
+            const ouSecundaria = document.getElementById('ouSecundaria');
+            ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria (opcional)</option>';
 
-                if (ouPrincipal) {
-                    fetch('/GestionUsuarios/GetOUSecundarias', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ouPrincipal })
-                    })
-                        .then(response => response.json())
-                        .then(data => {
+            if (ouPrincipal) {
+                fetch('/AltaUsuario/GetOUSecundarias', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ouPrincipal })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length === 0) {
+                            ouSecundaria.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
+                        } else {
                             data.forEach(ou => {
                                 const option = document.createElement('option');
                                 option.value = ou;
                                 option.textContent = ou;
                                 ouSecundaria.appendChild(option);
                             });
-                        })
-                        .catch(error => console.error('Error al obtener las OUs secundarias:', error));
-                }
-            }
-
-            // Obtener los Departamentos según la OU Principal seleccionada
-            function fetchDepartamentos() {
-                const ouPrincipal = document.getElementById('newOUPrincipal').value;
-                const departamento = document.getElementById('newDepartamento');
-                departamento.innerHTML = '<option value="">Seleccione un departamento</option>';
-
-                if (ouPrincipal) {
-                    fetch('/GestionUsuarios/GetDepartamentos', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ouPrincipal })
+                        }
                     })
-                        .then(response => response.json())
-                        .then(data => {
-                            data.forEach(dep => {
-                                const option = document.createElement('option');
-                                option.value = dep;
-                                option.textContent = dep;
-                                departamento.appendChild(option);
-                            });
-                        })
-                        .catch(error => console.error('Error al obtener los departamentos:', error));
-                }
+                    .catch(error => {
+                        console.error('Error al obtener las OUs secundarias:', error);
+                        alert('Error al obtener las OUs secundarias.');
+                    });
+            }
+        }
+
+        function fetchDepartamento() {
+            const ouPrincipal = document.getElementById('ouPrincipal').value;
+            const ouSecundaria = document.getElementById('ouSecundaria').value;
+            const departamentoField = document.getElementById('departamento');
+
+            if (!ouPrincipal) {
+                departamentoField.value = '';
+                return;
             }
 
-            // Obtener los Lugares de Envío según el Departamento seleccionado
-            function fetchLugarEnvio() {
-                const departamento = document.getElementById('newDepartamento').value;
-                const lugarEnvio = document.getElementById('newLugarEnvio');
-                lugarEnvio.innerHTML = '<option value="">Seleccione un lugar de envío</option>';
+            fetch('/AltaUsuario/GetDepartamento', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ouPrincipal, ouSecundaria })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    departamentoField.value = data.success ? data.departamento : '';
+                    if (!data.success) alert(data.message);
+                })
+                .catch(error => {
+                    console.error('Error al obtener el departamento:', error);
+                    alert('Error al obtener el departamento.');
+                    departamentoField.value = '';
+                });
+        }
 
-                if (departamento) {
-                    fetch('/GestionUsuarios/GetLugarEnvio', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ departamento })
-                    })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.length === 1) {
-                                lugarEnvio.innerHTML = '<option value="' + data[0] + '">' + data[0] + '</option>';
-                            } else {
-                                data.forEach(lugar => {
-                                    const option = document.createElement('option');
-                                    option.value = lugar;
-                                    option.textContent = lugar;
-                                    lugarEnvio.appendChild(option);
-                                });
-                            }
-                        })
-                        .catch(error => console.error('Error al obtener el lugar de envío:', error));
-                }
+        function fetchLugarEnvio() {
+            const ouPrincipal = document.getElementById('ouPrincipal').value;
+            const ouSecundaria = document.getElementById('ouSecundaria').value;
+            const lugarEnvioField = document.getElementById('lugarEnvio');
+
+            if (!ouPrincipal) {
+                lugarEnvioField.value = '';
+                return;
             }
 
-            // Enviar los cambios al servidor
+            fetch('/AltaUsuario/GetLugarEnvio', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ouPrincipal, ouSecundaria })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    lugarEnvioField.value = data.success ? data.lugarEnvio : '';
+                    if (!data.success) alert(data.message);
+                })
+                .catch(error => {
+                    console.error('Error al obtener el lugar de envío:', error);
+                    alert('Error al obtener el lugar de envío.');
+                    lugarEnvioField.value = '';
+                });
+        }
+
             async function modifyUserOU() {
-                const username = document.getElementById("selectedUser").value;
-                const ouPrincipal = document.getElementById("newOUPrincipal").value;
-                const ouSecundaria = document.getElementById("newOUSecundaria").value;
-                const departamento = document.getElementById("newDepartamento").value;
-                const lugarEnvio = document.getElementById("newLugarEnvio").value;
+                const username     = document.getElementById("selectedUser").value;
+                const ouPrincipal  = document.getElementById("ouPrincipal").value;
+                const ouSecundaria = document.getElementById("ouSecundaria").value;  // opcional
+                // CORRECCIÓN: id en minúsculas
+                const departamento  = document.getElementById("departamento").value;
+                const lugarEnvio   = document.getElementById("lugarEnvio").value;
 
-                if (!username || !ouPrincipal || !ouSecundaria || !departamento || !lugarEnvio) {
-                    alert("Todos los campos son obligatorios.");
+                // Ya no pedimos ouSecundaria
+                if (!username || !ouPrincipal || !departamento || !lugarEnvio) {
+                    alert("Usuario, OU Principal, Departamento y Lugar de envío son obligatorios.");
                     return;
                 }
 
+                // Construimos el payload
+                const payload = { username, ouPrincipal, departamento, lugarEnvio };
+                // Solo añadimos ouSecundaria si viene rellena
+                if (ouSecundaria.trim() !== "") {
+                    payload.ouSecundaria = ouSecundaria;
+                }
+
                 try {
-                    const response = await fetch('/GestionUsuarios/ModifyUserOU', {
+                    const resp = await fetch('/GestionUsuarios/ModifyUserOU', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username, ouPrincipal, ouSecundaria, departamento, lugarEnvio })
+                        body: JSON.stringify(payload)
                     });
-
-                    const data = await response.json();
+                    const data = await resp.json();
                     alert(data.message);
-                } catch (error) {
-                    alert("Error al modificar la OU.");
+                }
+                catch (err) {
+                    console.error(err);
+                    alert("Error al modificar la OU. Mira la consola para más detalles.");
                 }
             }
+
+
             // Cargar la información del usuario, incluyendo los grupos actuales
             async function loadUserInfo() {
                 const selectedUser = document.getElementById("selectedUser").value;
@@ -354,7 +388,7 @@
 
                     const data = await response.json();
                     alert(data.message);
-                    loadUserInfo();  // Recargar la lista de grupos
+                    loadUserGroups();  // Recargar la lista de grupos
                 } catch (error) {
                     alert("Error al modificar el grupo.");
                 }
@@ -383,7 +417,7 @@
                     });
                     const data = await response.json();
                     alert(data.message);
-                    loadUserInfo();  // Refrescar la lista de grupos
+                    loadUserGroups();  // Refrescar la lista de grupos
                 } catch (error) {
                     alert("Error al eliminar el grupo.");
                 }

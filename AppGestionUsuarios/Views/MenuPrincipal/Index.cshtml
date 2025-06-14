@@ -1,5 +1,5 @@
 ﻿@{
-    ViewData["Title"] = "Dashboard";
+    ViewData["Title"] = "Menú Principal";
 }
 
 <h1>@ViewData["Title"]</h1>
@@ -8,11 +8,26 @@
 <div>
     <h2>Opciones disponibles</h2>
     <ul>
-        <li><a class="btn" asp-controller="AltaUsuario" asp-action="AltaUsuario">Crear Usuario</a></li>
-        <li><a class="btn" asp-controller="GestionUsuarios" asp-action="HabilitarDeshabilitarUsuario">Habilitar Usuario</a></li>
-        <li><a class="btn" asp-controller="GestionUsuarios" asp-action="ModificarUsuario">Modificar Usuario</a></li>
-        <li><a class="btn" asp-controller="BajaUsuario" asp-action="BajaUsuario">Baja Usuario</a></li>
-        <li><a class="btn" asp-controller="AltaMasiva" asp-action="AltaMasiva">Altas Masivas</a></li>
+        <li class="option-card">
+            <a class="option-title" asp-controller="AltaUsuario" asp-action="AltaUsuario">Crear Usuario</a>
+            <p class="option-description">Permite registrar un nuevo usuario en la aplicación, asignándole rol y credenciales.</p>
+        </li>
+        <li class="option-card">
+            <a class="option-title" asp-controller="GestionUsuarios" asp-action="HabilitarDeshabilitarUsuario">Habilitar Usuario</a>
+            <p class="option-description">Activa o desactiva la cuenta de un usuario para controlar su acceso al sistema.</p>
+        </li>
+        <li class="option-card">
+            <a class="option-title" asp-controller="GestionUsuarios" asp-action="ModificarUsuario">Modificar Usuario</a>
+            <p class="option-description">Edita los datos personales o permisos de un usuario ya existente.</p>
+        </li>
+        <li class="option-card">
+            <a class="option-title" asp-controller="BajaUsuario" asp-action="BajaUsuario">Baja Usuario</a>
+            <p class="option-description">Elimina o da de baja permanentemente la cuenta de un usuario.</p>
+        </li>
+        <li class="option-card">
+            <a class="option-title" asp-controller="AltaMasiva" asp-action="AltaMasiva">Altas Masivas</a>
+            <p class="option-description">Importa un lote de usuarios desde un fichero CSV para agilizar registros.</p>
+        </li>
     </ul>
 </div>
 
@@ -21,10 +36,40 @@
         ul {
             list-style: none;
             padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
         }
 
-        li {
-            margin-bottom: 15px;
+        .option-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 16px;
+            background-color: #fafafa;
+            transition: box-shadow 0.2s;
+        }
+
+            .option-card:hover {
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+
+        .option-title {
+            display: block;
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-decoration: none;
+            color: #007bff;
+        }
+
+            .option-title:hover {
+                text-decoration: underline;
+            }
+
+        .option-description {
+            margin: 0;
+            font-size: 0.95em;
+            color: #555;
         }
     </style>
 }

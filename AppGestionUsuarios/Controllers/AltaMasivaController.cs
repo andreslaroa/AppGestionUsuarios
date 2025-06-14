@@ -36,6 +36,8 @@ public class AltaMasivaController : Controller
         public string Message { get; set; }
     }
 
+
+
     [HttpGet]
     public IActionResult AltaMasiva()
     {

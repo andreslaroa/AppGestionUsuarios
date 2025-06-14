@@ -11,6 +11,13 @@ using System.Linq;
 using System.Net.Mail;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using AppGestionUsuarios.Notificaciones;
+using Microsoft.Graph;
+using Microsoft.Graph.Models;
+using Microsoft.Graph.Users.Item.SendMail;
+using Azure.Identity;
+
+
 
 [Authorize]
 public class BajaUsuarioController : Controller
@@ -24,6 +31,8 @@ public class BajaUsuarioController : Controller
     private readonly string _fsServer;
     private readonly string _shareBase;
     private readonly string _quotaBase;
+    private static GraphServiceClient? _graphClient = null;
+
 
 
     public BajaUsuarioController(IConfiguration config)
@@ -43,7 +52,9 @@ public class BajaUsuarioController : Controller
         _fsServer = fs["ServerName"];
         _shareBase = fs["ShareBase"];
         _quotaBase = fs["QuotaPathBase"];
+
     }
+
 
 
     [HttpGet]
@@ -63,7 +74,7 @@ public class BajaUsuarioController : Controller
             search.PropertiesToLoad.Add("sAMAccountName");
 
             usuarios = search.FindAll()
-                             .Cast<SearchResult>()
+                             .Cast<System.DirectoryServices.SearchResult>()
                              .Where(r => r.Properties.Contains("displayName")
                                       && r.Properties.Contains("sAMAccountName"))
                              .Select(r => $"{r.Properties["displayName"][0]} ({r.Properties["sAMAccountName"][0]})")
@@ -82,6 +93,14 @@ public class BajaUsuarioController : Controller
     [HttpPost]
     public IActionResult BajaUsuario([FromBody] Dictionary<string, object> requestData)
     {
+        // 0) Inicializar GraphServiceClient
+        var tenantId = _config["AzureAd:TenantId"] ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
+        var clientId = _config["AzureAd:ClientId"] ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
+        var clientSecret = _config["AzureAd:ClientSecret"] ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
+        var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+        _graphClient = new GraphServiceClient(credential);
+
+
         var messages = new List<string>();
         bool userDisabled = false;
         List<string> selectedActions = new List<string>();
@@ -206,30 +225,21 @@ public class BajaUsuarioController : Controller
         }
 
         // 7) Envío de correos si procede
-        //if (userDisabled && selectedActions.Any())
-        //{
-        //    try
-        //    {
-        //        SendEmailToAdmin(username, /*…*/);
-        //        messages.Add("Email administrador enviado.");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        messages.Add($"Error envío email admin: {ex.Message}");
-        //    }
-        //    foreach (var action in selectedActions)
-        //    {
-        //        try
-        //        {
-        //            SendEmailForAction(action, /*…*/);
-        //            messages.Add($"Email para acción {action} enviado.");
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            messages.Add($"Error email acción {action}: {ex.Message}");
-        //        }
-        //    }
-        //}
+        if (userDisabled && selectedActions.Any())
+        {
+            foreach (var action in selectedActions)
+            {
+                try
+                {
+                    SendMailMessage(_graphClient, username, action).GetAwaiter().GetResult();
+                    messages.Add($"Email para '{GetActionDescription(action)}' enviado.");
+                }
+                catch (Exception ex)
+                {
+                    messages.Add($"Error enviando email para '{GetActionDescription(action)}': {ex.Message}");
+                }
+            }
+        }
 
         string final = userDisabled
             ? "Baja completada."
@@ -281,7 +291,7 @@ public class BajaUsuarioController : Controller
                     searcher.SearchScope = SearchScope.Subtree;
                     searcher.PropertiesToLoad.Add("distinguishedName");
 
-                    SearchResult result = searcher.FindOne();
+                    System.DirectoryServices.SearchResult result = searcher.FindOne();
                     return result?.GetDirectoryEntry();
                 }
             }
@@ -294,109 +304,7 @@ public class BajaUsuarioController : Controller
         return null;
     }
 
-    //private void SendEmailToAdmin(string username, string nombreCompleto, string dni, string ouOriginal, DateTime fechaBaja, List<string> processMessages)
-    //{
-    //    // Validar la configuración SMTP
-    //    string smtpServer = _configuration["SmtpSettings:Server"];
-    //    string smtpPortStr = _configuration["SmtpSettings:Port"];
-    //    string smtpUsername = _configuration["SmtpSettings:Username"];
-    //    string smtpPassword = _configuration["SmtpSettings:Password"];
-    //    string fromEmail = _configuration["SmtpSettings:FromEmail"];
-    //    string adminEmail = _configuration["SmtpSettings:AdminEmail"];
-
-    //    // Validar que todas las configuraciones estén presentes
-    //    if (string.IsNullOrEmpty(smtpServer) || string.IsNullOrEmpty(smtpPortStr) ||
-    //        string.IsNullOrEmpty(smtpUsername) || string.IsNullOrEmpty(smtpPassword) ||
-    //        string.IsNullOrEmpty(fromEmail) || string.IsNullOrEmpty(adminEmail))
-    //    {
-    //        throw new Exception("Configuración SMTP incompleta en appsettings.json. Verifique las claves SmtpSettings.");
-    //    }
-
-    //    if (!int.TryParse(smtpPortStr, out int smtpPort))
-    //    {
-    //        throw new Exception("El puerto SMTP en appsettings.json no es un número válido.");
-    //    }
-
-    //    using (var client = new SmtpClient(smtpServer, smtpPort))
-    //    {
-    //        client.EnableSsl = true; // Habilitar TLS
-    //        client.Credentials = new System.Net.NetworkCredential(smtpUsername, smtpPassword);
-
-    //        using (var mailMessage = new MailMessage())
-    //        {
-    //            mailMessage.From = new MailAddress(fromEmail, "Sistema de Gestión de Usuarios");
-    //            mailMessage.To.Add(adminEmail);
-    //            mailMessage.Subject = $"Notificación: Baja de usuario '{username}'";
-
-    //            // Construir el cuerpo del correo
-    //            string body = "Se ha dado de baja a un usuario en el sistema. A continuación, los detalles:\n\n";
-    //            body += $"Username: {username}\n";
-    //            body += $"Nombre completo: {nombreCompleto}\n";
-    //            body += $"DNI: {dni}\n";
-    //            body += $"OU original: {ouOriginal}\n";
-    //            body += $"Fecha y hora de la baja: {fechaBaja:dd/MM/yyyy HH:mm:ss}\n";
-    //            body += "\nDetalles del proceso:\n- " + (processMessages.Any() ? string.Join("\n- ", processMessages) : "No se registraron eventos adicionales.");
-
-    //            mailMessage.Body = body;
-    //            mailMessage.IsBodyHtml = false; // Texto plano
-
-    //            client.Send(mailMessage);
-    //        }
-    //    }
-    //}
-
-    //private void SendEmailForAction(string action, string username, string nombreCompleto, string dni, string ouOriginal, DateTime fechaBaja)
-    //{
-    //    // Validar la configuración SMTP
-    //    string smtpServer = _configuration["SmtpSettings:Server"];
-    //    string smtpPortStr = _configuration["SmtpSettings:Port"];
-    //    string smtpUsername = _configuration["SmtpSettings:Username"];
-    //    string smtpPassword = _configuration["SmtpSettings:Password"];
-    //    string fromEmail = _configuration["SmtpSettings:FromEmail"];
-    //    string adminEmail = _configuration["SmtpSettings:AdminEmail"];
-
-    //    // Validar que todas las configuraciones estén presentes
-    //    if (string.IsNullOrEmpty(smtpServer) || string.IsNullOrEmpty(smtpPortStr) ||
-    //        string.IsNullOrEmpty(smtpUsername) || string.IsNullOrEmpty(smtpPassword) ||
-    //        string.IsNullOrEmpty(fromEmail) || string.IsNullOrEmpty(adminEmail))
-    //    {
-    //        throw new Exception("Configuración SMTP incompleta en appsettings.json. Verifique las claves SmtpSettings.");
-    //    }
-
-    //    if (!int.TryParse(smtpPortStr, out int smtpPort))
-    //    {
-    //        throw new Exception("El puerto SMTP en appsettings.json no es un número válido.");
-    //    }
-
-    //    using (var client = new SmtpClient(smtpServer, smtpPort))
-    //    {
-    //        client.EnableSsl = true; // Habilitar TLS
-    //        client.Credentials = new System.Net.NetworkCredential(smtpUsername, smtpPassword);
-
-    //        using (var mailMessage = new MailMessage())
-    //        {
-    //            mailMessage.From = new MailAddress(fromEmail, "Sistema de Gestión de Usuarios");
-    //            mailMessage.To.Add(adminEmail);
-    //            mailMessage.Subject = $"Incidencia: {GetActionDescription(action)} para el usuario '{username}'";
-
-    //            // Construir el cuerpo del correo
-    //            string body = $"Se ha solicitado una acción adicional para un usuario dado de baja. A continuación, los detalles:\n\n";
-    //            body += $"Acción solicitada: {GetActionDescription(action)}\n";
-    //            body += $"Username: {username}\n";
-    //            body += $"Nombre completo: {nombreCompleto}\n";
-    //            body += $"DNI: {dni}\n";
-    //            body += $"OU original: {ouOriginal}\n";
-    //            body += $"Fecha y hora de la solicitud: {fechaBaja:dd/MM/yyyy HH:mm:ss}\n";
-    //            body += "\nPor favor, procese esta incidencia según corresponda.";
-
-    //            mailMessage.Body = body;
-    //            mailMessage.IsBodyHtml = false; // Texto plano
-
-    //            client.Send(mailMessage);
-    //        }
-    //    }
-    //}
-
+    
     private string GetActionDescription(string action)
     {
         return action switch
@@ -410,4 +318,41 @@ public class BajaUsuarioController : Controller
             _ => "Acción desconocida"
         };
     }
+
+    private async Task SendMailMessage(GraphServiceClient graphClient, string username, string action)
+    {
+       var fromEmail = _config.GetSection("SmtpSettings")["FromEmail"]
+                        ?? throw new InvalidOperationException("Falta SmtpSettings:FromEmail en config");
+
+        // 2) Construimos el mensaje igual que antes
+        var body = new SendMailPostRequestBody
+        {
+            Message = new Message
+            {
+                Subject = "Baja usuario en herramienta ",
+                Body = new ItemBody
+                {
+                    ContentType = BodyType.Text,
+                    Content = "Baja al usuario " + username + " en la herramienta " + action
+                },
+                ToRecipients = new List<Recipient>
+            {
+                new Recipient
+                {
+                    EmailAddress = new EmailAddress
+                    {
+                        Address = fromEmail
+                    }
+                }
+            }
+            }
+        };
+
+        // 3) Enviamos desde la cuenta que acabamos de leer
+        await graphClient
+            .Users[fromEmail]
+            .SendMail
+            .PostAsync(body);
+    }
+
 }

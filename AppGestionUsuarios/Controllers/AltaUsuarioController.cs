@@ -13,6 +13,10 @@ using static GestionUsuariosController;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Runtime.InteropServices; // Para COM
+using Microsoft.Graph.Models;
+using Microsoft.Graph.Users.Item.SendMail;
+using Microsoft.Kiota.Abstractions;
+using Microsoft.Graph;
 
 
 /*En esta clase encontramos todos los métodos que son concretos del alta de usuario*/
@@ -28,6 +32,7 @@ public class AltaUsuarioController : Controller
     {
         _config = config;
     }
+
 
     public class UserModelAltaUsuario
     {
@@ -306,13 +311,13 @@ public class AltaUsuarioController : Controller
     public IActionResult CreateUser([FromBody] UserModelAltaUsuario user)
     {
         // 1) Leemos la configuración de fichero
-        string serverName     = _config["FsConfig:ServerName"];
+        string serverName = _config["FsConfig:ServerName"];
         string folderPathBase = _config["FsConfig:ShareBase"];
-        string quotaPathBase  = _config["FsConfig:QuotaPathBase"];
+        string quotaPathBase = _config["FsConfig:QuotaPathBase"];
 
         // 2) Construimos rutas sin hard-codear ningún literal
-        string uncUserFolder  = Path.Combine(folderPathBase, user.Username);
-        string localQuotaPath = Path.Combine(quotaPathBase,  user.Username);
+        string uncUserFolder = Path.Combine(folderPathBase, user.Username);
+        string localQuotaPath = Path.Combine(quotaPathBase, user.Username);
 
 
         // Validar si los datos se recibieron correctamente
