@@ -1,19 +1,14 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System;
-using System.Collections.Generic;
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using OfficeOpenXml;
 using System.Globalization;
-using static GestionUsuariosController;
 using System.Text.Json;
 using Azure.Identity;
 using Microsoft.Graph;
-using Microsoft.AspNetCore.Http.HttpResults;
+using static AltaUsuarioController;
 
 [Authorize]
 public class AltaMasivaController : Controller
@@ -29,7 +24,6 @@ public class AltaMasivaController : Controller
     }
 
 
-    private readonly string domainPath = "DC=aytosa,DC=inet";
 
     // Clase para el resultado de las verificaciones
     private class CheckResult
@@ -40,7 +34,17 @@ public class AltaMasivaController : Controller
     }
 
     private GraphServiceClient? _graphClient = null;
-    private IConfiguration? _config;
+    private readonly IConfiguration _config;
+
+    public AltaMasivaController(IConfiguration config)
+    {
+        _config = config;
+    }
+
+
+
+    //private readonly string domainPath = _config["AciveDirectory:DomainComponents"];
+    private readonly string domainPath = "DC=aytosa, DC=inet";
 
     public class ProcessUsersRequest
     {

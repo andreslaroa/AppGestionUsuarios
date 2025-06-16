@@ -5,31 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alta de Usuario - Asistente</title>
     <style>
-    body {
+        body {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         margin: 0;
         padding: 20px;
         background-color: #F5F5F5; /* Gris claro del Ayuntamiento */
-    }
-    .wizard-container {
+        }
+        .wizard-container {
         max-width: 800px;
         margin: 0 auto;
         background-color: #FFFFFF; /* Blanco para el contenedor */
         border-radius: 10px;
         padding: 20px;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-    }
-    h1 {
+        }
+        h1 {
         color: #A42327; /* Rojo oscuro del Ayuntamiento */
         text-align: center;
         margin-bottom: 20px;
-    }
-    .steps {
+        }
+        .steps {
         display: flex;
         justify-content: space-between;
         margin-bottom: 20px;
-    }
-    .step {
+        }
+        .step {
         flex: 1;
         text-align: center;
         padding: 10px;
@@ -38,58 +38,67 @@
         margin: 0 5px;
         cursor: pointer;
         transition: background-color 0.3s;
-    }
-    .step.active {
+        }
+        .step.active {
         background-color: #A42327; /* Rojo oscuro para paso activo */
         color: #FFFFFF; /* Blanco para contraste */
-    }
-    .step.completed {
+        }
+        .step.completed {
         background-color: #28A745; /* Verde oscuro para pasos completados */
         color: #FFFFFF;
-    }
-    .form-step {
+        }
+        .form-step {
         display: none;
-    }
-    .form-step.active {
+        }
+        .form-step.active {
         display: block;
-    }
-    .field-group {
+        }
+        .field-group {
         margin-bottom: 20px;
-    }
-    label {
+        }
+        label {
         display: block;
         font-weight: bold;
         margin-bottom: 5px;
         color: #333; /* Gris oscuro para texto */
-    }
-    input, select, textarea {
+        }
+        input, select, textarea {
         width: 100%;
         padding: 10px;
         border: 1px solid #CCC;
         border-radius: 6px;
         background-color: #F9F9F9; /* Gris muy claro para campos */
         margin-bottom: 10px;
-    }
-    input:focus, select:focus {
+        }
+        input:focus, select:focus {
         border-color: #A42327; /* Rojo oscuro en foco */
         outline: none;
         box-shadow: 0 0 5px rgba(164, 35, 39, 0.3); /* Sombra con rojo oscuro */
-    }
-    .checkbox-group label {
-        display: flex;
-        align-items: center;
-        font-weight: normal;
-        margin-bottom: 10px;
-    }
-    .checkbox-group input[type="checkbox"] {
-        margin-right: 10px;
-    }
-    .button-group {
+        }
+        /* Contenedor que hará un grid de dos columnas */
+        .checkbox-group {
+          display: grid;
+          grid-template-columns: 1fr 1fr; /* dos columnas iguales */
+          gap: 8px 16px;                  /* espacio entre filas y columnas */
+          align-items: center;            /* centra verticalmente */
+        }
+
+        /* Cada label es un flex para alinear checkbox+texto */
+        .checkbox-group label {
+          display: flex;
+          align-items: center;
+        }
+
+        /* Un pequeño margen entre el checkbox y el texto */
+        .checkbox-group input[type="checkbox"] {
+          margin-right: 6px;
+        }
+        .button-group {
         display: flex;
         justify-content: space-between;
         margin-top: 20px;
-    }
-    button {
+        }
+        button {
         padding: 10px 20px;
         background-color: #A42327; /* Rojo oscuro para botones */
         color: #FFFFFF; /* Blanco para texto */
@@ -97,20 +106,20 @@
         border-radius: 6px;
         cursor: pointer;
         transition: background-color 0.3s;
-    }
-    button:disabled {
+        }
+        button:disabled {
         background-color: #CCCCCC; /* Gris para botones desactivados */
         cursor: not-allowed;
-    }
-    button:hover:not(:disabled) {
+        }
+        button:hover:not(:disabled) {
         background-color: #7E1C20; /* Tono más oscuro del rojo para hover */
-    }
-    .summary {
+        }
+        .summary {
         background-color: #F9F9F9; /* Gris muy claro para resumen */
         padding: 15px;
         border-radius: 6px;
-    }
-</style>
+        }
+    </style>
 </head>
 <body>
     <div class="wizard-container">
@@ -127,11 +136,11 @@
             <div class="form-step active" data-step="1">
                 <div class="field-group">
                     <label for="nombre">Nombre:</label>
-                    <input type="text" id="nombre" name="nombre" oninput="generateUsername()" required />
+                    <input type="text" id="nombre" name="nombre" oninput="generateUsername()"  />
                 </div>
                 <div class="field-group">
                     <label for="apellido1">Apellido 1:</label>
-                    <input type="text" id="apellido1" name="apellido1" oninput="generateUsername()" required />
+                    <input type="text" id="apellido1" name="apellido1" oninput="generateUsername()"  />
                 </div>
                 <div class="field-group">
                     <label for="apellido2">Apellido 2:</label>
@@ -139,11 +148,11 @@
                 </div>
                 <div class="field-group">
                     <label for="username">Nombre de Usuario:</label>
-                    <input type="text" id="username" name="username" readonly required />
+                    <input type="text" id="username" name="username" readonly  />
                 </div>
                 <div class="field-group">
                     <label for="dni">DNI:</label>
-                    <input type="text" id="dni" name="dni" onchange="checkDNIExists()" required />
+                    <input type="text" id="dni" name="dni" onchange="checkDNIExists()"  />
                 </div>
                 <div class="field-group">
                     <label for="nTelefono">Extensión de teléfono:</label>
@@ -235,19 +244,28 @@
 
                         }
                     </select>
-                </div>
+                 </div>
                 <div class="checkbox-group">
-                    <h4>Grupos de usuarios</h4>
-                    <label><input type="checkbox" id="grupoInternet" name="grupoInternet" value="Internet" /> Grupo Internet</label>
-                    @{
-                        var portalList = ViewBag.PortalEmpleado as List<string>;
-
-                        if (portalList != null && portalList.Any())
-
-                        {
-                            <label><input type="checkbox" id="grupoPortalEmpleado" name="grupoPortalEmpleado" value="@portalList.First()" /> Portal del empleado</label>
+                    <h4>Grupos por defecto</h4>
+                        @{
+                            var gruposPorDefecto = ViewBag.GruposPorDefecto as List<string>;
+                            if (gruposPorDefecto != null && gruposPorDefecto.Any())
+                            {
+                                foreach (var grupo in gruposPorDefecto)
+                                {
+                            <label>
+                                <input type="checkbox"
+                                        name="GruposPorDefecto"
+                                        value="@grupo" />
+                                        @grupo
+                            </label>
+                                }
+                            }
+                            else
+                            {
+                    <p>No hay grupos por defecto configurados.</p>
+                            }
                         }
-                    }
                 </div>
                 <div class="field-group">
                     <label for="grupoDropdown">Seleccionar Grupos:</label>
@@ -495,8 +513,8 @@
             }
 
             try {
-                console.log("Enviando solicitud a /GestionUsuarios/GenerateUsername con datos:", { nombre, apellido1, apellido2 });
-                const response = await fetch('/GestionUsuarios/GenerateUsername', {
+                console.log("Enviando solicitud a /AltaUsuario/GenerateUsername con datos:", { nombre, apellido1, apellido2 });
+                const response = await fetch('/AltaUsuario/GenerateUsername', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nombre, apellido1, apellido2 })
@@ -548,7 +566,7 @@
             if (!nTelefono) return false;
 
             try {
-                const response = await fetch('/GestionUsuarios/CheckTelephoneExists', {
+                const response = await fetch('/AltaUsuario/CheckTelephoneExists', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nTelefono })
@@ -572,7 +590,7 @@
             if (!nFuncionario || nFuncionario === "999999") return false;
 
             try {
-                const response = await fetch('/GestionUsuarios/CheckNumberIdExists', {
+                const response = await fetch('/AltaUsuario/CheckNumberIdExists', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nFuncionario })

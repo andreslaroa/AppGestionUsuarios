@@ -5,7 +5,7 @@ using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace TuProyecto.Controllers
+namespace AppGestionUsuarios.Controllers
 {
     [Authorize]
     public class HabilitarDeshabilitarUsuarioController : Controller

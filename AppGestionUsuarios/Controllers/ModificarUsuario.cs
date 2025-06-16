@@ -6,7 +6,7 @@ using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace TuProyecto.Controllers
+namespace AppGestionUsuarios.Controllers
 {
     [Authorize]
     public class ModificarUsuarioController : Controller
@@ -18,12 +18,74 @@ namespace TuProyecto.Controllers
         [HttpGet]
         public IActionResult ModificarUsuario()
         {
-            // 1) Cargar OUs principales
-            var ouPrincipales = GetOUPrincipales();
-            ViewBag.OUPrincipales = ouPrincipales;
+            try
+            {
 
-            // 2) Cargar grupos AD (para el selector de grupos, si tu vista los necesita)
-            ViewBag.GruposAD = GetGruposFromAD().OrderBy(g => g).ToList();
+                int pageSize = 1000;
+
+                // Obtener todos los usuarios del Directorio Activo
+                using (var entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
+                {
+                    using (var searcher = new DirectorySearcher(entry))
+                    {
+                        searcher.Filter = "(objectClass=user)";
+                        searcher.PropertiesToLoad.Add("displayName");
+                        searcher.PropertiesToLoad.Add("sAMAccountName");
+                        searcher.SearchScope = SearchScope.Subtree;
+
+                        // Habilitar la paginación
+                        searcher.PageSize = pageSize;
+
+                        var usuarios = new List<string>();
+
+                        foreach (SearchResult result in searcher.FindAll())
+                        {
+                            if (result.Properties.Contains("displayName") && result.Properties.Contains("sAMAccountName"))
+                            {
+                                string displayName = result.Properties["displayName"][0].ToString();
+                                string samAccountName = result.Properties["sAMAccountName"][0].ToString();
+                                usuarios.Add($"{displayName} ({samAccountName})");
+                            }
+                        }
+
+                        ViewBag.Users = usuarios.OrderBy(u => u).ToList(); // Ordenar usuarios alfabéticamente
+                    }
+                }
+
+                // Obtener lista de grupos del Directorio Activo
+                using (var entry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
+                {
+                    using (var searcher = new DirectorySearcher(entry))
+                    {
+                        searcher.Filter = "(objectClass=group)";
+                        searcher.PropertiesToLoad.Add("cn");
+                        searcher.SearchScope = SearchScope.Subtree;
+
+                        var grupos = new List<string>();
+
+                        foreach (SearchResult result in searcher.FindAll())
+                        {
+                            if (result.Properties.Contains("cn"))
+                            {
+                                grupos.Add(result.Properties["cn"][0].ToString());
+                            }
+                        }
+
+                        ViewBag.GruposAD = grupos.OrderBy(g => g).ToList(); // Ordenar grupos alfabéticamente
+                    }
+                }
+
+                // Obtener lista de OUs desde el servicio asociado al Excel
+                var ouPrincipales = GetOUPrincipalesFromAD();
+                ViewBag.OUPrincipales = ouPrincipales;
+            }
+            catch (Exception ex)
+            {
+                ViewBag.Users = new List<string>();
+                ViewBag.GruposAD = new List<string>();
+                ViewBag.OUPrincipales = new List<string>();
+                Console.WriteLine($"Error al cargar los datos para la vista de modificación: {ex.Message}");
+            }
 
             return View();
         }
@@ -230,6 +292,56 @@ namespace TuProyecto.Controllers
                 // ignorar
             }
             return grupos;
+        }
+
+        private List<string> GetOUPrincipalesFromAD()
+        {
+            var ouPrincipales = new List<string>();
+
+            try
+            {
+                using (var rootEntry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
+                {
+                    using (var searcher = new DirectorySearcher(rootEntry))
+                    {
+                        // Buscar la OU "AREAS" como base
+                        searcher.Filter = "(&(objectClass=organizationalUnit)(ou=AREAS))";
+                        searcher.SearchScope = SearchScope.Subtree;
+                        searcher.PropertiesToLoad.Add("distinguishedName");
+
+                        SearchResult areasResult = searcher.FindOne();
+                        if (areasResult == null)
+                        {
+                            throw new Exception("No se encontró la OU 'AREAS' en el Active Directory.");
+                        }
+
+                        string areasPath = areasResult.Path;
+
+                        // Buscar las sub-OUs bajo "AREAS"
+                        using (var areasEntry = new DirectoryEntry(areasPath))
+                        {
+                            foreach (DirectoryEntry child in areasEntry.Children)
+                            {
+                                if (child.SchemaClassName == "organizationalUnit")
+                                {
+                                    string ouName = child.Properties["ou"].Value?.ToString();
+                                    if (!string.IsNullOrEmpty(ouName))
+                                    {
+                                        ouPrincipales.Add(ouName);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                ouPrincipales.Sort();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Error al obtener las OUs principales del Active Directory: " + ex.Message, ex);
+            }
+
+            return ouPrincipales;
         }
     }
 }

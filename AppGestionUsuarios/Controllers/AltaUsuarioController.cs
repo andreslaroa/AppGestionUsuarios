@@ -5,7 +5,6 @@ using System.Globalization;
 using System.Text;
 using System.Management.Automation;
 using System.DirectoryServices.AccountManagement;
-using static GestionUsuariosController;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Runtime.InteropServices; 
@@ -29,6 +28,12 @@ public class AltaUsuarioController : Controller
 
     private  GraphServiceClient? _graphClient = null;
 
+    public class userInputModel
+    {
+        public string Nombre { get; set; }
+        public string Apellido1 { get; set; }
+        public string Apellido2 { get; set; }
+    }   
 
     public class UserModelAltaUsuario
     {
@@ -68,7 +73,13 @@ public class AltaUsuarioController : Controller
             ViewBag.GruposAD = grupos.OrderBy(g => g).ToList();
 
             // Mover la lógica de GetPortalEmpleado y GetCuota directamente aquí
-            ViewBag.PortalEmpleado = new List<string> { "GA_R_PORTALDELEMPLEADO" };
+            var gruposPorDefecto = _config
+                .GetSection("GruposPorDefecto:Grupos")
+                .Get<List<string>>()
+                ?? new List<string> {"GA_R_PORTALEMPLEADO"};
+
+            ViewBag.GruposPorDefecto = gruposPorDefecto;
+
             var cuotas = _config
                 .GetSection("QuotaSettings:Templates")
                 .Get<List<string>>()
@@ -113,7 +124,7 @@ public class AltaUsuarioController : Controller
 
         try
         {
-            using (var rootEntry = new DirectoryEntry("LDAP://DC=aytosa,DC=inet"))
+            using (var rootEntry = new DirectoryEntry(_config["ActiveDirectory:LDAPPath"]))
             {
                 using (var searcher = new DirectorySearcher(rootEntry))
                 {
@@ -359,7 +370,7 @@ public class AltaUsuarioController : Controller
             string ouPath; // Para obtener los atributos de la OU más inmediata
             if (!string.IsNullOrEmpty(user.OUSecundaria))
             {
-                ldapPath = $"LDAP://OU={user.OUSecundaria},OU=Usuarios y Grupos,OU={user.OUPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+                ldapPath = $"LDAP://OU=Usuarios y Grupos, OU={user.OUSecundaria},OU=Usuarios y Grupos,OU={user.OUPrincipal},OU=AREAS,DC=aytosa,DC=inet";
                 ouPath = $"LDAP://OU={user.OUSecundaria},OU=Usuarios y Grupos,OU={user.OUPrincipal},OU=AREAS,DC=aytosa,DC=inet";
                 errors.Add($"Usando OU secundaria: Path = {ouPath}");
             }
@@ -673,12 +684,6 @@ public class AltaUsuarioController : Controller
                                     PropagationFlags.None,
                                     AccessControlType.Allow));
 
-                                ds.AddAccessRule(new FileSystemAccessRule(
-                                    new NTAccount("AYTOSA\\adm_andres"),
-                                    FileSystemRights.FullControl,
-                                    InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                                    PropagationFlags.None,
-                                    AccessControlType.Allow));
                                 // Protegemos herencia y quitamos permisos preexistentes
                                 ds.SetAccessRuleProtection(true, true);
                                 di.SetAccessControl(ds);
@@ -827,6 +832,12 @@ public class AltaUsuarioController : Controller
             string.IsNullOrWhiteSpace(user.adminPassword))
         {
             return Json(new { success = false, message = "Faltan credenciales de administrador Exchange." });
+        }
+
+        //Validamos las credenciales de administrador contra active directory
+        if (!ValidateCredentials(user.adminUser, user.adminPassword))
+        {
+            return Json(new { success = false, message = "Credenciales de administrador exchange incorrectas" });
         }
 
         // Inicializar GraphServiceClient (puedes extraer esto a un método privado si lo prefieres)
@@ -1025,8 +1036,8 @@ public class AltaUsuarioController : Controller
             try
             {
                 // Configurar dominio y atributo a buscar
-                string domain = "aytosa.inet"; // Ajusta al dominio de tu entorno
-                string attributeName = "description"; // Atributo del Directorio Activo para el número de funcionario
+                string domain = _config["ActiveDirectory:DomainName"]; 
+                string attributeName = "description"; 
 
                 // Ruta LDAP al dominio
                 string ldapPath = $"LDAP://{domain}";
@@ -1082,7 +1093,7 @@ public class AltaUsuarioController : Controller
             try
             {
                 // Configurar dominio y atributo a buscar
-                string domain = "aytosa.inet"; // Ajusta al dominio de tu entorno
+                string domain = _config["ActiveDirectory:DomainName"]; 
                 string attributeName = "telephoneNumber"; // Atributo del Directorio Activo para el número de funcionario
 
                 // Ruta LDAP al dominio
@@ -1677,6 +1688,20 @@ public class AltaUsuarioController : Controller
         {
             var errs = string.Join(";\n", ps.Streams.Error.ReadAll().Select(e => e.ToString()));
             throw new InvalidOperationException($"Error al crear lote de migración: {errs}");
+        }
+    }
+
+    public bool ValidateCredentials ( string usuario, string password)
+    {
+        string dominio = _config["ActiveDirectory:DomainName"]
+                        ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
+        using (var ctx = new PrincipalContext(
+                   ContextType.Domain,   
+                   dominio))             
+        {
+
+            // El método devuelve true solo si el usuario y la contraseña son correctos.
+            return ctx.ValidateCredentials(usuario, password);
         }
     }
 

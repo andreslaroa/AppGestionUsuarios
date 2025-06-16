@@ -174,7 +174,7 @@
 
               try {
                 // 2) Llamada POST a GetUserGroups
-                const resp = await fetch('/GestionUsuarios/GetUserGroups', {
+                const resp = await fetch('/ModificarUsuario/GetUserGroups', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ username: input })
@@ -310,7 +310,7 @@
                 }
 
                 try {
-                    const resp = await fetch('/GestionUsuarios/ModifyUserOU', {
+                    const resp = await fetch('/ModificarUsuario/ModifyUserOU', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -334,7 +334,7 @@
                 }
 
                 try {
-                    const response = await fetch('/GestionUsuarios/GetUserDetails', {
+                    const response = await fetch('/ModificarUsuario/GetUserDetails', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ username: selectedUser })
@@ -380,7 +380,7 @@
                 }
 
                 try {
-                    const response = await fetch('/GestionUsuarios/ModifyUserGroup', {
+                    const response = await fetch('/ModificarUsuario/ModifyUserGroup', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ username, group, action: 'add' })
@@ -410,7 +410,7 @@
                 }
 
                 try {
-                    const response = await fetch('/GestionUsuarios/ModifyUserGroup', {
+                    const response = await fetch('/ModificarUsuario/ModifyUserGroup', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ username: document.getElementById("selectedUser").value, group: selectedGroup, action: 'remove' })
