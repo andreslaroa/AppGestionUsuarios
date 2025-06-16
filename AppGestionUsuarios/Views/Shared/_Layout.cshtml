@@ -130,10 +130,10 @@
                     <a class="nav-link" asp-controller="AltaMasiva" asp-action="AltaMasiva">Alta Masiva</a>
                 </li>
                 <li class="nav-item @(ViewBag.Active=="ModificarUsuario"?"active":"")">
-                    <a class="nav-link" asp-controller="GestionUsuarios" asp-action="ModificarUsuario">Modificar Usuario</a>
+                    <a class="nav-link" asp-controller="ModificarUsuario" asp-action="ModificarUsuario">Modificar Usuario</a>
                 </li>
                 <li class="nav-item @(ViewBag.Active=="HabilitarDeshabilitarUsuario"?"active":"")">
-                    <a class="nav-link" asp-controller="GestionUsuarios" asp-action="HabilitarDeshabilitarUsuario">Habilitar/Deshabilitar</a>
+                    <a class="nav-link" asp-controller="HabilitarDeshabilitarUsuario" asp-action="HabilitarDeshabilitarUsuario">Habilitar/Deshabilitar</a>
                 </li>
                 <li class="nav-item @(ViewBag.Active=="BajaUsuario"?"active":"")">
                     <a class="nav-link" asp-controller="BajaUsuario" asp-action="BajaUsuario">Baja Usuario</a>

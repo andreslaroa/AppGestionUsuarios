@@ -23,26 +23,26 @@ namespace AppGestionUsuarios.Controllers
         [HttpGet]
         public IActionResult HabilitarDeshabilitarUsuario()
         {
-            return RedirectToAction("HabilitarDeshabilitarUsuario", "GestionUsuarios"); 
+            return RedirectToAction("HabilitarDeshabilitarUsuario", "HabilitarDeshabilitarUsuario"); 
         }
 
         [HttpGet]
         public IActionResult ModificarUsuario()
         {
-            return RedirectToAction("ModificarUsuario", "GestionUsuarios");
+            return RedirectToAction("ModificarUsuario", "ModificarUsuario");
         }
 
 
         [HttpGet]
         public IActionResult DeleteUser()
         {
-            return RedirectToAction("BajaUsuario", "BajaUsuario"); // Asegúrate de tener este método en UserManagementController
+            return RedirectToAction("BajaUsuario", "BajaUsuario"); 
         }
 
         [HttpGet]
         public IActionResult AltaMasiva()
         {
-            return RedirectToAction("AltaMasiva", "AltaMasiva"); // Asegúrate de tener este método en UserManagementController
+            return RedirectToAction("AltaMasiva", "AltaMasiva"); 
         }
     }
 }

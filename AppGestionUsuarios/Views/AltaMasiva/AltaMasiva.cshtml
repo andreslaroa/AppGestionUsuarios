@@ -1,4 +1,5 @@
 ﻿@model List<Dictionary<string, object>>
+
 @{
     ViewBag.Title = "Alta Masiva de Usuarios";
     Layout = "_Layout";
@@ -6,41 +7,111 @@
 }
 
 @section Styles {
-        <style>
-            .container { max-width:100%; padding:10px; font-family:'Segoe UI', Tahoma, sans-serif; }
-            #usersTable { width:100%; table-layout:fixed; border-collapse:collapse; font-size:12px; }
-            #usersTable th, #usersTable td { border:1px solid #ddd; padding:6px; vertical-align:top; white-space:normal; }
-            #usersTable input[type="text"], #usersTable input[type="date"] { width:100%; font-size:11px; padding:4px; box-sizing:border-box; }
-            .btn { font-size:12px; padding:6px 10px; }
-            .groups-row td { padding-top:0; border-top:none; }
-            .groups-container { display:flex; align-items:center; gap:8px; }
-            .groups-container select { flex:1; }
-            .groups-container input { flex:3; }
-        </style>
+    <style>
+        .container {
+            max-width: 100%;
+            padding: 10px;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+        }
+
+        #usersTable {
+            width: 100%;
+            table-layout: fixed;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+            #usersTable th, #usersTable td {
+                border: 1px solid #ddd;
+                padding: 6px;
+                vertical-align: top;
+                white-space: normal;
+            }
+
+            #usersTable input[type="text"], #usersTable input[type="date"] {
+                width: 100%;
+                font-size: 11px;
+                padding: 4px;
+                box-sizing: border-box;
+            }
+
+        .btn {
+            font-size: 12px;
+            padding: 6px 10px;
+        }
+
+        .groups-row td {
+            padding-top: 0;
+            border-top: none;
+        }
+
+        .groups-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .groups-container select {
+                flex: 1;
+            }
+
+            .groups-container input {
+                flex: 3;
+            }
+    </style>
 }
 
 <div class="container">
     <h1>@ViewBag.Title</h1>
+
     <div class="form-group">
         <label for="file">Selecciona el archivo Excel (.xlsx):</label>
         <input type="file" id="file" accept=".xlsx" class="form-control" />
     </div>
     <button id="btnLoad" class="btn btn-primary mb-3">Cargar Datos</button>
 
+    <!-- Credenciales de administrador Exchange -->
+    <div class="form-group">
+        <label for="adminUser">Usuario administrador Exchange:</label>
+        <input type="text"
+               id="adminUser"
+               name="adminUser"
+               class="form-control"
+               placeholder="DOMINIO\\svc-exchange"
+               required />
+    </div>
+    <div class="form-group">
+        <label for="adminPassword">Contraseña administrador Exchange:</label>
+        <input type="password"
+               id="adminPassword"
+               name="adminPassword"
+               class="form-control"
+               required />
+    </div>
+
     <div id="usersTableContainer" style="display:none;">
         <table id="usersTable" class="table table-striped">
             <thead>
                 <tr>
-                    <th>Nombre</th><th>Apellido1</th><th>Apellido2</th><th>DNI</th>
-                    <th>OU Principal</th><th>OU Secundaria</th><th>Fecha Caducidad</th>
-                    <th>Teléfono</th><th>Ext. Móvil</th><th>Núm. Móvil</th>
-                    <th>Tarjeta ID</th><th>Func. N.º</th>
+                    <th>Nombre</th>
+                    <th>Apellido1</th>
+                    <th>Apellido2</th>
+                    <th>DNI</th>
+                    <th>OU Principal</th>
+                    <th>OU Secundaria</th>
+                    <th>Fecha Caducidad</th>
+                    <th>Teléfono</th>
+                    <th>Ext. Móvil</th>
+                    <th>Núm. Móvil</th>
+                    <th>Tarjeta ID</th>
+                    <th>Func. N.º</th>
                 </tr>
             </thead>
             <tbody id="usersTableBody"></tbody>
         </table>
         <button id="btnProcess" class="btn btn-success mt-2">Confirmar Alta Masiva</button>
     </div>
+
     <ul id="detailsList"></ul>
 </div>
 
@@ -48,56 +119,155 @@
     <script>
         const allGroups = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(allGroups));
         let usersData = [];
+
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('btnLoad').onclick = loadFile;
             document.getElementById('btnProcess').onclick = processUsers;
         });
+
         async function loadFile() {
             const input = document.getElementById('file');
-            if (!input.files.length) { alert('Seleccione un archivo .xlsx antes de continuar.'); return; }
-            const fd = new FormData(); fd.append('file', input.files[0]);
+            if (!input.files.length) {
+                alert('Seleccione un archivo .xlsx antes de continuar.');
+                return;
+            }
+            const fd = new FormData();
+            fd.append('file', input.files[0]);
             try {
-                const res = await fetch('/AltaMasiva/LoadFile', { method:'POST', body:fd });
-                const data = await res.json(); if (!data.success) { alert(data.message); return; }
-                usersData = data.users; displayUsersTable();
-            } catch (e) { console.error(e); alert('Error al cargar el archivo.'); }
+                const res = await fetch('/AltaMasiva/LoadFile', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (!data.success) { alert(data.message); return; }
+                usersData = data.users;
+                displayUsersTable();
+            } catch (e) {
+                console.error(e);
+                alert('Error al cargar el archivo.');
+            }
         }
+
         function displayUsersTable() {
-            const tbody = document.getElementById('usersTableBody'); tbody.innerHTML = '';
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
             document.getElementById('usersTableContainer').style.display = 'block';
-            usersData.forEach((u,i) => {
+
+            usersData.forEach((u, i) => {
                 // Fila de datos
                 const tr = document.createElement('tr');
-                const mkTd = (val,field) => `<td><input type='text' class='form-control' value='${val||''}' onchange="updateUser(${i},'${field}',this.value)"/></td>`;
-                const mkDate = val => `<td><input type='date' class='form-control' value='${val||''}' onchange="updateUser(${i},'FechaCaducidad',this.value)"/></td>`;
-                tr.innerHTML = mkTd(u.Nombre,'Nombre') + mkTd(u.Apellido1,'Apellido1') + mkTd(u.Apellido2,'Apellido2') + mkTd(u.DNI,'DNI')
-                            + mkTd(u.OUPrincipal,'OUPrincipal') + mkTd(u.OUSecundaria,'OUSecundaria') + mkDate(u.FechaCaducidad)
-                            + mkTd(u.nTelefono,'nTelefono') + mkTd(u.MobileExt,'MobileExt') + mkTd(u.MobileNumber,'MobileNumber')
-                            + mkTd(u.TarjetaId,'TarjetaId') + mkTd(u.nFuncionario,'nFuncionario');
+                const mkTd = (val, field) =>
+                    `<td><input type='text' class='form-control' value='${val||''}' onchange="updateUser(${i},'${field}',this.value)"/></td>`;
+                const mkDate = val =>
+                    `<td><input type='date' class='form-control' value='${val||''}' onchange="updateUser(${i},'FechaCaducidad',this.value)"/></td>`;
+
+                tr.innerHTML =
+                    mkTd(u.Nombre, 'Nombre') +
+                    mkTd(u.Apellido1, 'Apellido1') +
+                    mkTd(u.Apellido2, 'Apellido2') +
+                    mkTd(u.DNI, 'DNI') +
+                    mkTd(u.OUPrincipal, 'OUPrincipal') +
+                    mkTd(u.OUSecundaria, 'OUSecundaria') +
+                    mkDate(u.FechaCaducidad) +
+                    mkTd(u.nTelefono, 'nTelefono') +
+                    mkTd(u.MobileExt, 'MobileExt') +
+                    mkTd(u.MobileNumber, 'MobileNumber') +
+                    mkTd(u.TarjetaId, 'TarjetaId') +
+                    mkTd(u.nFuncionario, 'nFuncionario');
                 tbody.appendChild(tr);
-                // Fila de grupos spanning all columns
-                const grTr = document.createElement('tr'); grTr.className='groups-row';
-                const td = document.createElement('td'); td.colSpan=12;
-                const container = document.createElement('div'); container.className='groups-container';
-                // select
-                const select = document.createElement('select'); select.className='form-control'; select.dataset.index=i;
-                const placeholder = document.createElement('option'); placeholder.value=''; placeholder.text='-- Selecciona grupo --'; select.appendChild(placeholder);
-                allGroups.forEach(g=>{ const opt=document.createElement('option'); opt.value=g; opt.text=g; select.appendChild(opt); });
-                // add button
-                const btn = document.createElement('button'); btn.type='button'; btn.className='btn btn-sm btn-secondary'; btn.textContent='Agregar';
+
+                // Fila de grupos
+                const grTr = document.createElement('tr');
+                grTr.className = 'groups-row';
+                const td = document.createElement('td');
+                td.colSpan = 12;
+                const container = document.createElement('div');
+                container.className = 'groups-container';
+
+                const select = document.createElement('select');
+                select.className = 'form-control';
+                select.dataset.index = i;
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.text = '-- Selecciona grupo --';
+                select.appendChild(placeholder);
+                allGroups.forEach(g => {
+                    const opt = document.createElement('option');
+                    opt.value = g;
+                    opt.text = g;
+                    select.appendChild(opt);
+                });
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm btn-secondary';
+                btn.textContent = 'Agregar';
                 btn.onclick = () => {
-                    const idx = parseInt(select.dataset.index,10); const chosen=select.value; if(!chosen) return;
+                    const idx = parseInt(select.dataset.index, 10);
+                    const chosen = select.value;
+                    if (!chosen) return;
                     let arr = Array.isArray(usersData[idx].Grupos) ? [...usersData[idx].Grupos] : [];
-                    if(!arr.includes(chosen)) { arr.push(chosen); usersData[idx].Grupos=arr; txt.value=arr.join(';'); }
+                    if (!arr.includes(chosen)) {
+                        arr.push(chosen);
+                        usersData[idx].Grupos = arr;
+                        txt.value = arr.join(';');
+                    }
                 };
-                // text input
-                const txt = document.createElement('input'); txt.type='text'; txt.readOnly=true; txt.className='form-control';
-                txt.dataset.index=i; txt.value = Array.isArray(u.Grupos) ? u.Grupos.join(';') : '';
-                container.appendChild(select); container.appendChild(btn); container.appendChild(txt);
-                td.appendChild(container); grTr.appendChild(td); tbody.appendChild(grTr);
+
+                const txt = document.createElement('input');
+                txt.type = 'text';
+                txt.readOnly = true;
+                txt.className = 'form-control';
+                txt.dataset.index = i;
+                txt.value = Array.isArray(u.Grupos) ? u.Grupos.join(';') : '';
+
+                container.appendChild(select);
+                container.appendChild(btn);
+                container.appendChild(txt);
+                td.appendChild(container);
+                grTr.appendChild(td);
+                tbody.appendChild(grTr);
             });
         }
-        function updateUser(i,field,val){ usersData[i][field]=val; }
-        async function processUsers(){ if(!confirm('¿Procesar alta masiva?'))return; try{ const res=await fetch('/AltaMasiva/ProcessUsers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(usersData)});const data=await res.json(); const list=document.getElementById('detailsList'); list.innerHTML=''; (data.messages||[]).forEach(m=>{const li=document.createElement('li');li.textContent=m;li.style.color=m.startsWith('Error')?'red':'green'; list.appendChild(li);}); alert(data.success?'✅ Alta masiva completada con éxito':'❌ Se produjeron errores. Revisa detalles.'); }catch(e){console.error(e);alert('❌ Error procesando la alta masiva.');}}   
+
+        function updateUser(i, field, val) {
+            usersData[i][field] = val;
+        }
+
+        async function processUsers() {
+            if (!confirm('¿Procesar alta masiva?')) return;
+
+            // Leer credenciales de Exchange
+            const adminUser = document.getElementById('adminUser').value.trim();
+            const adminPassword = document.getElementById('adminPassword').value;
+            if (!adminUser || !adminPassword) {
+                alert('Debes indicar credenciales de administrador de Exchange.');
+                return;
+            }
+
+            try {
+                const res = await fetch('/AltaMasiva/ProcessUsers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        usersRaw: usersData,
+                        adminUser: adminUser,
+                        adminPassword: adminPassword
+                    })
+                });
+                const data = await res.json();
+                const list = document.getElementById('detailsList');
+                list.innerHTML = '';
+                (data.messages || []).forEach(m => {
+                    const li = document.createElement('li');
+                    li.textContent = m;
+                    li.style.color = m.startsWith('Error') ? 'red' : 'green';
+                    list.appendChild(li);
+                });
+                alert(data.success
+                    ? '✅ Alta masiva completada con éxito'
+                    : '❌ Se produjeron errores. Revisa detalles.');
+            } catch (e) {
+                console.error(e);
+                alert('❌ Error procesando la alta masiva.');
+            }
+        }
     </script>
 }

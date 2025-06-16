@@ -111,12 +111,15 @@
         <!-- Checkboxes para acciones adicionales -->
         <div class="checkbox-group">
             <label>Acciones adicionales para la baja:</label>
-            <label><input type="checkbox" name="additionalActions" value="BajaARU"> Baja de usuario en ARU</label>
-            <label><input type="checkbox" name="additionalActions" value="BajaEquipamientoPuesto"> Baja de equipamiento de puesto de trabajo del usuario</label>
-            <label><input type="checkbox" name="additionalActions" value="BajaEquipamientoMovil"> Baja de equipamiento móvil</label>
-            <label><input type="checkbox" name="additionalActions" value="BajaMytao"> Baja de usuario en Mytao</label>
-            <label><input type="checkbox" name="additionalActions" value="BajaPlataformasEstado"> Baja de usuario en Plataformas del Estado</label>
-            <label><input type="checkbox" name="additionalActions" value="RevocacionCertificados"> Revocación de certificados electrónicos municipales</label>
+            @foreach (var kvp in ViewBag.AdditionalActions as Dictionary<string, string>)
+            {
+                <label>
+                    <input type="checkbox"
+                           name="additionalActions"
+                           value="@kvp.Key" />
+                    @kvp.Value
+                </label>
+            }
         </div>
 
         <!-- Botón para baja usuario -->

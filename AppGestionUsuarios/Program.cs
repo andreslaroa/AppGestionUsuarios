@@ -12,34 +12,6 @@ using AppGestionUsuarios.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
-//// 0) Bind de configuración
-//builder.Services.Configure<AzureAdSettings>(
-//    builder.Configuration.GetSection("AzureAd")
-//);
-//builder.Services.Configure<AzureAdSyncSettings>(
-//    builder.Configuration.GetSection("AzureAdSync")
-//);
-//builder.Services.Configure<SmtpSettings>(
-//    builder.Configuration.GetSection("SmtpSettings")
-//);
-
-// 1) Registrar GraphServiceClient via Options
-//builder.Services.AddSingleton<GraphServiceClient>(sp =>
-//{
-//    var opts = sp.GetRequiredService<IOptions<AzureAdSettings>>().Value;
-//    if (string.IsNullOrEmpty(opts.TenantId) ||
-//        string.IsNullOrEmpty(opts.ClientId) ||
-//        string.IsNullOrEmpty(opts.ClientSecret))
-//        throw new InvalidOperationException("Faltan valores en AzureAd");
-
-//    var cred = new ClientSecretCredential(
-//        opts.TenantId, opts.ClientId, opts.ClientSecret
-//    );
-//    return new GraphServiceClient(
-//        cred,
-//        new[] { "https://graph.microsoft.com/.default" }
-//    );
-//});
 
 // 2) Kestrel
 builder.WebHost.ConfigureKestrel(opts =>
@@ -66,8 +38,6 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddScoped<AltaUsuarioController>();
 builder.Services.AddScoped<AltaMasivaController>();
 
-// 5) EmailNotifier (comenta para aislar)
-builder.Services.AddTransient<EmailNotifier>();
 
 var app = builder.Build();
 

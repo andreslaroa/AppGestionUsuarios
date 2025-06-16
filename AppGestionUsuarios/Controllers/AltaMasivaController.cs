@@ -11,6 +11,9 @@ using OfficeOpenXml;
 using System.Globalization;
 using static GestionUsuariosController;
 using System.Text.Json;
+using Azure.Identity;
+using Microsoft.Graph;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 [Authorize]
 public class AltaMasivaController : Controller
@@ -34,6 +37,16 @@ public class AltaMasivaController : Controller
         public bool Success { get; set; }
         public bool Exists { get; set; }
         public string Message { get; set; }
+    }
+
+    private GraphServiceClient? _graphClient = null;
+    private IConfiguration? _config;
+
+    public class ProcessUsersRequest
+    {
+        public List<Dictionary<string, object>> UsersRaw { get; set; }
+        public string AdminUser { get; set; }
+        public string AdminPassword { get; set; }
     }
 
 
@@ -98,13 +111,24 @@ public class AltaMasivaController : Controller
     // POST: /AltaMasiva/ProcessUsers
     // Mapea cada fila a UserModelAltaUsuario, inyecta Departamento y LugarEnvio y llama a CreateUser
     [HttpPost]
-    public JsonResult ProcessUsers([FromBody] List<Dictionary<string, object>> usersRaw)
+    public async Task<JsonResult> ProcessUsers([FromBody] ProcessUsersRequest request)
     {
         var summaryMessages = new List<string>();
+        var createdUsernames = new List<string>();
         bool overallSuccess = true;
+        bool overallOk = true;
+
+        // 2) Inicializar GraphServiceClient
+        //Microsoft graph es una API integrada para todos los servicios de microsoft
+        var tenantId = _config["AzureAd:TenantId"] ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
+        var clientId = _config["AzureAd:ClientId"] ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
+        var clientSecret = _config["AzureAd:ClientSecret"] ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
+        var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+        _graphClient = new GraphServiceClient(credential);
+
 
         // 1) Validación inicial
-        if (usersRaw == null || usersRaw.Count == 0)
+        if (request.UsersRaw == null || request.UsersRaw.Count == 0)
         {
             return Json(new
             {
@@ -113,15 +137,15 @@ public class AltaMasivaController : Controller
                 messages = summaryMessages
             });
         }
-        summaryMessages.Add($"▶ ProcessUsers: recibidas {usersRaw.Count} filas.");
+        summaryMessages.Add($"▶ ProcessUsers: recibidas {request.UsersRaw.Count} filas.");
 
         // 2) Iterar cada fila
-        for (int i = 0; i < usersRaw.Count; i++)
+        for (int i = 0; i < request.UsersRaw.Count; i++)
         {
             int rowNumber = i + 2;
             summaryMessages.Add($"-- Fila {rowNumber} --");
 
-            var dict = usersRaw[i];
+            var dict = request.UsersRaw[i];
             string get(string key) =>
                 dict.TryGetValue(key, out var v) && v != null
                     ? v.ToString().Trim()
@@ -271,13 +295,113 @@ public class AltaMasivaController : Controller
             if (created)
             {
                 summaryMessages.Add($"Fila {rowNumber}: Éxito");
+                createdUsernames.Add(model.Username);
             }
             else
             {
                 summaryMessages.Add($"Fila {rowNumber}: Error: {createData?.message ?? "desconocido"}");
                 overallSuccess = false;
             }
+
+            
         }
+
+        //Comenzamos con la creación de los correos electrónicos
+        if (createdUsernames.Count > 0)
+        {
+            summaryMessages.Add("▶ Asignando licencias de Exchange a usuarios creados...");
+            foreach (var user in createdUsernames)
+            {
+                try
+                {
+                    //Añadir los usuarios a los grupos
+                    _altaUsuarioController.AddUserToGroup(user);
+                    summaryMessages.Add($"Licencia asignada a '{user}'.");
+                                                            
+                }
+                catch (Exception ex)
+                {
+                    summaryMessages.Add($"Error asignando licencia a '{user}': {ex.Message}");
+                    createdUsernames.Remove(user);
+                    overallSuccess = false;
+                }
+            }
+
+            // 2) Forzar sincronización Azure AD Connect
+            var (syncOk, syncErr) = _altaUsuarioController.SyncDeltaOnVanGogh();
+            if (!syncOk)
+            {
+                summaryMessages.Add("Error al sincronizar Azure AD Connect: " + syncErr);
+                throw new InvalidOperationException(syncErr);
+            }
+
+            // 3) Comprobar si existe el último usuario de la lista en Exchange, lo que querría decir que existen todos
+            var lastUser = createdUsernames.LastOrDefault();
+
+            var exists = await _altaUsuarioController.WaitForAzureUser(lastUser);
+            if (!exists)
+            {
+                summaryMessages.Add($"Timeout esperando al usuario '{lastUser}' en Azure AD. Abortando creación de buzón y correo.");
+                return Json(new
+                {
+                    success = false,
+                    message = "Aborto: el usuario no apareció en Azure AD antes del timeout.",
+                    messages = summaryMessages,
+                    created = createdUsernames
+                });
+            }
+
+            // 4) Crear buzón on prem
+            foreach (var user in createdUsernames)
+            {
+                try
+                {
+                    
+                    _altaUsuarioController.EnableOnPremMailbox(user, request.AdminUser, request.AdminPassword);
+                    summaryMessages.Add($"Buzón creado para '{user}'.");
+                }
+                catch (Exception ex)
+                {
+                    summaryMessages.Add($"Error creando buzón para '{user}': {ex.Message}");
+                    createdUsernames.Remove(user);
+                    overallSuccess = false;
+                }
+            }
+
+            // 5) Actualizar proxyaddresses en AD
+            foreach(var user in createdUsernames)
+            {
+                try
+                {
+                    _altaUsuarioController.UpdateProxyAddresses(user);
+                    summaryMessages.Add($"Proxy addresses actualizadas para '{user}'.");
+                }
+                catch (Exception ex)
+                {
+                    summaryMessages.Add($"Error actualizando proxy addresses para '{user}': {ex.Message}");
+                    createdUsernames.Remove(user);
+                    overallSuccess = false;
+                }
+            }
+
+            //Crear batch de migración
+
+
+            try
+            {
+                string[] listaUsuarios = createdUsernames.ToArray();
+                _altaUsuarioController.CreateMigrationBatch(listaUsuarios);
+                summaryMessages.Add("Batch de migración creado con éxito.");
+            }
+            catch (Exception ex)
+            {
+                summaryMessages.Add($"Error creando batch de migración: {ex.Message}");
+                overallSuccess = false;
+            }
+
+
+        }
+
 
         // 3) Devolver resultado
         return Json(new
@@ -289,12 +413,6 @@ public class AltaMasivaController : Controller
             messages = summaryMessages
         });
     }
-
-
-
-
-
-
 
 
 

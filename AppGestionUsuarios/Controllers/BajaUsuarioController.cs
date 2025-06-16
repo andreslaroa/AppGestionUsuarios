@@ -1,17 +1,9 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
-using System;
-using System.Collections.Generic;
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
-using System.DirectoryServices.ActiveDirectory;
-using System.IO;
-using System.Linq;
-using System.Net.Mail;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using AppGestionUsuarios.Notificaciones;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Graph.Users.Item.SendMail;
@@ -80,6 +72,14 @@ public class BajaUsuarioController : Controller
                              .Select(r => $"{r.Properties["displayName"][0]} ({r.Properties["sAMAccountName"][0]})")
                              .OrderBy(s => s)
                              .ToList();
+
+            // Leer las acciones adicionales desde appsettings
+            var additionalActions = _config
+                .GetSection("UserDeactivation:AdditionalActions")
+                .Get<Dictionary<string, string>>()
+                ?? new Dictionary<string, string>();
+
+            ViewBag.AdditionalActions = additionalActions;
         }
         catch
         {
@@ -232,11 +232,11 @@ public class BajaUsuarioController : Controller
                 try
                 {
                     SendMailMessage(_graphClient, username, action).GetAwaiter().GetResult();
-                    messages.Add($"Email para '{GetActionDescription(action)}' enviado.");
+                    messages.Add($"Email para '{(action)}' enviado.");
                 }
                 catch (Exception ex)
                 {
-                    messages.Add($"Error enviando email para '{GetActionDescription(action)}': {ex.Message}");
+                    messages.Add($"Error enviando email para '{(action)}': {ex.Message}");
                 }
             }
         }
@@ -305,20 +305,7 @@ public class BajaUsuarioController : Controller
     }
 
     
-    private string GetActionDescription(string action)
-    {
-        return action switch
-        {
-            "BajaARU" => "Baja de usuario en ARU",
-            "BajaEquipamientoPuesto" => "Baja de equipamiento de puesto de trabajo del usuario",
-            "BajaEquipamientoMovil" => "Baja de equipamiento móvil",
-            "BajaMytao" => "Baja de usuario en Mytao",
-            "BajaPlataformasEstado" => "Baja de usuario en Plataformas del Estado",
-            "RevocacionCertificados" => "Revocación de certificados electrónicos municipales",
-            _ => "Acción desconocida"
-        };
-    }
-
+    
     private async Task SendMailMessage(GraphServiceClient graphClient, string username, string action)
     {
        var fromEmail = _config.GetSection("SmtpSettings")["FromEmail"]

@@ -1,8 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using System;
-using System.IO;
-using System.Linq;
-using System.Collections.Generic;
 using System.DirectoryServices;
 using Microsoft.AspNetCore.Authorization;
 using System.Globalization;
@@ -12,15 +8,13 @@ using System.DirectoryServices.AccountManagement;
 using static GestionUsuariosController;
 using System.Security.AccessControl;
 using System.Security.Principal;
-using System.Runtime.InteropServices; // Para COM
+using System.Runtime.InteropServices; 
 using Microsoft.Graph.Models;
-using Microsoft.Graph.Users.Item.SendMail;
-using Microsoft.Kiota.Abstractions;
 using Microsoft.Graph;
+using Azure.Identity;
+using System.Security;
 
 
-/*En esta clase encontramos todos los métodos que son concretos del alta de usuario*/
-/*En el caso de métodos que puedan usar otros menús, se almacenan en el apartado de gestión de usuarios*/
 
 [Authorize]
 public class AltaUsuarioController : Controller
@@ -32,6 +26,8 @@ public class AltaUsuarioController : Controller
     {
         _config = config;
     }
+
+    private  GraphServiceClient? _graphClient = null;
 
 
     public class UserModelAltaUsuario
@@ -55,6 +51,8 @@ public class AltaUsuarioController : Controller
         public string NumeroLargoMovil { get; set; }
         public string TarjetaIdentificativa { get; set; }
         public string DNI { get; set; }
+        public string adminUser { get; set; } // Usuario administrador utilizado para exchange
+        public string adminPassword { get; set; } // Contraseña del usuario administrador utilizado para exchange
     }
 
     [HttpGet]
@@ -71,7 +69,12 @@ public class AltaUsuarioController : Controller
 
             // Mover la lógica de GetPortalEmpleado y GetCuota directamente aquí
             ViewBag.PortalEmpleado = new List<string> { "GA_R_PORTALDELEMPLEADO" };
-            ViewBag.Cuota = new List<string> { "500MB", "1GB", "2GB" };
+            var cuotas = _config
+                .GetSection("QuotaSettings:Templates")
+                .Get<List<string>>()
+                ?? new List<string> { "HOME-500MB", "HOME-1GB", "HOME-2GB" };
+
+            ViewBag.Cuota = cuotas;
 
             return View("AltaUsuario");
         }
@@ -96,7 +99,7 @@ public class AltaUsuarioController : Controller
                 searcher.SearchScope = SearchScope.Subtree;
                 searcher.PageSize = 1000;
 
-                foreach (SearchResult result in searcher.FindAll())
+                foreach (System.DirectoryServices.SearchResult result in searcher.FindAll())
                     if (result.Properties.Contains("cn"))
                         grupos.Add(result.Properties["cn"][0].ToString());
             }
@@ -119,7 +122,7 @@ public class AltaUsuarioController : Controller
                     searcher.SearchScope = SearchScope.Subtree;
                     searcher.PropertiesToLoad.Add("distinguishedName");
 
-                    SearchResult areasResult = searcher.FindOne();
+                    System.DirectoryServices.SearchResult areasResult = searcher.FindOne();
                     if (areasResult == null)
                     {
                         throw new Exception("No se encontró la OU 'AREAS' en el Active Directory.");
@@ -702,8 +705,8 @@ public class AltaUsuarioController : Controller
                             // 3) Configuración de cuota FSRM en C:\Home\<user>
                             try
                             {
-                                string quota = user.Cuota ?? "1GB";
-                                string template = $"HOME-{quota}";
+                                string quota = user.Cuota ?? "HOME-1GB";
+                                string template = quota;
                                 string quotaFolder = Path.Combine(quotaPathBase, user.Username);
 
                                 errors.Add($"Configurando cuota en {quotaFolder} con plantilla {template} sobre {serverName}");
@@ -811,6 +814,91 @@ public class AltaUsuarioController : Controller
         return Json(new { success = userCreated, message });
     }
 
+    //Método para crear el alta complta de usuario con correo electrónico
+    [HttpPost]
+    public async Task<IActionResult> AltaCompleta([FromBody] UserModelAltaUsuario user)
+    {
+        // Validación básica
+        if (user == null || string.IsNullOrEmpty(user.Username))
+            return Json(new { success = false, message = "No se recibieron datos válidos." });
+
+        // Validaciones previas...
+        if (string.IsNullOrWhiteSpace(user.adminUser) ||
+            string.IsNullOrWhiteSpace(user.adminPassword))
+        {
+            return Json(new { success = false, message = "Faltan credenciales de administrador Exchange." });
+        }
+
+        // Inicializar GraphServiceClient (puedes extraer esto a un método privado si lo prefieres)
+        var tenantId = _config["AzureAd:TenantId"] ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
+        var clientId = _config["AzureAd:ClientId"] ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
+        var clientSecret = _config["AzureAd:ClientSecret"] ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
+        var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+        _graphClient = new GraphServiceClient(credential);
+
+        var samAccountName = user.Username;
+        var username = samAccountName; // o user.Username + dominio si lo necesitas
+
+        var log = new List<string>();
+        bool ok = true;
+
+        try
+        {
+            log.Add("=== Alta Completa iniciado: " + DateTime.Now + " ===");
+
+            // 1) Añadir grupo de licencias
+            AddUserToGroup(samAccountName);
+            log.Add("Usuario añadido al grupo de licencias.");
+
+            // 2) Forzar sincronización Azure AD Connect
+            var (syncOk, syncErr) = SyncDeltaOnVanGogh();
+            if (!syncOk)
+            {
+                log.Add("Error al sincronizar Azure AD Connect: " + syncErr);
+                ok = false;
+                throw new InvalidOperationException(syncErr);
+            }
+            log.Add("Sincronización Delta lanzada.");
+
+            // 3) Esperar a que aparezca en Azure AD
+            var exists = await WaitForAzureUser(samAccountName);
+            log.Add(exists
+                ? "Usuario encontrado en Azure AD."
+                : "Timeout esperando al usuario en Azure AD.");
+
+            // 4) Crear buzón on-prem
+            EnableOnPremMailbox(username, user.adminUser, user.adminPassword);
+            log.Add("Buzón on-prem habilitado.");
+
+            // 5) Actualizar proxyAddresses en AD
+            UpdateProxyAddresses(samAccountName);
+            log.Add("proxyAddresses actualizadas.");
+
+            // 6) Crear batch de migración
+            CreateMigrationBatch(new[] { username });
+            log.Add("Lote de migración creado y lanzado.");
+
+            
+        }
+        catch (Exception ex)
+        {
+            ok = false;
+            log.Add("[ERROR] " + ex.Message);
+            log.Add("=== Alta Completa abortada ===");
+        }
+
+        // Persistir log en disco si quieres
+        System.IO.File.WriteAllLines(
+            Path.Combine(Path.GetTempPath(), $"AltaCompleta_{samAccountName}.log"),
+            log);
+
+        // Devolver resultado
+        var message = ok
+            ? "Alta completa realizada con éxito.\n" + string.Join("\n", log)
+            : "Se produjeron errores en la Alta Completa:\n" + string.Join("\n", log);
+
+        return Json(new { success = ok, message });
+    }
 
 
     //Función encargada de comvertir el username recibido de una vista en string y pasarlo a la función que lo busca en AD
@@ -952,7 +1040,7 @@ public class AltaUsuarioController : Controller
                         searcher.SearchScope = SearchScope.Subtree;
 
                         // Buscar el identificador en el Directorio Activo
-                        SearchResult result = searcher.FindOne();
+                        System.DirectoryServices.SearchResult result = searcher.FindOne();
 
                         if (result != null)
                         {
@@ -974,7 +1062,6 @@ public class AltaUsuarioController : Controller
 
         return Json(new { success = false, exists = false, message = "No se recibió el identificador." });
     }
-
 
 
     //Comprueba si el número de teléfono del usuario existe en el directorio activo
@@ -1010,7 +1097,7 @@ public class AltaUsuarioController : Controller
                         searcher.SearchScope = SearchScope.Subtree;
 
                         // Buscar el identificador en el Directorio Activo
-                        SearchResult result = searcher.FindOne();
+                        System.DirectoryServices.SearchResult result = searcher.FindOne();
 
                         if (result != null)
                         {
@@ -1068,7 +1155,6 @@ public class AltaUsuarioController : Controller
             return Json(new { success = false, message = $"Error al verificar el DNI: {ex.Message}" });
         }
     }
-
 
 
     [HttpPost]
@@ -1277,7 +1363,7 @@ public class AltaUsuarioController : Controller
                     searcher.SearchScope = SearchScope.Subtree; // Asegura búsqueda en todo el dominio
                     searcher.PropertiesToLoad.Add("distinguishedName"); // Solo carga lo necesario
 
-                    SearchResult result = searcher.FindOne();
+                    System.DirectoryServices.SearchResult result = searcher.FindOne();
                     if (result != null)
                     {
                         return result.GetDirectoryEntry();
@@ -1339,4 +1425,260 @@ public class AltaUsuarioController : Controller
             return (false, $"Error en PowerShell: {ex.Message}");
         }
     }
+
+    public (bool Success, string ErrorMessage) SyncDeltaOnVanGogh()
+    {
+        // Nombre del servidor donde corre Azure AD Connect
+        var server = _config["AzureAdSync:SyncServer"]
+                     ?? throw new InvalidOperationException("Falta AzureAdSync:SyncServer en config");
+
+        // Scriptblock que queremos ejecutar remotamente
+        var remoteScript = @"
+            Import-Module ADSync
+            Start-ADSyncSyncCycle -PolicyType Delta
+            ";
+
+        try
+        {
+            using var ps = PowerShell.Create();
+            // Invocamos Invoke-Command en remoto
+            ps.AddCommand("Invoke-Command")
+              .AddParameter("ComputerName", server)
+              // Si necesitas credenciales explícitas:
+              // .AddParameter("Credential", new PSCredential(user, securePwd))
+              .AddParameter("ScriptBlock", ScriptBlock.Create(remoteScript));
+
+            var results = ps.Invoke();
+
+            if (ps.Streams.Error.Count > 0)
+            {
+                var errs = string.Join(";\n", ps.Streams.Error
+                                               .ReadAll()
+                                               .Select(e => e.ToString()));
+                return (false, errs);
+            }
+
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Espera 30 s, luego intenta hasta 4 veces comprobar en Graph si el usuario existe,
+    /// con 10 s de espera entre cada intento. Cualquier excepción cuenta como “no existe”.
+    /// </summary>
+    public  async Task<bool> WaitForAzureUser(string upn)
+    {
+        const int maxAttempts = 4;
+        const int initialDelaySeconds = 30;
+        const int retryDelaySeconds = 10;
+
+        // 1) Delay inicial
+        await Task.Delay(TimeSpan.FromSeconds(initialDelaySeconds));
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                // Si no lanza excepción, el usuario existe
+                await _graphClient.Users[upn].GetAsync();
+                return true;
+            }
+            catch
+            {
+                // Si es el último intento, devolvemos false
+                if (attempt == maxAttempts)
+                    return false;
+
+                // Si no, esperamos y reintentamos
+                await Task.Delay(TimeSpan.FromSeconds(retryDelaySeconds));
+            }
+        }
+
+        return false;
+    }
+
+    public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword)
+    {
+        // 1) Lee sólo los parámetros que sigan en config
+        var server = _config["Exchange:Server"]
+                     ?? throw new InvalidOperationException("Falta Exchange:Server");
+        var dbName = _config["Exchange:Database"]
+                     ?? throw new InvalidOperationException("Falta Exchange:Database");
+        var domain = _config["ActiveDirectory:DomainName"]
+                     ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
+
+        // 2) Construye el SecureString a partir de la password recibida
+        var securePwd = new SecureString();
+        foreach (var c in adminPassword)
+            securePwd.AppendChar(c);
+
+        var cred = new PSCredential(adminRunAs, securePwd);
+
+        // 3) Crea el script bloque
+        var identity = $"{domain}\\{username}";
+        var script = $@"
+        Import-Module ExchangeOnlineManagement
+        Enable-Mailbox -Identity '{identity}' -Alias '{username}' -Database '{dbName}'
+    ";
+
+        // 4) Ejecuta Invoke-Command con esas credenciales
+        using var ps = PowerShell.Create();
+        ps.AddCommand("Invoke-Command")
+          .AddParameter("ComputerName", server)
+          .AddParameter("Credential", cred)
+          .AddParameter("ScriptBlock", ScriptBlock.Create(script));
+
+        var results = ps.Invoke();
+        if (ps.Streams.Error.Count > 0)
+        {
+            var errs = string.Join(";\n", ps.Streams.Error.ReadAll().Select(e => e.ToString()));
+            throw new InvalidOperationException($"Error al habilitar buzón on-prem: {errs}");
+        }
+    }
+
+
+    public void UpdateProxyAddresses(string samAccountName)
+    {
+        // 1) Crear contexto y buscar usuario
+        using var ctx = new PrincipalContext(ContextType.Domain, _config["ActiveDirectory:DomainName"]);
+        using var user = UserPrincipal.FindByIdentity(ctx, IdentityType.SamAccountName, samAccountName);
+        if (user == null)
+            throw new InvalidOperationException($"Usuario '{samAccountName}' no encontrado en AD.");
+
+        // 2) Obtener su DirectoryEntry
+        var de = user.GetUnderlyingObject() as DirectoryEntry
+                 ?? throw new InvalidOperationException("No se pudo leer DirectoryEntry del usuario.");
+
+        // 3) Leer dominios
+        var oldDomain = _config["ActiveDirectory:OldDomain"]
+                        ?? throw new InvalidOperationException("Falta ActiveDirectory:OldDomain");
+        var newDomain = _config["ActiveDirectory:NewDomainNAme"]
+                        ?? throw new InvalidOperationException("Falta ActiveDirectory:NewDomainNAme");
+
+        // 4) Acceder a proxyAddresses
+        var proxies = de.Properties["proxyAddresses"];
+
+        // 5) Eliminar la antigua
+        var oldProxy = $"smtp:{samAccountName}@{oldDomain}";
+        for (int i = proxies.Count - 1; i >= 0; i--)
+        {
+            if (proxies[i]?.ToString().Equals(oldProxy, StringComparison.OrdinalIgnoreCase) == true)
+                proxies.Remove(proxies[i]);
+        }
+
+        // 6) Añadir la nueva primaria
+        /*var newProxy = $"SMTP:{samAccountName}@{newDomain}";
+        if (!proxies.Cast<string>().Any(p => p.Equals(newProxy, StringComparison.OrdinalIgnoreCase)))
+        {
+            proxies.Add(newProxy);
+        }*/
+
+        // 7) Guardar cambios
+        de.CommitChanges();
+    }
+
+
+    public void AddUserToGroup(string samAccountName)
+    {
+        // 1) Crear contexto y buscar usuario
+        using var ctx = new PrincipalContext(ContextType.Domain, _config["ActiveDirectory:DomainName"]);
+        using var user = UserPrincipal.FindByIdentity(ctx, IdentityType.SamAccountName, samAccountName);
+        if (user == null)
+            throw new InvalidOperationException($"Usuario '{samAccountName}' no encontrado en AD.");
+
+        Console.WriteLine(" ++++++++++++++++ se ha encontrado " + samAccountName);
+
+        // 2) Obtener su DirectoryEntry
+        var de = user.GetUnderlyingObject() as DirectoryEntry
+                 ?? throw new InvalidOperationException("No se pudo leer DirectoryEntry del usuario.");
+        var userDn = de.Properties["distinguishedName"].Value.ToString();
+        Console.WriteLine("No sé que es el Directory Entry, pero está");
+
+        // 3) Abrir el entry del grupo
+        var groupDn = _config["ActiveDirectory:LicenseGroupDn"]
+                      ?? throw new InvalidOperationException("Falta ActiveDirectory:LicenseGroupDn");
+        Console.WriteLine("+++++++++++Se Buscagrupos" + groupDn);
+
+        using var grp = new DirectoryEntry("LDAP://" + groupDn);
+        var members = grp.Properties["member"];
+
+        Console.WriteLine("+++++++++++Se han encontrado grupos" + grp.Username);
+
+        // 4) Añadirlo al grupo de licencias si aún no es miembro
+        if (!members.Cast<string>().Any(m => m.Equals(userDn, StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                members.Add(userDn);
+                grp.CommitChanges();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("!!!!!!!!!!!!!!!!!!!!!!" + ex.ToString());
+                throw ex;
+            }
+            Console.WriteLine("+++++++++++Se ha añadido el grupo  y se ha metido en el grupo");
+        }
+
+        Console.WriteLine("----------- Se ha incluido el usuario al grupo");
+
+    }
+
+    /// <summary>
+    /// Crea un lote de migración híbrida en Exchange Online utilizando el módulo ExchangeOnlineManagement.
+    /// Si el módulo no está instalado, se instala en el perfil del usuario.
+    /// </summary>
+    public void CreateMigrationBatch(string[] upns)
+    {
+        // 1) Leer configuración para autenticación con client secret
+        var clientId = _config["AzureAd:ClientId"]
+                          ?? throw new InvalidOperationException("Falta ExchangeOnline:AppId");
+        var tenantId = _config["AzureAd:TenantId"]
+                          ?? throw new InvalidOperationException("Falta ExchangeOnline:TenantId");
+        var clientSecret = _config["AzureAd:ClientSecret"]
+                          ?? throw new InvalidOperationException("Falta ExchangeOnline:ClientSecret");
+        var sourceEndpoint = _config["Exchange:Endpoint"] ?? "saura";
+        var targetDomain = _config["Exchange:TargetDeliveryDomain"] ?? "aytosalamanca.mail.onmicrosoft.com";
+
+        // 2) Preparar nombre de batch y lista de UPNs
+        var batchName = $"Migra_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+        var usersList = string.Join(", ", upns.Select(u => $"'{u}'"));
+
+        // 3) Construir script para PowerShell
+        var script = $@"
+            Import-Module ExchangeOnlineManagement -DisableNameChecking
+
+            # Conectar a Exchange Online usando client secret
+            Connect-ExchangeOnline -AppId '{clientId}' -Organization '{tenantId}' -ClientSecret '{clientSecret}' -ShowBanner:$false
+
+            # Crear lote de migración híbrida
+            New-MigrationBatch `
+                -Name '{batchName}' `
+                -MigrationType RemoteMove `
+                -SourceEndpoint '{sourceEndpoint}' `
+                -Users @({usersList}) `
+                -TargetDeliveryDomain '{targetDomain}' `
+                -AutoStart -AutoComplete
+
+            # Desconectar la sesión
+            Disconnect-ExchangeOnline -Confirm:$false
+            ";
+
+        // 4) Ejecutar script embebido
+        using var ps = PowerShell.Create();
+        ps.AddScript(script).Invoke();
+
+        // 5) Comprobar errores
+        if (ps.Streams.Error.Count > 0)
+        {
+            var errs = string.Join(";\n", ps.Streams.Error.ReadAll().Select(e => e.ToString()));
+            throw new InvalidOperationException($"Error al crear lote de migración: {errs}");
+        }
+    }
+
+
 }

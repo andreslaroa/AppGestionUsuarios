@@ -270,6 +270,14 @@
                     <select id="gruposSeleccionados" name="gruposSeleccionados" size="5"></select>
                     <button type="button" onclick="removeSelectedGroup()">Eliminar Grupo Seleccionado</button>
                 </div>
+                <div class="field-group">
+                    <label for="adminUser">Usuario administrador Exchange:</label>
+                    <input type="text" id="adminUser" name="adminUser" required />
+                </div>
+                <div class="field-group">
+                    <label for="adminPassword">Contraseña administrador Exchange:</label>
+                    <input type="password" id="adminPassword" name="adminPassword" required />
+                </div>
             </div>
 
             <!-- Paso 4: Revisión y Envío -->
@@ -602,6 +610,13 @@
             const fechaCaducidadOp = document.getElementById('fechaCaducidadOp').value;
             let fechaCaducidad = document.getElementById('fechaCaducidad').value;
             const cuota = document.getElementById('cuota').value;
+			const adminUser = document.getElementById('adminUser').value.trim();
+			const adminPassword = document.getElementById('adminPassword').value.trim();
+
+            if (!adminUser || !adminPassword) {
+              alert('Por favor indica las credenciales de administrador de Exchange.');
+              return;
+            }
 
             if (fechaCaducidadOp === "no") {
                 fechaCaducidad = new Date().toISOString().split('T')[0]; // Corrección del error de sintaxis
@@ -628,7 +643,7 @@
                     body: JSON.stringify({
                         nombre, apellido1, apellido2, username, dni, nTelefono, ddi, mobileExt, mobileNumber, tarjetaId, nFuncionario,
                         ouPrincipal, ouSecundaria: ouSecundaria || null, departamento, lugarEnvio,
-                        fechaCaducidadOp, fechaCaducidad, cuota, grupos
+                        fechaCaducidadOp, fechaCaducidad, cuota, grupos, adminPassword, adminUser   
                     })
                 });
                 const data = await response.json();
