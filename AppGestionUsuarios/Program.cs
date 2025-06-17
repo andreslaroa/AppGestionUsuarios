@@ -1,14 +1,4 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Options;
-using Microsoft.Graph;
-using Azure.Identity;
-using AppGestionUsuarios.Controllers;
-using AppGestionUsuarios.Notificaciones;
-using AppGestionUsuarios.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 

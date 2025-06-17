@@ -39,10 +39,5 @@
     <PackageReference Include="System.Management.Automation" Version="7.4.6" />
   </ItemGroup>
 
-	<ItemGroup>
-	  <Folder Include="Services\" />
-	  <Folder Include="Views\GestionUsuarios\" />
-	</ItemGroup>
-
 
 </Project>

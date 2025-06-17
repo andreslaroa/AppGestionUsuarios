@@ -14,6 +14,13 @@ namespace AppGestionUsuarios.Controllers
         // Cadena base para el LDAP
         private const string DomainPath = "LDAP://DC=aytosa,DC=inet";
 
+        private readonly IConfiguration _config;
+
+        public ModificarUsuarioController(IConfiguration config)
+        {
+            _config = config;
+        }
+
         // GET: /ModificarUsuario
         [HttpGet]
         public IActionResult ModificarUsuario()
@@ -139,7 +146,7 @@ namespace AppGestionUsuarios.Controllers
             try
             {
                 using var entry = new DirectoryEntry(ldapPath);
-                var dep = entry.Properties["st"]?.Value?.ToString() ?? "";
+                var dep = entry.Properties[_config["GroupInformation:DepartmentAttr"]]?.Value?.ToString() ?? "";
                 if (string.IsNullOrEmpty(dep))
                     return Json(new { success = false, message = "Departamento no definido." });
                 return Json(new { success = true, departamento = dep });
@@ -166,7 +173,7 @@ namespace AppGestionUsuarios.Controllers
             try
             {
                 using var entry = new DirectoryEntry(ldapPath);
-                var lugar = entry.Properties["l"]?.Value?.ToString() ?? "";
+                var lugar = entry.Properties[_config["GroupInformation:SendPlaceAttr"]]?.Value?.ToString() ?? "";
                 if (string.IsNullOrEmpty(lugar))
                     return Json(new { success = false, message = "Lugar de envío no definido." });
                 return Json(new { success = true, lugarEnvio = lugar });
@@ -228,10 +235,7 @@ namespace AppGestionUsuarios.Controllers
             }
         }
 
-        // -----------------------------------------------------
-        // Helpers
-        // -----------------------------------------------------
-
+       
         /// <summary>
         /// Extrae el sAMAccountName de un string tipo "DisplayName (sam)".
         /// </summary>

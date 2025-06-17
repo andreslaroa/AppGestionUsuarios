@@ -251,7 +251,7 @@ public class AltaUsuarioController : Controller
                 }
 
                 // Obtener el atributo 'description' de la OU
-                string departamento = ouEntry.Properties["description"]?.Value?.ToString();
+                string departamento = ouEntry.Properties[_config["GroupInformation:DepartmentAttr"]]?.Value?.ToString();
                 if (string.IsNullOrEmpty(departamento))
                 {
                     // Si no hay descripción, usar el nombre de la OU como valor predeterminado
@@ -305,7 +305,7 @@ public class AltaUsuarioController : Controller
                 }
 
                 // Obtener el atributo 'city' de la OU
-                string lugarEnvio = ouEntry.Properties["l"]?.Value?.ToString(); // El atributo 'city' en AD es 'l' (lowercase L)
+                string lugarEnvio = ouEntry.Properties[_config["GroupInformation:SendPlaceAttr"]]?.Value?.ToString(); // El atributo 'city' en AD es 'l' (lowercase L)
                 if (string.IsNullOrEmpty(lugarEnvio))
                 {
                     // Si no hay valor para 'city', usar un valor predeterminado
@@ -342,8 +342,8 @@ public class AltaUsuarioController : Controller
 
         // Validar los campos obligatorios (los nuevos campos son opcionales)
         if (string.IsNullOrEmpty(user.Nombre) || string.IsNullOrEmpty(user.Apellido1) ||
-            string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.OUPrincipal) ||
-            string.IsNullOrEmpty(user.Departamento) || string.IsNullOrEmpty(user.FechaCaducidadOp))
+            string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Apellido2) || 
+            string.IsNullOrEmpty(user.OUPrincipal) || string.IsNullOrEmpty(user.FechaCaducidadOp))
         {
             return Json(new { success = false, message = "Faltan campos obligatorios." });
         }
@@ -381,9 +381,9 @@ public class AltaUsuarioController : Controller
                 errors.Add($"Usando OU principal: Path = {ouPath}");
             }
 
-            // Obtener los atributos "st", "description" y "street" de la OU más inmediata
-            string estadoProvincia = null;
-            string descripcion = null;
+            string departamento = null;
+            string area = null;
+            string lugarEnvio = null;
 
             try
             {
@@ -395,40 +395,53 @@ public class AltaUsuarioController : Controller
                     }
                     else
                     {
-                        // Obtener el atributo "st" (Estado o Provincia)
-                        estadoProvincia = ouEntryForAttributes.Properties["st"]?.Value?.ToString();
-                        if (string.IsNullOrEmpty(estadoProvincia))
+                        //Obtiene el nombre del departamento según la ou
+                        departamento = ouEntryForAttributes.Properties[_config["GroupInformation:DepartmentAttr"]]?.Value?.ToString();
+                        if (string.IsNullOrEmpty(departamento))
                         {
-                            estadoProvincia = "Sin estado o provincia";
-                            errors.Add("Atributo 'st' no definido, usando valor predeterminado: 'Sin estado o provincia'.");
+                            departamento = "";
+                            errors.Add("Atributo 'st' no definido, usando valor predeterminado: 'sin departamento'.");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'st' encontrado: '{estadoProvincia}'.");
+                            errors.Add($"Atributo 'st' encontrado: '{departamento}'.");
                         }
 
-                        // Obtener el atributo "description" (Descripción)
-                        descripcion = ouEntryForAttributes.Properties["description"]?.Value?.ToString();
-                        if (string.IsNullOrEmpty(descripcion))
+
+                        // obtiene el nombre del área
+                        area = ouEntryForAttributes.Properties[_config["GroupInformation:AreaAttr"]]?.Value?.ToString();
+                        if (string.IsNullOrEmpty(area))
                         {
-                            descripcion = "Sin descripción";
+                            area = "";
                             errors.Add("Atributo 'description' no definido, usando valor predeterminado: 'Sin descripción'.");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'description' encontrado: '{descripcion}'.");
+                            errors.Add($"Atributo 'description' encontrado: '{area}'.");
                         }
 
-                        // Obtener el atributo "street" (Calle), que será el nombre del grupo del departamento
-                        grupoDepartamento = ouEntryForAttributes.Properties["street"]?.Value?.ToString();
+                        // Obtener el grupo de usuarios asociado al departamento concreto
+                        grupoDepartamento = ouEntryForAttributes.Properties[_config["GroupInformation:DepartmentGroup"]]?.Value?.ToString();
                         if (string.IsNullOrEmpty(grupoDepartamento))
                         {
-                            grupoDepartamento = null;
+                            grupoDepartamento = "";
                             errors.Add($"El atributo 'street' no está definido en la OU (Path: {ouPath}).");
                         }
                         else
                         {
                             errors.Add($"Atributo 'street' encontrado: '{grupoDepartamento}' (Path: {ouPath}).");
+                        }
+
+                        // Obtener el lugar de envío
+                        lugarEnvio = ouEntryForAttributes.Properties[_config["GroupInformation:SendPlaceAttr"]]?.Value?.ToString();
+                        if (string.IsNullOrEmpty(lugarEnvio))
+                        {
+                            lugarEnvio = "";
+                            errors.Add($"El atributo 'l' no está definido en la OU (Path: {ouPath}).");
+                        }
+                        else
+                        {
+                            errors.Add($"Atributo 'l' encontrado: '{lugarEnvio}' (Path: {ouPath}).");
                         }
                     }
                 }
@@ -457,13 +470,13 @@ public class AltaUsuarioController : Controller
                     // Establecer atributos básicos del usuario
                     try
                     {
-                        newUser.Properties["givenName"].Value = user.Nombre;
-                        newUser.Properties["sn"].Value = user.Apellido1 + " " + user.Apellido2;
-                        newUser.Properties["sAMAccountName"].Value = user.Username;
-                        newUser.Properties["userPrincipalName"].Value = $"{user.Username}@aytosa.inet";
-                        newUser.Properties["displayName"].Value = displayName;
-                        newUser.Properties["department"].Value = estadoProvincia;
-                        newUser.Properties["division"].Value = descripcion;
+                        newUser.Properties[_config["ADAttributes:NameAttr"]].Value = user.Nombre;
+                        newUser.Properties[_config["ADAttributes:SurnameAttr"]].Value = user.Apellido1 + " " + user.Apellido2;
+                        newUser.Properties[_config["ADAttributes:UsernameAttr"]].Value = user.Username;
+                        newUser.Properties[_config["ADAttributes:NameAndDomainAttr"]].Value = $"{user.Username}@aytosa.inet";
+                        newUser.Properties[_config["ADAttributes:DisplayNameAttr"]].Value = displayName;
+                        newUser.Properties[_config["ADAttributes:DepartmentAttr"]].Value = departamento;
+                        newUser.Properties[_config["ADAttributes:AreaAttr"]].Value = area;
                         errors.Add("Atributos básicos del usuario establecidos correctamente.");
                     }
                     catch (Exception ex)
@@ -471,46 +484,47 @@ public class AltaUsuarioController : Controller
                         errors.Add($"Error al establecer los atributos básicos del usuario: {ex.Message}");
                     }
 
-                    // Asignar campos opcionales
+                    // Asignar otros campos
                     try
                     {
                         if (!string.IsNullOrEmpty(user.NFuncionario))
                         {
-                            newUser.Properties["description"].Value = user.NFuncionario;
+                            newUser.Properties[_config["ADAttributes:NFuncionarioAttr"]].Value = user.NFuncionario;
                             errors.Add($"Atributo 'description' (NFuncionario) establecido: {user.NFuncionario}");
                         }
+                        //NTelefono se refiere a la extensión del número fijo
                         if (!string.IsNullOrEmpty(user.NTelefono))
                         {
-                            newUser.Properties["telephoneNumber"].Value = user.NTelefono;
+                            newUser.Properties[_config["ADAttributes:TelephoneNumberAttr"]].Value = user.NTelefono;
                             errors.Add($"Atributo 'telephoneNumber' establecido: {user.NTelefono}");
                         }
+                        //Se refiere al número fijo completo
                         if (!string.IsNullOrEmpty(user.NumeroLargoFijo))
                         {
-                            newUser.Properties["otherTelephone"].Value = user.NumeroLargoFijo;
+                            newUser.Properties[_config["ADAttributes:OtherTelephoneAttr"]].Value = user.NumeroLargoFijo;
                             errors.Add($"Atributo 'otherTelephone' establecido: {user.NumeroLargoFijo}");
                         }
                         if (!string.IsNullOrEmpty(user.ExtensionMovil))
                         {
-                            newUser.Properties["mobile"].Value = user.ExtensionMovil;
+                            newUser.Properties[_config["ADAttributes:MobileExtensionAttr"]].Value = user.ExtensionMovil;
                             errors.Add($"Atributo 'mobile' establecido: {user.ExtensionMovil}");
                         }
                         if (!string.IsNullOrEmpty(user.NumeroLargoMovil))
                         {
-                            newUser.Properties["otherMobile"].Value = user.NumeroLargoMovil;
+                            newUser.Properties[_config["ADAttributes:LargeMobileNumberAttr"]].Value = user.NumeroLargoMovil;
                             errors.Add($"Atributo 'otherMobile' establecido: {user.NumeroLargoMovil}");
                         }
                         if (!string.IsNullOrEmpty(user.TarjetaIdentificativa))
                         {
-                            newUser.Properties["serialNumber"].Value = user.TarjetaIdentificativa;
+                            newUser.Properties[_config["ADAttributes:IDCardAttr"]].Value = user.TarjetaIdentificativa;
                             errors.Add($"Atributo 'serialNumber' establecido: {user.TarjetaIdentificativa}");
                         }
                         if (!string.IsNullOrEmpty(user.DNI))
                         {
-                            newUser.Properties["employeeID"].Value = user.DNI;
+                            newUser.Properties[_config["ADAttributes:DNIAttr"]].Value = user.DNI;
                             errors.Add($"Atributo 'employeeID' establecido: {user.DNI}");
                         }
-                        newUser.Properties["physicalDeliveryOfficeName"].Value = user.Departamento;
-                        newUser.Properties["l"].Value = user.LugarEnvio;
+                        newUser.Properties[_config["ADAttributes:LocationAttr"]].Value = user.LugarEnvio;
                         errors.Add("Atributos opcionales del usuario establecidos correctamente.");
                     }
                     catch (Exception ex)
@@ -530,7 +544,7 @@ public class AltaUsuarioController : Controller
                             else
                             {
                                 long accountExpires = user.FechaCaducidad.ToFileTime();
-                                newUser.Properties["accountExpires"].Value = accountExpires.ToString();
+                                newUser.Properties[_config["ADAttributes:AccountExpiresAttr"]].Value = accountExpires.ToString();
                                 errors.Add($"Fecha de caducidad establecida: {user.FechaCaducidad}");
                             }
                         }
@@ -556,8 +570,8 @@ public class AltaUsuarioController : Controller
                     try
                     {
                         newUser.Invoke("SetPassword", new object[] { "Temporal2024" });
-                        newUser.Properties["userAccountControl"].Value = 0x200;
-                        newUser.Properties["pwdLastSet"].Value = 0;
+                        newUser.Properties[_config["ADAttributes:EnableAccountAttr"]].Value = 0x200;
+                        newUser.Properties[_config["ADAttributes:ChangePassNextLoginAttr"]].Value = 0;
                         newUser.CommitChanges();
                         userCreated = true; // Marcamos que el usuario se creó exitosamente
                         errors.Add("Contraseña configurada y cuenta activada correctamente.");
