@@ -230,7 +230,7 @@
                 </div>
                 <div class="field-group">
                     <label for="cuota">Cuota del usuario:</label>
-                    <select id="cuota" name="cuota">
+                    <select id="cuota" name="cuota" required>
                         <option value="">Seleccione la cuota para el usuario</option>
                         @if (ViewBag.Cuota != null)
 
@@ -655,7 +655,7 @@
             if (dniExists || telephoneExists || numberIdExists) return;
 
             try {
-                const response = await fetch('/AltaUsuario/AltaCompleta', {
+                const response = await fetch('/AltaUsuario/CreateUser', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

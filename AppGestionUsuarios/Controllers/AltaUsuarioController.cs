@@ -371,7 +371,7 @@ public class AltaUsuarioController : Controller
             if (!string.IsNullOrEmpty(user.OUSecundaria))
             {
                 ldapPath = $"LDAP://OU=Usuarios, OU={user.OUSecundaria},OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
-                ouPath = $"LDAP://OU=Usuarios,OU={user.OUSecundaria},OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
+                ouPath = $"LDAP://OU={user.OUSecundaria},OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
                 errors.Add($"Usando OU secundaria: Path = {ouPath}");
             }
             else
@@ -731,6 +731,7 @@ public class AltaUsuarioController : Controller
                                     InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                     PropagationFlags.None,
                                     AccessControlType.Allow));
+
                                 // Permisos del propio usuario
                                 ds.AddAccessRule(new FileSystemAccessRule(
                                     new NTAccount($"{quotaDomain}\\{user.Username}"),
@@ -919,6 +920,22 @@ public class AltaUsuarioController : Controller
         try
         {
             log.Add("=== Alta Completa iniciado: " + DateTime.Now + " ===");
+
+            var createResult = CreateUser(user) as JsonResult;
+            dynamic createData = createResult?.Value;
+            if (createData == null || !(bool)createData.success)
+            {
+                // Abortamos aquí si CreateUser falla
+                log.Add("[ERROR] No se pudo crear el usuario en AD: " + (createData?.message ?? "sin mensaje"));
+                return Json(new
+                {
+                    success = false,
+                    message = "Alta completa abortada: fallo al crear el usuario en AD.",
+                    log
+                });
+            }
+            log.Add("[OK] Usuario creado en AD: " + createData.message);
+
 
             // 1) Añadir grupo de licencias
             AddUserToGroup(samAccountName);

@@ -173,7 +173,7 @@ public class BajaUsuarioController : Controller
             }
             else messages.Add("No pertenecía a ningún grupo.");
 
-            // 3) Eliminar cuota en Leonardo
+            // 3) Eliminar cuota en servidor de cuotas
             string quotaPath = Path.Combine(_quotaBase, username);
             Type qmType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", _fsServer);
             if (qmType != null)
