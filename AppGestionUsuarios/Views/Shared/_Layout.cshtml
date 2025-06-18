@@ -21,7 +21,7 @@
         }
         /* Sidebar styling */
         .app-sidebar {
-            background: #003478; /* blue reemplaza rojo */
+            background: #0075C9; /* blue reemplaza rojo */
             color: white;
             display: flex;
             flex-direction: column;
@@ -62,7 +62,7 @@
         }
         .app-header .navbar-brand {
             font-weight: bold;
-            color: #003478; /* blue reemplaza rojo */
+                color: #0075C9; /* blue reemplaza rojo */
             margin: 0;
         }
         .app-content {
@@ -81,7 +81,7 @@
         /* Typography overrides */
         .app-content h1,
         .app-content h2 {
-            color: #003478; /* blue reemplaza rojo */
+            color: #0075C9; /* blue reemplaza rojo */
             font-weight: bold;
         }
         /* Form focus */
@@ -94,12 +94,12 @@
         }
         .app-content input:focus,
         .app-content select:focus {
-            border-color: #003478; /* blue */
+                border-color: #0075C9; /* blue */
             box-shadow: 0 0 5px rgba(0,52,120,0.3); /* blue shadow */
         }
         /* Button colors */
         .app-content button {
-            background-color: #003478; /* blue */
+            background-color: #0075C9; /* blue */
             border: none;
             color: white;
             padding: 10px 20px;
@@ -107,7 +107,30 @@
             transition: background-color 0.3s ease;
         }
         .app-content button:hover {
-            background-color: #002a58; /* darker blue */
+                background-color: #0075C9; /* darker blue */
+        }
+
+        .sidebar-logo {
+            max-height: 100px;
+            width: auto;
+            display: block;
+
+
+            margin: 0 auto;
+        }
+
+        .app-sidebar {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .sidebar-footer {
+            border-top: 1px solid rgba(255,255,255,0.2);
         }
     </style>
     @RenderSection("Styles", required: false)
@@ -116,9 +139,9 @@
     <div class="app-container">
         <!-- Sidebar -->
         <nav class="app-sidebar">
-            <div class="sidebar-header">
-                Ayuntamiento Salamanca
-            </div>
+            <img src="~/images/EscudoAyuntamientoSalamanca.png"
+                 alt="Ayuntamiento de Salamanca"
+                 class="sidebar-logo" />
             <ul class="nav flex-column sidebar-nav">
                 <li class="nav-item @(ViewBag.Active=="MenuPrincipal"?"active":"")">
                     <a class="nav-link" asp-controller="MenuPrincipal" asp-action="Index">Menú Principal</a>
@@ -139,6 +162,19 @@
                     <a class="nav-link" asp-controller="BajaUsuario" asp-action="BajaUsuario">Baja Usuario</a>
                 </li>
             </ul>
+            <div class="sidebar-footer mt-auto">
+                <form asp-controller="InicioSesion"
+                      asp-action="Logout"
+                      method="post"
+                      class="px-3 py-2">
+                    @Html.AntiForgeryToken()
+                    <button type="submit"
+                            class="btn btn-link text-white w-100 text-start">
+                        <i class="bi bi-box-arrow-right me-2"></i>
+                        Cerrar Sesión
+                    </button>
+                </form>
+            </div>
         </nav>
         <!-- Main area -->
         <div class="app-main">

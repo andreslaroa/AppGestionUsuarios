@@ -16,11 +16,16 @@ public class AltaMasivaController : Controller
 
     private readonly AltaUsuarioController _altaUsuarioController;
 
-    public AltaMasivaController(AltaUsuarioController altaUsuarioController)
+
+    private GraphServiceClient? _graphClient = null;
+    private readonly IConfiguration _config;
+
+    public AltaMasivaController(AltaUsuarioController altaUsuarioController, IConfiguration config)
     {
         Console.WriteLine("Ctor AltaMasivaController invocado");
         _altaUsuarioController = altaUsuarioController
             ?? throw new ArgumentNullException(nameof(altaUsuarioController));
+        _config = config;
     }
 
 
@@ -33,19 +38,7 @@ public class AltaMasivaController : Controller
         public string Message { get; set; }
     }
 
-    private GraphServiceClient? _graphClient = null;
-    private readonly IConfiguration _config;
-
-    public AltaMasivaController(IConfiguration config)
-    {
-        _config = config;
-    }
-
-
-
-    //private readonly string domainPath = _config["AciveDirectory:DomainComponents"];
-    private readonly string domainPath = "DC=aytosa, DC=inet";
-
+    
     public class ProcessUsersRequest
     {
         public List<Dictionary<string, object>> UsersRaw { get; set; }
@@ -65,7 +58,7 @@ public class AltaMasivaController : Controller
                        .GetGruposFromAD()
                        .OrderBy(g => g)
                        .ToList();
-            return View("AltaMasiva");
+            return View();
         }
         catch (Exception ex)
         {
@@ -112,7 +105,6 @@ public class AltaMasivaController : Controller
         return Json(new { success = true, users });
     }
 
-    // POST: /AltaMasiva/ProcessUsers
     // Mapea cada fila a UserModelAltaUsuario, inyecta Departamento y LugarEnvio y llama a CreateUser
     [HttpPost]
     public async Task<JsonResult> ProcessUsers([FromBody] ProcessUsersRequest request)
@@ -321,7 +313,7 @@ public class AltaMasivaController : Controller
                     //Añadir los usuarios a los grupos
                     _altaUsuarioController.AddUserToGroup(user);
                     summaryMessages.Add($"Licencia asignada a '{user}'.");
-                                                            
+
                 }
                 catch (Exception ex)
                 {
@@ -360,7 +352,7 @@ public class AltaMasivaController : Controller
             {
                 try
                 {
-                    
+
                     _altaUsuarioController.EnableOnPremMailbox(user, request.AdminUser, request.AdminPassword);
                     summaryMessages.Add($"Buzón creado para '{user}'.");
                 }
@@ -373,7 +365,7 @@ public class AltaMasivaController : Controller
             }
 
             // 5) Actualizar proxyaddresses en AD
-            foreach(var user in createdUsernames)
+            foreach (var user in createdUsernames)
             {
                 try
                 {
@@ -439,7 +431,8 @@ public class AltaMasivaController : Controller
 
     private async Task<string> GetOUPath(string ouName, string parentOU)
     {
-        try
+        string domainPath = _config["ActiveDirectory:DomainComponents"];
+            try
         {
             using (var rootEntry = new DirectoryEntry($"LDAP://{domainPath}"))
             {
@@ -449,12 +442,12 @@ public class AltaMasivaController : Controller
                     if (!string.IsNullOrEmpty(parentOU))
                     {
                         // Buscar OU secundaria dentro de OU principal
-                        filter = $"(&(objectClass=organizationalUnit)(ou={ouName})(distinguishedName=OU={ouName},OU=Usuarios y Grupos,OU={parentOU},OU=AREAS,DC=aytosa,DC=inet))";
+                        filter = $"(&(objectClass=organizationalUnit)(ou={ouName})(distinguishedName=OU={ouName},OU=Usuarios,OU={parentOU},{_config["ActiveDirectory:DomainBase"]}";
                     }
                     else
                     {
                         // Buscar OU principal bajo AREAS
-                        filter = $"(&(objectClass=organizationalUnit)(ou={ouName})(distinguishedName=OU={ouName},OU=AREAS,DC=aytosa,DC=inet))";
+                        filter = $"(&(objectClass=organizationalUnit)(ou={ouName})(distinguishedName=OU={ouName},{_config["ActiveDirectory:DomainBase"]}))";
                     }
 
                     searcher.Filter = filter;
@@ -584,15 +577,16 @@ public class AltaMasivaController : Controller
     }
 
     /// <summary>
-    /// Comprueba si existe la OU principal bajo OU=AREAS,DC=aytosa,DC=inet
+    /// Comprueba si existe la OU principal bajo {_config["ActiveDirectory:DomainBase"]}
     /// </summary>
     private bool OuPrincipalExiste(string ouPrincipal)
     {
         if (string.IsNullOrWhiteSpace(ouPrincipal))
             return false;
 
-        // Base de búsqueda: OU=AREAS,DC=aytosa,DC=inet
-        using var entry = new DirectoryEntry("LDAP://OU=AREAS,DC=aytosa,DC=inet");
+        // Base de búsqueda: {_config["ActiveDirectory:DomainBase"]}
+        string ldapPath = $"LDAP://{_config["ActiveDirectory:DomainBase"]}";
+        using var entry = new DirectoryEntry(ldapPath);
         using var searcher = new DirectorySearcher(entry)
         {
             Filter = $"(&(objectClass=organizationalUnit)(ou={ouPrincipal}))",
@@ -604,15 +598,15 @@ public class AltaMasivaController : Controller
 
     /// <summary>
     /// Comprueba si existe la OU secundaria bajo
-    ///     OU=Usuarios y Grupos,OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet
+    ///     OU=Usuarios,OU={ouPrincipal},{_config["ActiveDirectory:DomainBase"]}
     /// </summary>
     private bool OuSecundariaExiste(string ouPrincipal, string ouSecundaria)
     {
         if (string.IsNullOrWhiteSpace(ouSecundaria))
             return true;  // no es obligatorio
 
-        // Base de búsqueda: OU=Usuarios y Grupos bajo la OU principal
-        string ldapPath = $"LDAP://OU=Usuarios y Grupos,OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+        // Base de búsqueda: OU=Usuarios bajo la OU principal
+        string ldapPath = $"LDAP://OU=Usuarios,OU={ouPrincipal},{_config["ActiveDirectory:DomainBase"]}";
         using var entry = new DirectoryEntry(ldapPath);
         using var searcher = new DirectorySearcher(entry)
         {

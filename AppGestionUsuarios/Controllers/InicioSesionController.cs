@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.DirectoryServices.AccountManagement;
 using Microsoft.AspNetCore.Authentication;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 
 namespace AppGestionUsuarios.Controllers
 {
@@ -51,6 +52,17 @@ namespace AppGestionUsuarios.Controllers
 
             ViewBag.Message = validationResult;
             return View();
+        }
+
+        [Authorize]
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Logout()
+        {
+            // Destruye la cookie de autenticación
+            await HttpContext.SignOutAsync("CookieAuth");
+            // Redirige al formulario de login
+            return RedirectToAction("Login", "InicioSesion");
         }
 
         // Método para validar las credenciales del usuario contra el dominio especificado

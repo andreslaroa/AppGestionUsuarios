@@ -185,7 +185,7 @@ public class AltaUsuarioController : Controller
         try
         {
             var ouSecundarias = new List<string>();
-            string ldapPath = $"LDAP://OU=Usuarios y Grupos,OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+            string ldapPath = $"LDAP://OU=Usuarios,OU={ouPrincipal},{_config["ActiveDirectory:DomainBase"]}";
 
             using (var rootEntry = new DirectoryEntry(ldapPath))
             {
@@ -234,13 +234,13 @@ public class AltaUsuarioController : Controller
             string ldapPath;
             if (!string.IsNullOrEmpty(ouSecundaria))
             {
-                // Si hay OU secundaria, buscamos el departamento en la OU secundaria dentro de "Usuarios y Grupos"
-                ldapPath = $"LDAP://OU={ouSecundaria},OU=Usuarios y Grupos,OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+                // Si hay OU secundaria, buscamos el departamento en la OU secundaria dentro de "Usuarios"
+                ldapPath = $"LDAP://OU={ouSecundaria},OU=Usuarios,OU={ouPrincipal},{_config["ActiveDirectory:DomainBase"]}";
             }
             else
             {
                 // Si no hay OU secundaria, buscamos el departamento en la OU principal
-                ldapPath = $"LDAP://OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+                ldapPath = $"LDAP://OU={ouPrincipal},{_config["ActiveDirectory:DomainBase"]}";
             }
 
             using (var ouEntry = new DirectoryEntry(ldapPath))
@@ -288,13 +288,13 @@ public class AltaUsuarioController : Controller
             string ldapPath;
             if (!string.IsNullOrEmpty(ouSecundaria))
             {
-                // Si hay OU secundaria, buscamos el lugar de envío en la OU secundaria dentro de "Usuarios y Grupos"
-                ldapPath = $"LDAP://OU={ouSecundaria},OU=Usuarios y Grupos,OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+                // Si hay OU secundaria, buscamos el lugar de envío en la OU secundaria dentro de "Usuarios"
+                ldapPath = $"LDAP://OU={ouSecundaria},OU=Usuarios,OU={ouPrincipal},{_config["ActiveDirectory:DomainBase"]}";
             }
             else
             {
                 // Si no hay OU secundaria, buscamos el lugar de envío en la OU principal
-                ldapPath = $"LDAP://OU={ouPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+                ldapPath = $"LDAP://OU={ouPrincipal},{_config["ActiveDirectory:DomainBase"]}";
             }
 
             using (var ouEntry = new DirectoryEntry(ldapPath))
@@ -370,14 +370,14 @@ public class AltaUsuarioController : Controller
             string ouPath; // Para obtener los atributos de la OU más inmediata
             if (!string.IsNullOrEmpty(user.OUSecundaria))
             {
-                ldapPath = $"LDAP://OU=Usuarios y Grupos, OU={user.OUSecundaria},OU=Usuarios y Grupos,OU={user.OUPrincipal},OU=AREAS,DC=aytosa,DC=inet";
-                ouPath = $"LDAP://OU={user.OUSecundaria},OU=Usuarios y Grupos,OU={user.OUPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+                ldapPath = $"LDAP://OU=Usuarios, OU={user.OUSecundaria},OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
+                ouPath = $"LDAP://OU={user.OUSecundaria},OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
                 errors.Add($"Usando OU secundaria: Path = {ouPath}");
             }
             else
             {
-                ldapPath = $"LDAP://OU=Usuarios y Grupos,OU={user.OUPrincipal},OU=AREAS,DC=aytosa,DC=inet";
-                ouPath = $"LDAP://OU={user.OUPrincipal},OU=AREAS,DC=aytosa,DC=inet";
+                ldapPath = $"LDAP://OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
+                ouPath = $"LDAP://OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
                 errors.Add($"Usando OU principal: Path = {ouPath}");
             }
 
@@ -421,7 +421,7 @@ public class AltaUsuarioController : Controller
                         }
 
                         // Obtener el grupo de usuarios asociado al departamento concreto
-                        grupoDepartamento = ouEntryForAttributes.Properties[_config["GroupInformation:DepartmentGroup"]]?.Value?.ToString();
+                        grupoDepartamento = ouEntryForAttributes.Properties[_config["GroupInformation:DepartmentGroupAttr"]]?.Value?.ToString();
                         if (string.IsNullOrEmpty(grupoDepartamento))
                         {
                             grupoDepartamento = "";
@@ -569,7 +569,7 @@ public class AltaUsuarioController : Controller
                     // Configurar contraseña y activar cuenta
                     try
                     {
-                        newUser.Invoke("SetPassword", new object[] { "Temporal2024" });
+                        newUser.Invoke("SetPassword", new object[] { _config["ActiveDirectory:TemporalPassword"] });    
                         newUser.Properties[_config["ADAttributes:EnableAccountAttr"]].Value = 0x200;
                         newUser.Properties[_config["ADAttributes:ChangePassNextLoginAttr"]].Value = 0;
                         newUser.CommitChanges();
@@ -674,26 +674,40 @@ public class AltaUsuarioController : Controller
                                 Directory.CreateDirectory(folderPath);
                                 errors.Add($"Carpeta creada: {folderPath}");
 
+
+                                string adminUsername = _config["ActiveDirectory:AppAdministrator"];
+                                string adminFileSystem = _config["ActiveDirectory:FileSystemAdministrator"];
+                                string adminDomainSystem = _config["ActiveDirectory:DomainSystemAdministrator"];
+                                string quotaDomain = _config["ActiveDirectory:QuotaDomain"];
+
                                 // 2) NTFS: permisos sobre \\LEONARDO\Home\<user>
                                 DirectoryInfo di = new DirectoryInfo(folderPath);
                                 var ds = new DirectorySecurity();
                                 // FullControl a las cuentas de administración
                                 ds.AddAccessRule(new FileSystemAccessRule(
-                                    new NTAccount("aytosa\\adm_fs"),
+                                    new NTAccount($"{quotaDomain}\\{adminFileSystem}"),
                                     FileSystemRights.FullControl,
                                     InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                     PropagationFlags.None,
                                     AccessControlType.Allow));
                                 ds.AddAccessRule(new FileSystemAccessRule(
-                                    new NTAccount("aytosa\\adm_ds"),
+                                    new NTAccount($"{quotaDomain}\\{adminDomainSystem}"),
                                     FileSystemRights.FullControl,
                                     InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                     PropagationFlags.None,
                                     AccessControlType.Allow));
                                 // Permisos del propio usuario
                                 ds.AddAccessRule(new FileSystemAccessRule(
-                                    new NTAccount($"aytosa\\{user.Username}"),
+                                    new NTAccount($"{quotaDomain}\\{user.Username}"),
                                     FileSystemRights.ReadAndExecute | FileSystemRights.Write | FileSystemRights.DeleteSubdirectoriesAndFiles,
+                                    InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                                    PropagationFlags.None,
+                                    AccessControlType.Allow));
+
+
+                                ds.AddAccessRule(new FileSystemAccessRule(
+                                    new NTAccount($"{quotaDomain} \\{adminUsername}"),
+                                    FileSystemRights.FullControl,
                                     InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                     PropagationFlags.None,
                                     AccessControlType.Allow));
