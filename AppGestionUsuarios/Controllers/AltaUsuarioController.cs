@@ -371,7 +371,7 @@ public class AltaUsuarioController : Controller
             if (!string.IsNullOrEmpty(user.OUSecundaria))
             {
                 ldapPath = $"LDAP://OU=Usuarios, OU={user.OUSecundaria},OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
-                ouPath = $"LDAP://OU={user.OUSecundaria},OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
+                ouPath = $"LDAP://OU=Usuarios,OU={user.OUSecundaria},OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
                 errors.Add($"Usando OU secundaria: Path = {ouPath}");
             }
             else
@@ -412,8 +412,8 @@ public class AltaUsuarioController : Controller
                         area = ouEntryForAttributes.Properties[_config["GroupInformation:AreaAttr"]]?.Value?.ToString();
                         if (string.IsNullOrEmpty(area))
                         {
-                            area = "";
-                            errors.Add("Atributo 'description' no definido, usando valor predeterminado: 'Sin descripción'.");
+                            area = "Sin area";
+                            errors.Add("Atributo 'description' no definido, usando valor predeterminado: 'Sin Área'.");
                         }
                         else
                         {
@@ -465,7 +465,7 @@ public class AltaUsuarioController : Controller
                 {
                     // Crear el usuario
                     newUser = ouEntry.Children.Add($"CN={displayName}", "user");
-                    errors.Add($"Usuario creado en la OU: CN={displayName}");
+                    errors.Add($"Usuario creado en la OU: CN={ldapPath}");
 
                     // Establecer atributos básicos del usuario
                     try
@@ -490,39 +490,74 @@ public class AltaUsuarioController : Controller
                         if (!string.IsNullOrEmpty(user.NFuncionario))
                         {
                             newUser.Properties[_config["ADAttributes:NFuncionarioAttr"]].Value = user.NFuncionario;
-                            errors.Add($"Atributo 'description' (NFuncionario) establecido: {user.NFuncionario}");
+                            errors.Add($"Atributo 'NFuncionarioAttr' (NFuncionario) establecido: {user.NFuncionario}");
+                        }
+                        else
+                        {
+                            errors.Add($"Atributo 'NFuncionarioAttr' se recibió como null o vacio");
+
                         }
                         //NTelefono se refiere a la extensión del número fijo
                         if (!string.IsNullOrEmpty(user.NTelefono))
                         {
                             newUser.Properties[_config["ADAttributes:TelephoneNumberAttr"]].Value = user.NTelefono;
-                            errors.Add($"Atributo 'telephoneNumber' establecido: {user.NTelefono}");
+                            errors.Add($"Atributo 'TelephoneNumberAttr' establecido: {user.NTelefono}");
+                        }
+                        else
+                        {
+                            errors.Add($"Atributo 'TelephoneNumberAttr' se recibió como null o vacio");
+
                         }
                         //Se refiere al número fijo completo
                         if (!string.IsNullOrEmpty(user.NumeroLargoFijo))
                         {
                             newUser.Properties[_config["ADAttributes:OtherTelephoneAttr"]].Value = user.NumeroLargoFijo;
-                            errors.Add($"Atributo 'otherTelephone' establecido: {user.NumeroLargoFijo}");
+                            errors.Add($"Atributo 'OtherTelephoneAttr' establecido: {user.NumeroLargoFijo}");
+                        }
+                        else
+                        {
+                            errors.Add($"Atributo 'OtherTelephoneAttr' se recibió como null o vacio");
+
                         }
                         if (!string.IsNullOrEmpty(user.ExtensionMovil))
                         {
                             newUser.Properties[_config["ADAttributes:MobileExtensionAttr"]].Value = user.ExtensionMovil;
-                            errors.Add($"Atributo 'mobile' establecido: {user.ExtensionMovil}");
+                            errors.Add($"Atributo 'MobileExtensionAttr' establecido: {user.ExtensionMovil}");
+                        }
+                        else
+                        {
+                            errors.Add($"Atributo 'MobileextensionAttr' se recibió como null o vacio");
+
                         }
                         if (!string.IsNullOrEmpty(user.NumeroLargoMovil))
                         {
                             newUser.Properties[_config["ADAttributes:LargeMobileNumberAttr"]].Value = user.NumeroLargoMovil;
-                            errors.Add($"Atributo 'otherMobile' establecido: {user.NumeroLargoMovil}");
+                            errors.Add($"Atributo 'LargeMobileNumberAttr' establecido: {user.NumeroLargoMovil}");
+                        }
+                        else
+                        {
+                            errors.Add($"Atributo 'MobileextensionAttr' se recibió como null o vacio");
+
                         }
                         if (!string.IsNullOrEmpty(user.TarjetaIdentificativa))
                         {
                             newUser.Properties[_config["ADAttributes:IDCardAttr"]].Value = user.TarjetaIdentificativa;
-                            errors.Add($"Atributo 'serialNumber' establecido: {user.TarjetaIdentificativa}");
+                            errors.Add($"Atributo 'IDCardAttr' establecido: {user.TarjetaIdentificativa}");
+                        }
+                        else
+                        {
+                            errors.Add($"Atributo 'IDCardAttr' se recibió como null o vacio");
+
                         }
                         if (!string.IsNullOrEmpty(user.DNI))
                         {
                             newUser.Properties[_config["ADAttributes:DNIAttr"]].Value = user.DNI;
-                            errors.Add($"Atributo 'employeeID' establecido: {user.DNI}");
+                            errors.Add($"Atributo 'DNIAttr' establecido: {user.DNI}");
+                        }
+                        else
+                        {
+                            errors.Add($"Atributo 'DNIAttr' se recibió como null o vacio");
+
                         }
                         newUser.Properties[_config["ADAttributes:LocationAttr"]].Value = user.LugarEnvio;
                         errors.Add("Atributos opcionales del usuario establecidos correctamente.");
