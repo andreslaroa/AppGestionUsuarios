@@ -7,7 +7,7 @@ using System.Management.Automation;
 using System.DirectoryServices.AccountManagement;
 using System.Security.AccessControl;
 using System.Security.Principal;
-using System.Runtime.InteropServices; 
+using System.Runtime.InteropServices;
 using Microsoft.Graph.Models;
 using Microsoft.Graph;
 using Azure.Identity;
@@ -26,14 +26,14 @@ public class AltaUsuarioController : Controller
         _config = config;
     }
 
-    private  GraphServiceClient? _graphClient = null;
+    private GraphServiceClient? _graphClient = null;
 
     public class userInputModel
     {
         public string Nombre { get; set; }
         public string Apellido1 { get; set; }
         public string Apellido2 { get; set; }
-    }   
+    }
 
     public class UserModelAltaUsuario
     {
@@ -76,7 +76,7 @@ public class AltaUsuarioController : Controller
             var gruposPorDefecto = _config
                 .GetSection("GruposPorDefecto:Grupos")
                 .Get<List<string>>()
-                ?? new List<string> {"GA_R_PORTALEMPLEADO"};
+                ?? new List<string> { "GA_R_PORTALEMPLEADO" };
 
             ViewBag.GruposPorDefecto = gruposPorDefecto;
 
@@ -342,7 +342,7 @@ public class AltaUsuarioController : Controller
 
         // Validar los campos obligatorios (los nuevos campos son opcionales)
         if (string.IsNullOrEmpty(user.Nombre) || string.IsNullOrEmpty(user.Apellido1) ||
-            string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Apellido2) || 
+            string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Apellido2) ||
             string.IsNullOrEmpty(user.OUPrincipal) || string.IsNullOrEmpty(user.FechaCaducidadOp))
         {
             return Json(new { success = false, message = "Faltan campos obligatorios." });
@@ -604,7 +604,7 @@ public class AltaUsuarioController : Controller
                     // Configurar contraseña y activar cuenta
                     try
                     {
-                        newUser.Invoke("SetPassword", new object[] { _config["ActiveDirectory:TemporalPassword"] });    
+                        newUser.Invoke("SetPassword", new object[] { _config["ActiveDirectory:TemporalPassword"] });
                         newUser.Properties[_config["ADAttributes:EnableAccountAttr"]].Value = 0x200;
                         newUser.Properties[_config["ADAttributes:ChangePassNextLoginAttr"]].Value = 0;
                         newUser.CommitChanges();
@@ -885,48 +885,45 @@ public class AltaUsuarioController : Controller
 
     //Método para crear el alta complta de usuario con correo electrónico
     [HttpPost]
+    [HttpPost]
     public async Task<IActionResult> AltaCompleta([FromBody] UserModelAltaUsuario user)
     {
-        // Validación básica
+        var log = new List<string>();
+        bool ok = true;
+
         if (user == null || string.IsNullOrEmpty(user.Username))
             return Json(new { success = false, message = "No se recibieron datos válidos." });
 
-        // Validaciones previas...
-        if (string.IsNullOrWhiteSpace(user.adminUser) ||
-            string.IsNullOrWhiteSpace(user.adminPassword))
-        {
+        if (string.IsNullOrWhiteSpace(user.adminUser) || string.IsNullOrWhiteSpace(user.adminPassword))
             return Json(new { success = false, message = "Faltan credenciales de administrador Exchange." });
-        }
 
-        //Validamos las credenciales de administrador contra active directory
+        log.Add("Validación de credenciales del administrador...");
         if (!ValidateCredentials(user.adminUser, user.adminPassword))
-        {
             return Json(new { success = false, message = "Credenciales de administrador exchange incorrectas" });
-        }
+        log.Add("[OK] Credenciales validadas correctamente.");
 
-        // Inicializar GraphServiceClient (puedes extraer esto a un método privado si lo prefieres)
+        log.Add("Inicializando GraphServiceClient...");
         var tenantId = _config["AzureAd:TenantId"] ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
         var clientId = _config["AzureAd:ClientId"] ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
         var clientSecret = _config["AzureAd:ClientSecret"] ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
         var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
         _graphClient = new GraphServiceClient(credential);
+        log.Add("[OK] GraphServiceClient inicializado.");
 
         var samAccountName = user.Username;
-        var username = samAccountName; // o user.Username + dominio si lo necesitas
-
-        var log = new List<string>();
-        bool ok = true;
+        var username = samAccountName;
 
         try
         {
             log.Add("=== Alta Completa iniciado: " + DateTime.Now + " ===");
 
+            // Paso 1: Crear usuario en AD
+            log.Add("Paso 1: Intentando crear el usuario en AD...");
             var createResult = CreateUser(user) as JsonResult;
             dynamic createData = createResult?.Value;
             if (createData == null || !(bool)createData.success)
             {
-                // Abortamos aquí si CreateUser falla
-                log.Add("[ERROR] No se pudo crear el usuario en AD: " + (createData?.message ?? "sin mensaje"));
+                log.Add("[ERROR] Fallo al crear el usuario en AD: " + (createData?.message ?? "sin mensaje"));
                 return Json(new
                 {
                     success = false,
@@ -934,42 +931,58 @@ public class AltaUsuarioController : Controller
                     log
                 });
             }
-            log.Add("[OK] Usuario creado en AD: " + createData.message);
+            log.Add("[OK] Usuario creado en AD correctamente.");
 
 
-            // 1) Añadir grupo de licencias
-            AddUserToGroup(samAccountName);
-            log.Add("Usuario añadido al grupo de licencias.");
+            // Paso 2: Añadir a grupo de licencias
+            log.Add("Paso 2: Añadiendo al grupo de licencias...");
+            var grupoResult = ModifyUserGroup(samAccountName) as JsonResult;
+            dynamic grupoData = grupoResult?.Value;
+            if (grupoData == null || !(bool)grupoData.success)
+            {
+                log.Add("[ERROR] No se pudo añadir al grupo: " + (grupoData?.message ?? "sin mensaje"));
+                ok = false;
+            }
+            else
+            {
+                log.Add("[OK] Usuario añadido al grupo de licencias.");
+            }
 
-            // 2) Forzar sincronización Azure AD Connect
+            // Paso 3: Sincronizar con Azure AD
+            log.Add("Paso 3: Lanzando sincronización Delta con Azure AD Connect...");
             var (syncOk, syncErr) = SyncDeltaOnVanGogh();
             if (!syncOk)
             {
-                log.Add("Error al sincronizar Azure AD Connect: " + syncErr);
+                log.Add("[ERROR] Error en la sincronización: " + syncErr);
                 ok = false;
                 throw new InvalidOperationException(syncErr);
             }
-            log.Add("Sincronización Delta lanzada.");
+            log.Add("[OK] Sincronización Delta completada.");
 
-            // 3) Esperar a que aparezca en Azure AD
+            // Paso 4: Esperar a que aparezca en Azure AD
+            log.Add("Paso 4: Esperando aparición del usuario en Azure AD...");
             var exists = await WaitForAzureUser(samAccountName);
-            log.Add(exists
-                ? "Usuario encontrado en Azure AD."
-                : "Timeout esperando al usuario en Azure AD.");
+            if (exists)
+                log.Add("[OK] Usuario encontrado en Azure AD.");
+            else
+                log.Add("[WARN] Timeout esperando al usuario en Azure AD.");
 
-            // 4) Crear buzón on-prem
+            // Paso 5: Crear buzón on-prem
+            log.Add("Paso 5: Habilitando buzón on-prem...");
             EnableOnPremMailbox(username, user.adminUser, user.adminPassword);
-            log.Add("Buzón on-prem habilitado.");
+            log.Add("[OK] Buzón on-prem habilitado correctamente.");
 
-            // 5) Actualizar proxyAddresses en AD
+            // Paso 6: Actualizar proxyAddresses
+            log.Add("Paso 6: Actualizando proxyAddresses...");
             UpdateProxyAddresses(samAccountName);
-            log.Add("proxyAddresses actualizadas.");
+            log.Add("[OK] proxyAddresses actualizadas.");
 
-            // 6) Crear batch de migración
+            // Paso 7: Crear lote de migración
+            log.Add("Paso 7: Creando y lanzando lote de migración...");
             CreateMigrationBatch(new[] { username });
-            log.Add("Lote de migración creado y lanzado.");
+            log.Add("[OK] Lote de migración lanzado.");
 
-            
+            log.Add("=== Alta Completa finalizada con éxito ===");
         }
         catch (Exception ex)
         {
@@ -978,18 +991,18 @@ public class AltaUsuarioController : Controller
             log.Add("=== Alta Completa abortada ===");
         }
 
-        // Persistir log en disco si quieres
+        // Guardar log en disco
         System.IO.File.WriteAllLines(
             Path.Combine(Path.GetTempPath(), $"AltaCompleta_{samAccountName}.log"),
             log);
 
-        // Devolver resultado
         var message = ok
             ? "Alta completa realizada con éxito.\n" + string.Join("\n", log)
             : "Se produjeron errores en la Alta Completa:\n" + string.Join("\n", log);
 
         return Json(new { success = ok, message });
     }
+
 
 
     //Función encargada de comvertir el username recibido de una vista en string y pasarlo a la función que lo busca en AD
@@ -1116,8 +1129,8 @@ public class AltaUsuarioController : Controller
             try
             {
                 // Configurar dominio y atributo a buscar
-                string domain = _config["ActiveDirectory:DomainName"]; 
-                string attributeName = "description"; 
+                string domain = _config["ActiveDirectory:DomainName"];
+                string attributeName = "description";
 
                 // Ruta LDAP al dominio
                 string ldapPath = $"LDAP://{domain}";
@@ -1173,7 +1186,7 @@ public class AltaUsuarioController : Controller
             try
             {
                 // Configurar dominio y atributo a buscar
-                string domain = _config["ActiveDirectory:DomainName"]; 
+                string domain = _config["ActiveDirectory:DomainName"];
                 string attributeName = "telephoneNumber"; // Atributo del Directorio Activo para el número de funcionario
 
                 // Ruta LDAP al dominio
@@ -1561,7 +1574,7 @@ public class AltaUsuarioController : Controller
     /// Espera 30 s, luego intenta hasta 4 veces comprobar en Graph si el usuario existe,
     /// con 10 s de espera entre cada intento. Cualquier excepción cuenta como “no existe”.
     /// </summary>
-    public  async Task<bool> WaitForAzureUser(string upn)
+    public async Task<bool> WaitForAzureUser(string upn)
     {
         const int maxAttempts = 4;
         const int initialDelaySeconds = 30;
@@ -1654,19 +1667,19 @@ public class AltaUsuarioController : Controller
         var proxies = de.Properties["proxyAddresses"];
 
         // 5) Eliminar la antigua
-        var oldProxy = $"smtp:{samAccountName}@{oldDomain}";
-        for (int i = proxies.Count - 1; i >= 0; i--)
-        {
-            if (proxies[i]?.ToString().Equals(oldProxy, StringComparison.OrdinalIgnoreCase) == true)
-                proxies.Remove(proxies[i]);
-        }
+        //var oldProxy = $"smtp:{samAccountName}@{oldDomain}";
+        //for (int i = proxies.Count - 1; i >= 0; i--)
+        //{
+        //    if (proxies[i]?.ToString().Equals(oldProxy, StringComparison.OrdinalIgnoreCase) == true)
+        //        proxies.Remove(proxies[i]);
+        //}
 
         // 6) Añadir la nueva primaria
-        /*var newProxy = $"SMTP:{samAccountName}@{newDomain}";
+        var newProxy = $"SMTP:{samAccountName}@{newDomain}";
         if (!proxies.Cast<string>().Any(p => p.Equals(newProxy, StringComparison.OrdinalIgnoreCase)))
         {
             proxies.Add(newProxy);
-        }*/
+        }
 
         // 7) Guardar cambios
         de.CommitChanges();
@@ -1771,17 +1784,88 @@ public class AltaUsuarioController : Controller
         }
     }
 
-    public bool ValidateCredentials ( string usuario, string password)
+    public bool ValidateCredentials(string usuario, string password)
     {
         string dominio = _config["ActiveDirectory:DomainName"]
                         ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
         using (var ctx = new PrincipalContext(
-                   ContextType.Domain,   
-                   dominio))             
+                   ContextType.Domain,
+                   dominio))
         {
 
             // El método devuelve true solo si el usuario y la contraseña son correctos.
             return ctx.ValidateCredentials(usuario, password);
+        }
+    }
+
+    [HttpPost]
+    public IActionResult ModifyUserGroup(string SAMAccountName)
+    {
+        if (string.IsNullOrEmpty(SAMAccountName))
+        {
+
+        }
+        string username = SAMAccountName; // Extrae el nombre de usuario
+        string groupName = _config["ActiveDirectory:LicenseGroupDn"];
+        string action = "add";
+
+        DirectoryEntry groupEntry = null; // Declaración fuera del try
+
+        try
+        {
+            // Buscar el grupo en el dominio
+            groupEntry = FindGroupByName(groupName);
+            if (groupEntry == null)
+                return Json(new { success = false, message = $"Grupo '{groupName}' no encontrado en el dominio." });
+
+            // Buscar el usuario en el dominio
+            string ldapPath = "LDAP://DC=aytosa,DC=inet";
+            using (var root = new DirectoryEntry(ldapPath))
+            {
+                using (var searcher = new DirectorySearcher(root))
+                {
+                    searcher.Filter = $"(&(objectClass=user)(sAMAccountName={username}))";
+                    searcher.SearchScope = SearchScope.Subtree;
+
+                    System.DirectoryServices.SearchResult result = searcher.FindOne();
+
+                    if (result == null)
+                        return Json(new { success = false, message = $"Usuario '{username}' no encontrado en el dominio." });
+
+                    using (DirectoryEntry userEntry = result.GetDirectoryEntry())
+                    {
+                        if (action == "add")
+                        {
+                            // Añadir el usuario al grupo
+                            groupEntry.Invoke("Add", new object[] { userEntry.Path });
+                            groupEntry.CommitChanges();
+                            return Json(new { success = true, message = $"El usuario '{username}' fue añadido al grupo '{groupName}' correctamente." });
+                        }
+                        else if (action == "remove")
+                        {
+                            // Eliminar el usuario del grupo
+                            groupEntry.Invoke("Remove", new object[] { userEntry.Path });
+                            groupEntry.CommitChanges();
+                            return Json(new { success = true, message = $"El usuario '{username}' fue eliminado del grupo '{groupName}' correctamente." });
+                        }
+                        else
+                        {
+                            return Json(new { success = false, message = "Acción no válida. Use 'add' o 'remove'." });
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = $"Error al modificar el grupo: {ex.Message}" });
+        }
+        finally
+        {
+            if (groupEntry != null)
+            {
+                groupEntry.Dispose(); // Liberar el recurso correctamente
+            }
         }
     }
 
