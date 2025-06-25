@@ -145,7 +145,6 @@
                     u.Grupos = [];
                 }
 
-                // … resto de tu código sin cambios …
                 const tr = document.createElement('tr');
                 const mkTd = (val, field) =>
                     `<td>
@@ -270,7 +269,7 @@
                 const data = await res.json();
 			    if (data.success) {
 				    alert('Usuario creado exitosamente');
-				    windows.location.reload();
+				    window.location.reload();
                 }
                 else
                 {

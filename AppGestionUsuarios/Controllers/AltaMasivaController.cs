@@ -358,108 +358,107 @@ public class AltaMasivaController : Controller
                         }
                     }
 
-                    if (createdUsernames.Any())
+                    
+                    summaryMessages.Add("▶ Asignando licencias de Exchange a usuarios creados...");
+                    // 3) Asignar licencias (iteramos sobre una copia)
+                    var usersForLicenses = createdUsernames.ToList();
+                    var failedLicenseUsers = new List<string>();
+
+                    foreach (var user in usersForLicenses)
                     {
-                        summaryMessages.Add("▶ Asignando licencias de Exchange a usuarios creados...");
-                        // 3) Asignar licencias (iteramos sobre una copia)
-                        var usersForLicenses = createdUsernames.ToList();
-                        var failedLicenseUsers = new List<string>();
-
-                        foreach (var user in usersForLicenses)
+                        try
                         {
-                            try
-                            {
-                                _altaUsuarioController.AddUserToGroup(user);
-                                summaryMessages.Add($"Licencia asignada a '{user}'.");
-                            }
-                            catch (Exception ex)
-                            {
-                                summaryMessages.Add($"Error asignando licencia a '{user}': {ex.Message}");
-                                failedLicenseUsers.Add(user);
-                                overallSuccess = false;
-                            }
+                            _altaUsuarioController.AddUserToGroup(user);
+                            summaryMessages.Add($"Licencia asignada a '{user}'.");
                         }
-
-                        // 2) Forzar sincronización Azure AD Connect
-                        //var (syncOk, syncErr) = _altaUsuarioController.SyncDeltaOnVanGogh();
-                        //if (!syncOk)
-                        //{
-                        //    summaryMessages.Add("Error al sincronizar Azure AD Connect: " + syncErr);
-                        //    throw new InvalidOperationException(syncErr);
-                        //}
-
-                        // 3) Comprobar si existe el último usuario de la lista en Exchange, lo que querría decir que existen todos
-                        //var lastUser = createdUsernames.LastOrDefault();
-
-                        //var exists = await _altaUsuarioController.WaitForAzureUser(lastUser);
-                        //if (!exists)
-                        //{
-                        //    summaryMessages.Add($"Timeout esperando al usuario '{lastUser}' en Azure AD. Abortando creación de buzón y correo.");
-                        //    return Json(new
-                        //    {
-                        //        success = false,
-                        //        message = "Aborto: el usuario no apareció en Azure AD antes del timeout.",
-                        //        messages = summaryMessages,
-                        //        created = createdUsernames
-                        //    });
-                        //}
-
-                        // 4) Crear buzón on prem
-                        //foreach (var user in usersForLicenses)
-                        //{
-                        //    try
-                        //    {
-
-                        //        _altaUsuarioController.EnableOnPremMailbox(user, adminUsername, adminPassword);
-                        //        summaryMessages.Add($"Buzón creado para '{user}'.");
-                        //    }
-                        //    catch (Exception ex)
-                        //    {
-                        //        summaryMessages.Add($"Error creando buzón para '{user}': {ex.Message}");
-                        //        createdUsernames.Remove(user);
-                        //        overallSuccess = false;
-                        //    }
-                        //}
-
-                        // 5) Actualizar proxyaddresses en AD
-                        foreach (var user in usersForLicenses)
+                        catch (Exception ex)
                         {
-                            try
-                            {
-                                _altaUsuarioController.UpdateProxyAddresses(user);
-                                summaryMessages.Add($"Proxy addresses actualizadas para '{user}'.");
-                            }
-                            catch (Exception ex)
-                            {
-                                summaryMessages.Add($"Error actualizando proxy addresses para '{user}': {ex.Message}");
-                                createdUsernames.Remove(user);
-                                overallSuccess = false;
-                            }
+                            summaryMessages.Add($"Error asignando licencia a '{user}': {ex.Message}");
+                            failedLicenseUsers.Add(user);
+                            overallSuccess = false;
                         }
-
-                        //Crear batch de migración
-
-                        //try
-                        //{
-                        //    string[] listaUsuarios = createdUsernames.ToArray();
-                        //    _altaUsuarioController.CreateMigrationBatch(listaUsuarios);
-                        //    summaryMessages.Add("Batch de migración creado con éxito.");
-                        //}
-                        //catch (Exception ex)
-                        //{
-                        //    summaryMessages.Add($"Error creando batch de migración: {ex.Message}");
-                        //    overallSuccess = false;
-                        //}
-
-                        // Capturar errores de RunImpersonated o de inicialización
-                        overallSuccess = true;
-                        finalResult = Json(new
-                        {
-                            success = true,
-                            message = $"Éxito en altas masivas: " + summaryMessages,
-                            log = summaryMessages
-                        });
                     }
+
+                    // 2) Forzar sincronización Azure AD Connect
+                    //var (syncOk, syncErr) = _altaUsuarioController.SyncDeltaOnVanGogh();
+                    //if (!syncOk)
+                    //{
+                    //    summaryMessages.Add("Error al sincronizar Azure AD Connect: " + syncErr);
+                    //    throw new InvalidOperationException(syncErr);
+                    //}
+
+                    // 3) Comprobar si existe el último usuario de la lista en Exchange, lo que querría decir que existen todos
+                    //var lastUser = createdUsernames.LastOrDefault();
+
+                    //var exists = await _altaUsuarioController.WaitForAzureUser(lastUser);
+                    //if (!exists)
+                    //{
+                    //    summaryMessages.Add($"Timeout esperando al usuario '{lastUser}' en Azure AD. Abortando creación de buzón y correo.");
+                    //    return Json(new
+                    //    {
+                    //        success = false,
+                    //        message = "Aborto: el usuario no apareció en Azure AD antes del timeout.",
+                    //        messages = summaryMessages,
+                    //        created = createdUsernames
+                    //    });
+                    //}
+
+                    // 4) Crear buzón on prem
+                    //foreach (var user in usersForLicenses)
+                    //{
+                    //    try
+                    //    {
+
+                    //        _altaUsuarioController.EnableOnPremMailbox(user, adminUsername, adminPassword);
+                    //        summaryMessages.Add($"Buzón creado para '{user}'.");
+                    //    }
+                    //    catch (Exception ex)
+                    //    {
+                    //        summaryMessages.Add($"Error creando buzón para '{user}': {ex.Message}");
+                    //        createdUsernames.Remove(user);
+                    //        overallSuccess = false;
+                    //    }
+                    //}
+
+                    // 5) Actualizar proxyaddresses en AD
+                    foreach (var user in usersForLicenses)
+                    {
+                        try
+                        {
+                            _altaUsuarioController.UpdateProxyAddresses(user);
+                            summaryMessages.Add($"Proxy addresses actualizadas para '{user}'.");
+                        }
+                        catch (Exception ex)
+                        {
+                            summaryMessages.Add($"Error actualizando proxy addresses para '{user}': {ex.Message}");
+                            createdUsernames.Remove(user);
+                            overallSuccess = false;
+                        }
+                    }
+
+                    //Crear batch de migración
+
+                    //try
+                    //{
+                    //    string[] listaUsuarios = createdUsernames.ToArray();
+                    //    _altaUsuarioController.CreateMigrationBatch(listaUsuarios);
+                    //    summaryMessages.Add("Batch de migración creado con éxito.");
+                    //}
+                    //catch (Exception ex)
+                    //{
+                    //    summaryMessages.Add($"Error creando batch de migración: {ex.Message}");
+                    //    overallSuccess = false;
+                    //}
+
+                    // Capturar errores de RunImpersonated o de inicialización
+                    overallSuccess = true;
+                    finalResult = Json(new
+                    {
+                        success = true,
+                        message = $"Éxito en altas masivas: " + summaryMessages,
+                        log = summaryMessages
+                    });
+                    
                 
                 }
                 catch (Exception exInner)

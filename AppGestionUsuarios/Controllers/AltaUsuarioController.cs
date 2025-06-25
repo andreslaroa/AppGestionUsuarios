@@ -619,6 +619,7 @@ public class AltaUsuarioController : Controller
                     // Guardar los cambios iniciales del usuario
                     try
                     {
+                        userCreated = true;
                         newUser.CommitChanges();
                         errors.Add("Cambios iniciales del usuario guardados correctamente.");
                     }
@@ -737,7 +738,6 @@ public class AltaUsuarioController : Controller
                                 errors.Add($"Carpeta creada: {folderPath}");
 
 
-                                string adminUsername = _config["ActiveDirectory:AppAdministrator"];
                                 string adminFileSystem = _config["ActiveDirectory:FileSystemAdministrator"];
                                 string adminDomainSystem = _config["ActiveDirectory:DomainSystemAdministrator"];
                                 string quotaDomain = _config["ActiveDirectory:QuotaDomain"];
@@ -768,12 +768,6 @@ public class AltaUsuarioController : Controller
                                     AccessControlType.Allow));
 
 
-                                ds.AddAccessRule(new FileSystemAccessRule(
-                                    new NTAccount($"{quotaDomain} \\{adminUsername}"),
-                                    FileSystemRights.FullControl,
-                                    InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                                    PropagationFlags.None,
-                                    AccessControlType.Allow));
 
                                 // Protegemos herencia y quitamos permisos preexistentes
                                 ds.SetAccessRuleProtection(true, true);
@@ -1798,10 +1792,12 @@ public class AltaUsuarioController : Controller
     }
 
 
-    //Código antiguo de enable onpremMailBox, funciona solo en el entorno de pruebas
+    
+
+    //Nuevo enable OnPreMailBox se conecta a la directamente a la shell de exchange antes de ejecutar el comando remoto
     //public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword)
     //{
-    //    // 1) Lee sólo los parámetros que sigan en config
+    //    // 1) Parámetros de configuración
     //    var server = _config["Exchange:Server"]
     //                 ?? throw new InvalidOperationException("Falta Exchange:Server");
     //    var dbName = _config["Exchange:Database"]
@@ -1809,36 +1805,60 @@ public class AltaUsuarioController : Controller
     //    var domain = _config["ActiveDirectory:DomainName"]
     //                 ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
 
-    //    // 2) Construye el SecureString a partir de la password recibida
-    //    var securePwd = new SecureString();
-    //    foreach (var c in adminPassword)
-    //        securePwd.AppendChar(c);
-
-    //    var cred = new PSCredential(adminRunAs, securePwd);
-
-    //    // 3) Crea el script bloque
-    //    var identity = $"{domain}\\{username}";
-    //    var script = $@"
-    //    Import-Module ExchangeOnlineManagement
-    //    Enable-Mailbox -Identity '{identity}' -Alias '{username}' -Database '{dbName}'
-    //";
-
-    //    // 4) Ejecuta Invoke-Command con esas credenciales
-    //    using var ps = PowerShell.Create();
-    //    ps.AddCommand("Invoke-Command")
-    //      .AddParameter("ComputerName", server)
-    //      .AddParameter("Credential", cred)
-    //      .AddParameter("ScriptBlock", ScriptBlock.Create(script));
-
-    //    var results = ps.Invoke();
-    //    if (ps.Streams.Error.Count > 0)
+    //    // 2) Impersonación para obtener ticket Kerberos
+    //    if (!LogonUser(
+    //            adminRunAs,
+    //            domain,
+    //            adminPassword,
+    //            LOGON32_LOGON_NEW_CREDENTIALS,
+    //            LOGON32_PROVIDER_DEFAULT,
+    //            out var userToken))
     //    {
-    //        var errs = string.Join(";\n", ps.Streams.Error.ReadAll().Select(e => e.ToString()));
-    //        throw new InvalidOperationException($"Error al habilitar buzón on-prem: {errs}");
+    //        var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
+    //        throw new InvalidOperationException($"Imposible impersonar: {err}");
     //    }
+
+    //    using var safeToken = new SafeAccessTokenHandle(userToken);
+
+    //    // 3) Ejecutar todo bajo la identidad impersonada
+    //    WindowsIdentity.RunImpersonated(safeToken, () =>
+    //    {
+    //        // 3.1) Configurar conexión WinRM a la EMS de Exchange
+    //        var uri = new Uri($"http://{server}:5986/PowerShell/");
+    //        var connectionInfo = new WSManConnectionInfo(
+    //            uri,
+    //            "http://schemas.microsoft.com/powershell/Microsoft.Exchange",
+    //            credential: null  // usa Kerberos delegado
+    //        )
+    //        {
+    //            AuthenticationMechanism = AuthenticationMechanism.Negotiate,
+    //            OperationTimeout = 4 * 60 * 1000,  // 4 minutos
+    //            OpenTimeout = 1 * 60 * 1000   // 1 minuto
+    //        };
+
+    //        // 3.2) Abrir runspace remoto
+    //        using var runspace = RunspaceFactory.CreateRunspace(connectionInfo);
+    //        runspace.Open();
+
+    //        // 3.3) Invocar Enable-Mailbox directamente en ese runspace
+    //        using var ps = PowerShell.Create();
+    //        ps.Runspace = runspace;
+    //        ps.AddCommand("Enable-Mailbox")
+    //          .AddParameter("Identity", $"{domain}\\{username}")
+    //          .AddParameter("Alias", username)
+    //          .AddParameter("Database", dbName);
+
+    //        ps.Invoke();
+    //        if (ps.Streams.Error.Count > 0)
+    //        {
+    //            var errs = string.Join(";\n", ps.Streams.Error
+    //                                           .ReadAll()
+    //                                           .Select(e => e.ToString()));
+    //            throw new InvalidOperationException($"Error al habilitar buzón on-prem via Kerberos: {errs}");
+    //        }
+    //    });
     //}
 
-    //Nuevo enable OnPreMailBox se conecta a la directamente a la shell de exchange antes de ejecutar el comando remoto
     public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword)
     {
         // 1) Parámetros de configuración
@@ -1849,14 +1869,14 @@ public class AltaUsuarioController : Controller
         var domain = _config["ActiveDirectory:DomainName"]
                      ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
 
-        // 2) Impersonación para obtener ticket Kerberos
+        // 2) Impersonación para conseguir ticket Kerberos delegado
         if (!LogonUser(
-                adminRunAs,
-                domain,
-                adminPassword,
-                LOGON32_LOGON_NEW_CREDENTIALS,
-                LOGON32_PROVIDER_DEFAULT,
-                out var userToken))
+            adminRunAs,
+            domain,
+            adminPassword,
+            LOGON32_LOGON_NEW_CREDENTIALS,
+            LOGON32_PROVIDER_DEFAULT,
+            out var userToken))
         {
             var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
             throw new InvalidOperationException($"Imposible impersonar: {err}");
@@ -1864,27 +1884,18 @@ public class AltaUsuarioController : Controller
 
         using var safeToken = new SafeAccessTokenHandle(userToken);
 
-        // 3) Ejecutar todo bajo la identidad impersonada
+        // 3) Ejecutar bajo la identidad impersonada
         WindowsIdentity.RunImpersonated(safeToken, () =>
         {
-            // 3.1) Configurar conexión WinRM a la EMS de Exchange
-            var uri = new Uri($"http://{server}:5986/PowerShell/");
-            var connectionInfo = new WSManConnectionInfo(
-                uri,
-                "http://schemas.microsoft.com/powershell/Microsoft.Exchange",
-                credential: null  // usa Kerberos delegado
-            )
-            {
-                AuthenticationMechanism = AuthenticationMechanism.Negotiate,
-                OperationTimeout = 4 * 60 * 1000,  // 4 minutos
-                OpenTimeout = 1 * 60 * 1000   // 1 minuto
-            };
+            // Construimos la URL para EMS on-prem (incluyendo parámetros recomendados)
+            var url = $"http://{server}/PowerShell?serializationLevel=Full;clientApplication=AppGestionUsuarios";
 
-            // 3.2) Abrir runspace remoto
-            using var runspace = RunspaceFactory.CreateRunspace(connectionInfo);
-            runspace.Open();
+            // Abrimos el runspace contra EMS, usando Negotiate (Kerberos/NTLM)
+            using var runspace = OpenExchangeManagementRunspace(
+                url,
+                authenticationMechanism: AuthenticationMechanism.Negotiate);
 
-            // 3.3) Invocar Enable-Mailbox directamente en ese runspace
+            // Ejecutamos el cmdlet Enable-Mailbox
             using var ps = PowerShell.Create();
             ps.Runspace = runspace;
             ps.AddCommand("Enable-Mailbox")
@@ -1892,16 +1903,55 @@ public class AltaUsuarioController : Controller
               .AddParameter("Alias", username)
               .AddParameter("Database", dbName);
 
-            ps.Invoke();
+            var results = ps.Invoke();
             if (ps.Streams.Error.Count > 0)
             {
                 var errs = string.Join(";\n", ps.Streams.Error
                                                .ReadAll()
                                                .Select(e => e.ToString()));
-                throw new InvalidOperationException($"Error al habilitar buzón on-prem via Kerberos: {errs}");
+                throw new InvalidOperationException($"Enable-Mailbox falló: {errs}");
             }
         });
     }
+
+    private static SecureString ConvertToSecureString(string password)
+    {
+        var ss = new SecureString();
+        foreach (var c in password) ss.AppendChar(c);
+        ss.MakeReadOnly();
+        return ss;
+    }
+
+    private static Runspace OpenExchangeManagementRunspace(
+    string url,
+    AuthenticationMechanism authenticationMechanism = AuthenticationMechanism.Kerberos,
+    string userName = null,
+    string password = null)
+    {
+        PSCredential shellCred = null;
+        if (!string.IsNullOrWhiteSpace(userName) &&
+            !string.IsNullOrWhiteSpace(password))
+        {
+            shellCred = new PSCredential(userName, ConvertToSecureString(password));
+        }
+
+        var shellConnection = new WSManConnectionInfo(
+            new Uri(url),
+            "http://schemas.microsoft.com/powershell/Microsoft.Exchange",
+            shellCred)
+        {
+            AuthenticationMechanism = authenticationMechanism
+        };
+
+        var runspace = RunspaceFactory.CreateRunspace(shellConnection);
+        runspace.Open();
+        return runspace;
+    }
+
+
+
+
+
 
     private static void ThrowIfErrors(PowerShell ps, string paso)
     {
