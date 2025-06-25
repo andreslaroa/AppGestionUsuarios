@@ -18,6 +18,7 @@ using Microsoft.Win32.SafeHandles;
 using Microsoft.AspNetCore.DataProtection;
 using System.Runtime.Intrinsics.Arm;
 using Microsoft.PowerShell;
+using System.Diagnostics;
 
 
 
@@ -1701,57 +1702,58 @@ public class AltaUsuarioController : Controller
 
     public (bool Success, string ErrorMessage) SyncDeltaOnVanGogh()
     {
-        // 1) Servidor de Azure AD Connect
+        // 1) Servidor de Azure AD Connect (config)
         var server = _config["AzureAdSync:SyncServer"]
                      ?? throw new InvalidOperationException("Falta AzureAdSync:SyncServer en config");
 
-        // 2) Script remoto
-        var remoteScript = @"
+        // 2) Construyo el bloque remoto completo (comillas dobles escapadas)
+        var remoteScript = $@"
+      Invoke-Command -ComputerName '{server}' {{
         Import-Module ADSync -ErrorAction Stop
         Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
+      }} -ErrorAction Stop
     ";
+
+        // 3) Preparo el ProcessStartInfo para powershell.exe
+        var psi = new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"{remoteScript}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
 
         try
         {
-            // 3) Creamos un InitialSessionState “vacío” y cargamos sólo ADSync
-            var iss = InitialSessionState.CreateDefault();
-            iss.ExecutionPolicy = ExecutionPolicy.Unrestricted;
-            iss.ImportPSModule(new[] { "ADSync" });
+            using var process = System.Diagnostics.Process.Start(psi);
+            if (process == null)
+                return (false, "No se pudo iniciar powershell.exe");
 
-            // 4) Creamos y abrimos un Runspace con esa configuración
-            using var runspace = RunspaceFactory.CreateRunspace(iss);
-            runspace.Open();
+            // 4) Leo salida y error
+            string stdout = process.StandardOutput.ReadToEnd();
+            string stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
 
-            // 5) Asociamos el Runspace a nuestro PowerShell
-            using var ps = PowerShell.Create();
-            ps.Runspace = runspace;
-
-            // 6) Invocamos el comando remoto (Invoke-Command)
-            ps.AddCommand("Invoke-Command")
-              .AddParameter("ComputerName", server)
-              .AddParameter("ScriptBlock", ScriptBlock.Create(remoteScript))
-              // .AddParameter("Credential", cred)  // Si necesitas pasar credenciales
-              ;
-
-            var results = ps.Invoke();
-
-            // 7) Comprobamos errores
-            if (ps.Streams.Error.Count > 0)
+            // 5) Si el código de salida no es cero, lo devolvemos como error
+            if (process.ExitCode != 0)
             {
-                var errs = string.Join(";\n", ps.Streams.Error
-                                               .ReadAll()
-                                               .Select(e => e.ToString()));
-                return (false, errs);
+                var msg = string.IsNullOrWhiteSpace(stderr)
+                    ? $"Salida inesperada (exit {process.ExitCode}): {stdout}"
+                    : stderr;
+                return (false, msg.Trim());
             }
 
-            return (true, null);
+            // 6) Éxito, podemos devolver stdout si queremos
+            return (true, stdout.Trim());
         }
         catch (Exception ex)
         {
-            // Esto captura fallos de load de módulo, remoting, etc.
             return (false, ex.Message);
         }
     }
+
 
     /// <summary>
     /// Espera 30 s, luego intenta hasta 4 veces comprobar en Graph si el usuario existe,

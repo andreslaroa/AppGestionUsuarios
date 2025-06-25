@@ -25,6 +25,20 @@ public class BajaUsuarioController : Controller
     private readonly string _quotaBase;
     private static GraphServiceClient? _graphClient = null;
 
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern bool LogonUser(
+        string lpszUsername,
+        string lpszDomain,
+        string lpszPassword,
+        int dwLogonType,
+        int dwLogonProvider,
+        out IntPtr phToken);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+    static extern bool CloseHandle(IntPtr handle);
+
+    const int LOGON32_LOGON_NEW_CREDENTIALS = 9;
+    const int LOGON32_PROVIDER_DEFAULT = 0;
 
 
     public BajaUsuarioController(IConfiguration config)
