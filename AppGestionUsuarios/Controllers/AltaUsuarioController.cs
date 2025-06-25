@@ -17,6 +17,7 @@ using System.ComponentModel;
 using Microsoft.Win32.SafeHandles;
 using Microsoft.AspNetCore.DataProtection;
 using System.Runtime.Intrinsics.Arm;
+using Microsoft.PowerShell;
 
 
 
@@ -1700,28 +1701,41 @@ public class AltaUsuarioController : Controller
 
     public (bool Success, string ErrorMessage) SyncDeltaOnVanGogh()
     {
-        // Nombre del servidor donde corre Azure AD Connect
+        // 1) Servidor de Azure AD Connect
         var server = _config["AzureAdSync:SyncServer"]
                      ?? throw new InvalidOperationException("Falta AzureAdSync:SyncServer en config");
 
-        // Scriptblock que queremos ejecutar remotamente
+        // 2) Script remoto
         var remoteScript = @"
-            Import-Module ADSync
-            Start-ADSyncSyncCycle -PolicyType Delta
-            ";
+        Import-Module ADSync -ErrorAction Stop
+        Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
+    ";
 
         try
         {
+            // 3) Creamos un InitialSessionState “vacío” y cargamos sólo ADSync
+            var iss = InitialSessionState.CreateDefault();
+            iss.ExecutionPolicy = ExecutionPolicy.Unrestricted;
+            iss.ImportPSModule(new[] { "ADSync" });
+
+            // 4) Creamos y abrimos un Runspace con esa configuración
+            using var runspace = RunspaceFactory.CreateRunspace(iss);
+            runspace.Open();
+
+            // 5) Asociamos el Runspace a nuestro PowerShell
             using var ps = PowerShell.Create();
-            // Invocamos Invoke-Command en remoto
+            ps.Runspace = runspace;
+
+            // 6) Invocamos el comando remoto (Invoke-Command)
             ps.AddCommand("Invoke-Command")
               .AddParameter("ComputerName", server)
-              // Si necesitas credenciales explícitas:
-              // .AddParameter("Credential", new PSCredential(user, securePwd))
-              .AddParameter("ScriptBlock", ScriptBlock.Create(remoteScript));
+              .AddParameter("ScriptBlock", ScriptBlock.Create(remoteScript))
+              // .AddParameter("Credential", cred)  // Si necesitas pasar credenciales
+              ;
 
             var results = ps.Invoke();
 
+            // 7) Comprobamos errores
             if (ps.Streams.Error.Count > 0)
             {
                 var errs = string.Join(";\n", ps.Streams.Error
@@ -1734,6 +1748,7 @@ public class AltaUsuarioController : Controller
         }
         catch (Exception ex)
         {
+            // Esto captura fallos de load de módulo, remoting, etc.
             return (false, ex.Message);
         }
     }
