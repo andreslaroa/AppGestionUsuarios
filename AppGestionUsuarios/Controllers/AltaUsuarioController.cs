@@ -12,6 +12,11 @@ using Microsoft.Graph.Models;
 using Microsoft.Graph;
 using Azure.Identity;
 using System.Security;
+using System.Management.Automation.Runspaces;
+using System.ComponentModel;
+using Microsoft.Win32.SafeHandles;
+using Microsoft.AspNetCore.DataProtection;
+using System.Runtime.Intrinsics.Arm;
 
 
 
@@ -19,11 +24,33 @@ using System.Security;
 public class AltaUsuarioController : Controller
 {
 
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern bool LogonUser(
+        string lpszUsername,
+        string lpszDomain,
+        string lpszPassword,
+        int dwLogonType,
+        int dwLogonProvider,
+        out IntPtr phToken);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+    static extern bool CloseHandle(IntPtr handle);
+
+    const int LOGON32_LOGON_NEW_CREDENTIALS = 9;
+    const int LOGON32_PROVIDER_DEFAULT = 0;
+
+
+    //Esto se utiliza para obtener las credenciales de usuario
+    private readonly IDataProtector _protector;
+    
+
+    //Esto se utiliza para poder leer la información de appsettings
     private readonly IConfiguration _config;
 
-    public AltaUsuarioController(IConfiguration config)
+    public AltaUsuarioController(IConfiguration config, IDataProtectionProvider dp)
     {
         _config = config;
+        _protector = dp.CreateProtector("CredencialesProtector");
     }
 
     private GraphServiceClient? _graphClient = null;
@@ -56,8 +83,6 @@ public class AltaUsuarioController : Controller
         public string NumeroLargoMovil { get; set; }
         public string TarjetaIdentificativa { get; set; }
         public string DNI { get; set; }
-        public string adminUser { get; set; } // Usuario administrador utilizado para exchange
-        public string adminPassword { get; set; } // Contraseña del usuario administrador utilizado para exchange
     }
 
     [HttpGet]
@@ -883,129 +908,272 @@ public class AltaUsuarioController : Controller
         return Json(new { success = userCreated, message });
     }
 
+    
     //Método para crear el alta complta de usuario con correo electrónico
-    [HttpPost]
-    [HttpPost]
-    public async Task<IActionResult> AltaCompleta([FromBody] UserModelAltaUsuario user)
-    {
-        var log = new List<string>();
-        bool ok = true;
+    //[HttpPost]
+    //public async Task<IActionResult> AltaCompleta([FromBody] UserModelAltaUsuario user)
+    //{
+    //    var log = new List<string>();
+    //    bool ok = true;
 
-        if (user == null || string.IsNullOrEmpty(user.Username))
-            return Json(new { success = false, message = "No se recibieron datos válidos." });
+    //    if (user == null || string.IsNullOrEmpty(user.Username))
+    //        return Json(new { success = false, message = "No se recibieron datos válidos." });
 
-        if (string.IsNullOrWhiteSpace(user.adminUser) || string.IsNullOrWhiteSpace(user.adminPassword))
-            return Json(new { success = false, message = "Faltan credenciales de administrador Exchange." });
+    //    if (string.IsNullOrWhiteSpace(user.adminUser) || string.IsNullOrWhiteSpace(user.adminPassword))
+    //        return Json(new { success = false, message = "Faltan credenciales de administrador Exchange." });
 
-        log.Add("Validación de credenciales del administrador...");
-        if (!ValidateCredentials(user.adminUser, user.adminPassword))
-            return Json(new { success = false, message = "Credenciales de administrador exchange incorrectas" });
-        log.Add("[OK] Credenciales validadas correctamente.");
+    //    log.Add("Validación de credenciales del administrador...");
+    //    if (!ValidateCredentials(user.adminUser, user.adminPassword))
+    //        return Json(new { success = false, message = "Credenciales de administrador exchange incorrectas" });
+    //    log.Add("[OK] Credenciales validadas correctamente.");
 
-        log.Add("Inicializando GraphServiceClient...");
-        var tenantId = _config["AzureAd:TenantId"] ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
-        var clientId = _config["AzureAd:ClientId"] ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
-        var clientSecret = _config["AzureAd:ClientSecret"] ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
-        var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-        _graphClient = new GraphServiceClient(credential);
-        log.Add("[OK] GraphServiceClient inicializado.");
+    //    log.Add("Inicializando GraphServiceClient...");
+    //    var tenantId = _config["AzureAd:TenantId"] ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
+    //    var clientId = _config["AzureAd:ClientId"] ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
+    //    var clientSecret = _config["AzureAd:ClientSecret"] ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
+    //    var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+    //    _graphClient = new GraphServiceClient(credential);
+    //    log.Add("[OK] GraphServiceClient inicializado.");
 
-        var samAccountName = user.Username;
-        var username = samAccountName;
+    //    var samAccountName = user.Username;
+    //    var username = samAccountName;
 
-        try
-        {
-            log.Add("=== Alta Completa iniciado: " + DateTime.Now + " ===");
+    //    try
+    //    {
+    //        log.Add("=== Alta Completa iniciado: " + DateTime.Now + " ===");
 
-            // Paso 1: Crear usuario en AD
-            log.Add("Paso 1: Intentando crear el usuario en AD...");
-            var createResult = CreateUser(user) as JsonResult;
-            dynamic createData = createResult?.Value;
-            if (createData == null || !(bool)createData.success)
-            {
-                log.Add("[ERROR] Fallo al crear el usuario en AD: " + (createData?.message ?? "sin mensaje"));
-                return Json(new
-                {
-                    success = false,
-                    message = "Alta completa abortada: fallo al crear el usuario en AD.",
-                    log
-                });
-            }
-            log.Add("[OK] Usuario creado en AD correctamente.");
+    //        // Paso 1: Crear usuario en AD
+    //        log.Add("Paso 1: Intentando crear el usuario en AD...");
+    //        var createResult = CreateUser(user) as JsonResult;
+    //        dynamic createData = createResult?.Value;
+    //        if (createData == null || !(bool)createData.success)
+    //        {
+    //            log.Add("[ERROR] Fallo al crear el usuario en AD: " + (createData?.message ?? "sin mensaje"));
+    //            return Json(new
+    //            {
+    //                success = false,
+    //                message = "Alta completa abortada: fallo al crear el usuario en AD.",
+    //                log
+    //            });
+    //        }
+    //        log.Add("[OK] Usuario creado en AD correctamente.");
 
 
-            // Paso 2: Añadir a grupo de licencias
-            log.Add("Paso 2: Añadiendo al grupo de licencias...");
-            var grupoResult = ModifyUserGroup(samAccountName) as JsonResult;
-            dynamic grupoData = grupoResult?.Value;
-            if (grupoData == null || !(bool)grupoData.success)
-            {
-                log.Add("[ERROR] No se pudo añadir al grupo: " + (grupoData?.message ?? "sin mensaje"));
-                ok = false;
-            }
-            else
-            {
-                log.Add("[OK] Usuario añadido al grupo de licencias.");
-            }
+    //        // Paso 2: Añadir a grupo de licencias
+    //        log.Add("Paso 2: Añadiendo al grupo de licencias...");
+    //        var grupoResult = ModifyUserGroup(samAccountName) as JsonResult;
+    //        dynamic grupoData = grupoResult?.Value;
+    //        if (grupoData == null || !(bool)grupoData.success)
+    //        {
+    //            log.Add("[ERROR] No se pudo añadir al grupo: " + (grupoData?.message ?? "sin mensaje"));
+    //            ok = false;
+    //        }
+    //        else
+    //        {
+    //            log.Add("[OK] Usuario añadido al grupo de licencias.");
+    //        }
 
-            // Paso 3: Sincronizar con Azure AD
-            log.Add("Paso 3: Lanzando sincronización Delta con Azure AD Connect...");
-            var (syncOk, syncErr) = SyncDeltaOnVanGogh();
-            if (!syncOk)
-            {
-                log.Add("[ERROR] Error en la sincronización: " + syncErr);
-                ok = false;
-                throw new InvalidOperationException(syncErr);
-            }
-            log.Add("[OK] Sincronización Delta completada.");
+    //        // Paso 3: Sincronizar con Azure AD
+    //        log.Add("Paso 3: Lanzando sincronización Delta con Azure AD Connect...");
+    //        var (syncOk, syncErr) = SyncDeltaOnVanGogh();
+    //        if (!syncOk)
+    //        {
+    //            log.Add("[ERROR] Error en la sincronización: " + syncErr);
+    //            ok = false;
+    //            throw new InvalidOperationException(syncErr);
+    //        }
+    //        log.Add("[OK] Sincronización Delta completada.");
 
-            // Paso 4: Esperar a que aparezca en Azure AD
-            log.Add("Paso 4: Esperando aparición del usuario en Azure AD...");
-            var exists = await WaitForAzureUser(samAccountName);
-            if (exists)
-                log.Add("[OK] Usuario encontrado en Azure AD.");
-            else
-                log.Add("[WARN] Timeout esperando al usuario en Azure AD.");
+    //        // Paso 4: Esperar a que aparezca en Azure AD
+    //        log.Add("Paso 4: Esperando aparición del usuario en Azure AD...");
+    //        var exists = await WaitForAzureUser(samAccountName);
+    //        if (exists)
+    //            log.Add("[OK] Usuario encontrado en Azure AD.");
+    //        else
+    //            log.Add("[WARN] Timeout esperando al usuario en Azure AD.");
 
-            // Paso 5: Crear buzón on-prem
-            log.Add("Paso 5: Habilitando buzón on-prem...");
-            EnableOnPremMailbox(username, user.adminUser, user.adminPassword);
-            log.Add("[OK] Buzón on-prem habilitado correctamente.");
+    //        // Paso 5: Crear buzón on-prem
+    //        log.Add("Paso 5: Habilitando buzón on-prem...");
+    //        EnableOnPremMailbox(username, user.adminUser, user.adminPassword);
+    //        log.Add("[OK] Buzón on-prem habilitado correctamente.");
 
-            // Paso 6: Actualizar proxyAddresses
-            log.Add("Paso 6: Actualizando proxyAddresses...");
-            UpdateProxyAddresses(samAccountName);
-            log.Add("[OK] proxyAddresses actualizadas.");
+    //        // Paso 6: Actualizar proxyAddresses
+    //        log.Add("Paso 6: Actualizando proxyAddresses...");
+    //        UpdateProxyAddresses(samAccountName);
+    //        log.Add("[OK] proxyAddresses actualizadas.");
 
-            // Paso 7: Crear lote de migración
-            log.Add("Paso 7: Creando y lanzando lote de migración...");
-            CreateMigrationBatch(new[] { username });
-            log.Add("[OK] Lote de migración lanzado.");
+    //        // Paso 7: Crear lote de migración
+    //        log.Add("Paso 7: Creando y lanzando lote de migración...");
+    //        CreateMigrationBatch(new[] { username });
+    //        log.Add("[OK] Lote de migración lanzado.");
 
-            log.Add("=== Alta Completa finalizada con éxito ===");
-        }
-        catch (Exception ex)
-        {
-            ok = false;
-            log.Add("[ERROR] " + ex.Message);
-            log.Add("=== Alta Completa abortada ===");
-        }
+    //        log.Add("=== Alta Completa finalizada con éxito ===");
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        ok = false;
+    //        log.Add("[ERROR] " + ex.Message);
+    //        log.Add("=== Alta Completa abortada ===");
+    //    }
 
-        // Guardar log en disco
-        System.IO.File.WriteAllLines(
-            Path.Combine(Path.GetTempPath(), $"AltaCompleta_{samAccountName}.log"),
-            log);
+    //    // Guardar log en disco
+    //    System.IO.File.WriteAllLines(
+    //        Path.Combine(Path.GetTempPath(), $"AltaCompleta_{samAccountName}.log"),
+    //        log);
 
-        var message = ok
-            ? "Alta completa realizada con éxito.\n" + string.Join("\n", log)
-            : "Se produjeron errores en la Alta Completa:\n" + string.Join("\n", log);
+    //    var message = ok
+    //        ? "Alta completa realizada con éxito.\n" + string.Join("\n", log)
+    //        : "Se produjeron errores en la Alta Completa:\n" + string.Join("\n", log);
 
-        return Json(new { success = ok, message });
-    }
+    //    return Json(new { success = ok, message });
+    //}
 
 
 
     //Función encargada de comvertir el username recibido de una vista en string y pasarlo a la función que lo busca en AD
+
+
+    [HttpPost]
+    public async Task<IActionResult> AltaCompleta([FromBody] UserModelAltaUsuario user)
+    {
+        
+
+        string domain = _config["ActiveDirectory:DomainName"];
+        string adminUsername = HttpContext.Session.GetString("adminUser");
+        var encryptedPass = HttpContext.Session.GetString("adminPassword");
+        var adminPassword = _protector.Unprotect(encryptedPass);
+
+        // 3) LogonUser → token Windows
+        if (!LogonUser(
+                adminUsername,
+                domain,
+                adminPassword,
+                LOGON32_LOGON_NEW_CREDENTIALS,
+                LOGON32_PROVIDER_DEFAULT,
+                out var userToken))
+        {
+            var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
+            return Json(new { success = false, message = $"No se pudo loguear: {err}" });
+        }
+
+        try
+        {
+            // 4) Envolver TODO en impersonación
+            using var safeToken = new SafeAccessTokenHandle(userToken);
+            IActionResult finalResult = null;
+
+            await WindowsIdentity.RunImpersonated(safeToken, async () =>
+            {
+                var log = new List<string>();
+                bool ok = true;
+
+
+                log.Add("Inicializando GraphServiceClient...");
+                var tenantId = _config["AzureAd:TenantId"] ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
+                var clientId = _config["AzureAd:ClientId"] ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
+                var clientSecret = _config["AzureAd:ClientSecret"] ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
+                var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+                _graphClient = new GraphServiceClient(credential);
+                log.Add("[OK] GraphServiceClient inicializado.");
+
+                var samAccountName = user.Username;
+
+                try
+                {
+                    log.Add("=== Alta Completa iniciado: " + DateTime.Now + " ===");
+
+                    // Paso 1: Crear usuario en AD
+                    log.Add("Paso 1: Intentando crear el usuario en AD...");
+                    var createResult = CreateUser(user) as JsonResult;
+                    dynamic createData = createResult?.Value;
+                    if (createData == null || !(bool)createData.success)
+                    {
+                        log.Add("[ERROR] Fallo al crear el usuario en AD: " + (createData?.message ?? "sin mensaje"));
+                        finalResult = Json(new
+                        {
+                            success = false,
+                            message = "Alta completa abortada: fallo al crear el usuario en AD." ,
+                            log
+                        });
+                        return;
+                    }
+                    log.Add("[OK] Usuario creado en AD correctamente.");
+
+                    // Paso 2: Añadir a grupo de licencias
+                    log.Add("Paso 2: Añadiendo al grupo de licencias...");
+                    var grupoResult = ModifyUserGroup(samAccountName) as JsonResult;
+                    dynamic grupoData = grupoResult?.Value;
+                    if (grupoData == null || !(bool)grupoData.success)
+                    {
+                        log.Add("[ERROR] No se pudo añadir al grupo: " + (grupoData?.message ?? "sin mensaje"));
+                        ok = false;
+                    }
+                    else
+                    {
+                        log.Add("[OK] Usuario añadido al grupo de licencias.");
+                    }
+
+                    // Paso 3: Sincronizar con Azure AD Connect
+                    log.Add("Paso 3: Lanzando sincronización Delta con Azure AD Connect...");
+                    var (syncOk, syncErr) = SyncDeltaOnVanGogh();
+                    if (!syncOk)
+                    {
+                        log.Add("[ERROR] Error en la sincronización: " + syncErr);
+                        ok = false;
+                        throw new InvalidOperationException(syncErr);
+                    }
+                    log.Add("[OK] Sincronización Delta completada.");
+
+                    // Paso 4: Esperar a que aparezca en Azure AD
+                    log.Add("Paso 4: Esperando aparición del usuario en Azure AD...");
+                    var exists = await WaitForAzureUser(samAccountName);
+                    if (exists)
+                        log.Add("[OK] Usuario encontrado en Azure AD.");
+                    else
+                        log.Add("[WARN] Timeout esperando al usuario en Azure AD.");
+
+                    // Paso 5: Crear buzón on-prem
+                    log.Add("Paso 5: Habilitando buzón on-prem...");
+                    EnableOnPremMailbox(samAccountName, adminUsername, adminPassword);
+                    log.Add("[OK] Buzón on-prem habilitado correctamente.");
+
+                    // Paso 6: Actualizar proxyAddresses
+                    log.Add("Paso 6: Actualizando proxyAddresses...");
+                    UpdateProxyAddresses(samAccountName);
+                    log.Add("[OK] proxyAddresses actualizadas.");
+
+                    // Paso 7: Crear lote de migración
+                    log.Add("Paso 7: Creando y lanzando lote de migración...");
+                    CreateMigrationBatch(new[] { samAccountName });
+                    log.Add("[OK] Lote de migración lanzado.");
+
+                    log.Add("=== Alta Completa finalizada con éxito ===");
+                }
+                catch (Exception ex)
+                {
+                    ok = false;
+                    log.Add("[ERROR] " + ex.Message);
+                    log.Add("=== Alta Completa abortada ===");
+                }
+
+                
+                // Preparar resultado final
+                var message = ok
+                    ? "Alta completa realizada con éxito.\n" + string.Join("\n", log)
+                    : "Se produjeron errores en la Alta Completa:\n" + string.Join("\n", log);
+
+                finalResult = Json(new { success = ok, message });
+            });
+
+            return finalResult;
+        }
+        finally
+        {
+            CloseHandle(userToken);
+        }
+    }
+
+
     [HttpPost]
     public IActionResult CheckUsernameExists([FromBody] Dictionary<string, string> requestData)
     {
@@ -1605,43 +1773,109 @@ public class AltaUsuarioController : Controller
         return false;
     }
 
+
+    //Código antiguo de enable onpremMailBox, funciona solo en el entorno de pruebas
+    //public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword)
+    //{
+    //    // 1) Lee sólo los parámetros que sigan en config
+    //    var server = _config["Exchange:Server"]
+    //                 ?? throw new InvalidOperationException("Falta Exchange:Server");
+    //    var dbName = _config["Exchange:Database"]
+    //                 ?? throw new InvalidOperationException("Falta Exchange:Database");
+    //    var domain = _config["ActiveDirectory:DomainName"]
+    //                 ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
+
+    //    // 2) Construye el SecureString a partir de la password recibida
+    //    var securePwd = new SecureString();
+    //    foreach (var c in adminPassword)
+    //        securePwd.AppendChar(c);
+
+    //    var cred = new PSCredential(adminRunAs, securePwd);
+
+    //    // 3) Crea el script bloque
+    //    var identity = $"{domain}\\{username}";
+    //    var script = $@"
+    //    Import-Module ExchangeOnlineManagement
+    //    Enable-Mailbox -Identity '{identity}' -Alias '{username}' -Database '{dbName}'
+    //";
+
+    //    // 4) Ejecuta Invoke-Command con esas credenciales
+    //    using var ps = PowerShell.Create();
+    //    ps.AddCommand("Invoke-Command")
+    //      .AddParameter("ComputerName", server)
+    //      .AddParameter("Credential", cred)
+    //      .AddParameter("ScriptBlock", ScriptBlock.Create(script));
+
+    //    var results = ps.Invoke();
+    //    if (ps.Streams.Error.Count > 0)
+    //    {
+    //        var errs = string.Join(";\n", ps.Streams.Error.ReadAll().Select(e => e.ToString()));
+    //        throw new InvalidOperationException($"Error al habilitar buzón on-prem: {errs}");
+    //    }
+    //}
+
+    //Nuevo enable OnPreMailBox se conecta a la directamente a la shell de exchange antes de ejecutar el comando remoto
     public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword)
     {
-        // 1) Lee sólo los parámetros que sigan en config
+        // ─── 1) Parámetros de configuración ───────────────────────────────────────
         var server = _config["Exchange:Server"]
-                     ?? throw new InvalidOperationException("Falta Exchange:Server");
+                      ?? throw new InvalidOperationException("Falta Exchange:Server");
         var dbName = _config["Exchange:Database"]
-                     ?? throw new InvalidOperationException("Falta Exchange:Database");
+                      ?? throw new InvalidOperationException("Falta Exchange:Database");
         var domain = _config["ActiveDirectory:DomainName"]
-                     ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
+                      ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
 
-        // 2) Construye el SecureString a partir de la password recibida
-        var securePwd = new SecureString();
-        foreach (var c in adminPassword)
-            securePwd.AppendChar(c);
+        // ─── 2) Credenciales seguras ─────────────────────────────────────────────
+        var secure = new SecureString();
+        foreach (var c in adminPassword) secure.AppendChar(c);
+        var cred = new PSCredential($"{domain}\\{adminRunAs}", secure);
 
-        var cred = new PSCredential(adminRunAs, securePwd);
+        // ─── 3) Abre una Runspace a la EMS ────────────────────────────────────────
+        var initial = InitialSessionState.CreateDefault();
+        using var runspace = RunspaceFactory.CreateRunspace(initial);
+        runspace.Open();
 
-        // 3) Crea el script bloque
-        var identity = $"{domain}\\{username}";
-        var script = $@"
-        Import-Module ExchangeOnlineManagement
-        Enable-Mailbox -Identity '{identity}' -Alias '{username}' -Database '{dbName}'
-    ";
-
-        // 4) Ejecuta Invoke-Command con esas credenciales
+        // Crear la PowerShell asociada a la runspace
         using var ps = PowerShell.Create();
-        ps.AddCommand("Invoke-Command")
-          .AddParameter("ComputerName", server)
-          .AddParameter("Credential", cred)
-          .AddParameter("ScriptBlock", ScriptBlock.Create(script));
+        ps.Runspace = runspace;
 
-        var results = ps.Invoke();
-        if (ps.Streams.Error.Count > 0)
-        {
-            var errs = string.Join(";\n", ps.Streams.Error.ReadAll().Select(e => e.ToString()));
-            throw new InvalidOperationException($"Error al habilitar buzón on-prem: {errs}");
-        }
+        // 3.1) New-PSSession contra la EMS del servidor on-prem
+        ps.AddCommand("New-PSSession")
+          .AddParameter("ConfigurationName", "Microsoft.Exchange")
+          .AddParameter("ConnectionUri", new Uri($"http://{server}/PowerShell/"))
+          .AddParameter("Authentication", "Kerberos")      // O "Negotiate"
+          .AddParameter("Credential", cred);
+
+        var newSession = ps.Invoke<PSSession>().FirstOrDefault();
+        ThrowIfErrors(ps, "crear la sesión EMS");
+
+        // 3.2) Importar la sesión para exponer los cmdlets locales
+        ps.Commands.Clear();
+        ps.AddCommand("Import-PSSession")
+          .AddParameter("Session", newSession)
+          .AddParameter("DisableNameChecking");
+        ps.Invoke();
+        ThrowIfErrors(ps, "importar la sesión EMS");
+
+        // ─── 4) Lanza Enable-Mailbox dentro de esa sesión ─────────────────────────
+        ps.Commands.Clear();
+        ps.AddCommand("Enable-Mailbox")
+          .AddParameter("Identity", $"{domain}\\{username}")
+          .AddParameter("Alias", username)
+          .AddParameter("Database", dbName);
+        ps.Invoke();
+        ThrowIfErrors(ps, "habilitar el buzón");
+
+        // ─── 5) Limpieza ──────────────────────────────────────────────────────────
+        ps.Commands.Clear();
+        ps.AddCommand("Remove-PSSession").AddParameter("Session", newSession).Invoke();
+    }
+
+    private static void ThrowIfErrors(PowerShell ps, string paso)
+    {
+        if (!ps.HadErrors) return;
+        var msg = string.Join(" | ", ps.Streams.Error.Select(e => e.ToString()));
+        throw new InvalidOperationException($"Error al {paso}: {msg}");
     }
 
 
@@ -1665,15 +1899,7 @@ public class AltaUsuarioController : Controller
 
         // 4) Acceder a proxyAddresses
         var proxies = de.Properties["proxyAddresses"];
-
-        // 5) Eliminar la antigua
-        //var oldProxy = $"smtp:{samAccountName}@{oldDomain}";
-        //for (int i = proxies.Count - 1; i >= 0; i--)
-        //{
-        //    if (proxies[i]?.ToString().Equals(oldProxy, StringComparison.OrdinalIgnoreCase) == true)
-        //        proxies.Remove(proxies[i]);
-        //}
-
+                
         // 6) Añadir la nueva primaria
         var newProxy = $"SMTP:{samAccountName}@{newDomain}";
         if (!proxies.Cast<string>().Any(p => p.Equals(newProxy, StringComparison.OrdinalIgnoreCase)))
@@ -1736,52 +1962,60 @@ public class AltaUsuarioController : Controller
     /// Crea un lote de migración híbrida en Exchange Online utilizando el módulo ExchangeOnlineManagement.
     /// Si el módulo no está instalado, se instala en el perfil del usuario.
     /// </summary>
+    /// //Método de migración antiguo sin usar la exchange shell
+
+
+    //Nueva creación de lote de migración
     public void CreateMigrationBatch(string[] upns)
     {
-        // 1) Leer configuración para autenticación con client secret
-        var clientId = _config["AzureAd:ClientId"]
-                          ?? throw new InvalidOperationException("Falta ExchangeOnline:AppId");
+        // Config
+        var appId = _config["AzureAd:ClientId"]
+                     ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
         var tenantId = _config["AzureAd:TenantId"]
-                          ?? throw new InvalidOperationException("Falta ExchangeOnline:TenantId");
-        var clientSecret = _config["AzureAd:ClientSecret"]
-                          ?? throw new InvalidOperationException("Falta ExchangeOnline:ClientSecret");
-        var sourceEndpoint = _config["Exchange:Endpoint"] ?? "saura";
-        var targetDomain = _config["Exchange:TargetDeliveryDomain"] ?? "aytosalamanca.mail.onmicrosoft.com";
+                     ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
+        var secret = _config["AzureAd:ClientSecret"]
+                     ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
 
-        // 2) Preparar nombre de batch y lista de UPNs
+        var endpoint = _config["Exchange:Endpoint"] ?? "saura";
+        var tgtDomain = _config["Exchange:TargetDeliveryDomain"] ?? "aytosalamanca.mail.onmicrosoft.com";
         var batchName = $"Migra_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-        var usersList = string.Join(", ", upns.Select(u => $"'{u}'"));
 
-        // 3) Construir script para PowerShell
-        var script = $@"
-            Import-Module ExchangeOnlineManagement -DisableNameChecking
+        // 1) Runspace con módulo EMS-EXO precargado
+        var iss = InitialSessionState.CreateDefault();
+        iss.ImportPSModule(new[] { "ExchangeOnlineManagement" });
+        using var run = RunspaceFactory.CreateRunspace(iss);
+        run.Open();
 
-            # Conectar a Exchange Online usando client secret
-            Connect-ExchangeOnline -AppId '{clientId}' -Organization '{tenantId}' -ClientSecret '{clientSecret}' -ShowBanner:$false
-
-            # Crear lote de migración híbrida
-            New-MigrationBatch `
-                -Name '{batchName}' `
-                -MigrationType RemoteMove `
-                -SourceEndpoint '{sourceEndpoint}' `
-                -Users @({usersList}) `
-                -TargetDeliveryDomain '{targetDomain}' `
-                -AutoStart -AutoComplete
-
-            # Desconectar la sesión
-            Disconnect-ExchangeOnline -Confirm:$false
-            ";
-
-        // 4) Ejecutar script embebido
         using var ps = PowerShell.Create();
-        ps.AddScript(script).Invoke();
+        ps.Runspace = run;
 
-        // 5) Comprobar errores
-        if (ps.Streams.Error.Count > 0)
-        {
-            var errs = string.Join(";\n", ps.Streams.Error.ReadAll().Select(e => e.ToString()));
-            throw new InvalidOperationException($"Error al crear lote de migración: {errs}");
-        }
+        // 2) Conectar a EXO con App-only + Client Secret
+        ps.AddCommand("Connect-ExchangeOnline")
+          .AddParameter("AppId", appId)
+          .AddParameter("TenantId", tenantId)   // ← NO “Organization”
+          .AddParameter("ClientSecret", secret)
+          .AddParameter("ShowBanner", false);
+        ps.Invoke();
+        ThrowIfErrors(ps, "conectar a Exchange Online");
+        ps.Commands.Clear();
+
+        // 3) Crear el Migration Batch
+        ps.AddCommand("New-MigrationBatch")
+          .AddParameter("Name", batchName)
+          .AddParameter("MigrationType", "RemoteMove")
+          .AddParameter("SourceEndpoint", endpoint)
+          .AddParameter("TargetDeliveryDomain", tgtDomain)
+          .AddParameter("Users", upns)          // array directo
+          .AddParameter("AutoStart", true)
+          .AddParameter("AutoComplete", true);
+        ps.Invoke();
+        ThrowIfErrors(ps, "crear el lote de migración");
+        ps.Commands.Clear();
+
+        // 4) Desconectar sesión
+        ps.AddCommand("Disconnect-ExchangeOnline")
+          .AddParameter("Confirm", false)
+          .Invoke();
     }
 
     public bool ValidateCredentials(string usuario, string password)

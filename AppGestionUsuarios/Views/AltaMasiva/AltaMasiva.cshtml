@@ -65,28 +65,10 @@
     <h1>@ViewBag.Title</h1>
 
     <div class="form-group">
-        <label for="file">Selecciona el archivo Excel (.xlsx):</label>
+        <label for="file">Selecciona la hoja de calculo (.xlsx):</label>
         <input type="file" id="file" accept=".xlsx" class="form-control" />
     </div>
     <button id="btnLoad" class="btn btn-primary mb-3">Cargar Datos</button>
-
-    <!-- Credenciales de administrador Exchange -->
-    <div class="form-group">
-        <label for="adminUser">Usuario administrador Exchange:</label>
-        <input type="text"
-               id="adminUser"
-               name="adminUser"
-               class="form-control"
-               required />
-    </div>
-    <div class="form-group">
-        <label for="adminPassword">Contraseña administrador Exchange:</label>
-        <input type="password"
-               id="adminPassword"
-               name="adminPassword"
-               class="form-control"
-               required />
-    </div>
 
     <div id="usersTableContainer" style="display:none;">
         <table id="usersTable" class="table table-striped">
@@ -150,26 +132,68 @@
             document.getElementById('usersTableContainer').style.display = 'block';
 
             usersData.forEach((u, i) => {
-                // Fila de datos
+                // 1) Si viene string separado por ';', lo convertimos en array
+                if (typeof u.Grupos === 'string') {
+                    u.Grupos = u.Grupos
+                      .split(';')
+                      .map(g => g.trim())
+                      .filter(g => g);  // eliminamos vacíos
+                }
+
+                // 2) Aseguramos array en todos los casos
+                if (!Array.isArray(u.Grupos)) {
+                    u.Grupos = [];
+                }
+
+                // … resto de tu código sin cambios …
                 const tr = document.createElement('tr');
                 const mkTd = (val, field) =>
-                    `<td><input type='text' class='form-control' value='${val||''}' onchange="updateUser(${i},'${field}',this.value)"/></td>`;
-                const mkDate = val =>
-                    `<td><input type='date' class='form-control' value='${val||''}' onchange="updateUser(${i},'FechaCaducidad',this.value)"/></td>`;
+                    `<td>
+                       <input type='text'
+                              class='form-control'
+                              value='${val||""}'
+                              onchange="updateUser(${i}, '${field}', this.value)" />
+                     </td>`;
+
+                const mkDate = rawVal => {
+                    let iso = '';
+                    if (rawVal) {
+                        const dmy = rawVal.split('/');
+                        if (dmy.length === 3) {
+                            let [dd, mm, yyyy] = dmy;
+                            dd = dd.padStart(2,'0');
+                            mm = mm.padStart(2,'0');
+                            if (yyyy.length === 2) yyyy = '20' + yyyy;
+                            iso = `${yyyy}-${mm}-${dd}`;
+                        } else {
+                            const dt = new Date(rawVal);
+                            if (!isNaN(dt)) {
+                                iso = dt.toISOString().split('T')[0];
+                            }
+                        }
+                    }
+                    return `<td>
+                              <input type='date'
+                                     class='form-control'
+                                     value='${iso}'
+                                     onchange="updateUser(${i}, 'FechaCaducidad', this.value)" />
+                            </td>`;
+                };
 
                 tr.innerHTML =
-                    mkTd(u.Nombre, 'Nombre') +
-                    mkTd(u.Apellido1, 'Apellido1') +
-                    mkTd(u.Apellido2, 'Apellido2') +
-                    mkTd(u.DNI, 'DNI') +
-                    mkTd(u.OUPrincipal, 'OUPrincipal') +
+                    mkTd(u.Nombre,       'Nombre')       +
+                    mkTd(u.Apellido1,    'Apellido1')    +
+                    mkTd(u.Apellido2,    'Apellido2')    +
+                    mkTd(u.DNI,          'DNI')          +
+                    mkTd(u.OUPrincipal,  'OUPrincipal')  +
                     mkTd(u.OUSecundaria, 'OUSecundaria') +
-                    mkDate(u.FechaCaducidad) +
-                    mkTd(u.nTelefono, 'nTelefono') +
-                    mkTd(u.MobileExt, 'MobileExt') +
+                    mkDate(u.FechaCaducidad)               +
+                    mkTd(u.nTelefono,    'nTelefono')    +
+                    mkTd(u.MobileExt,    'MobileExt')    +
                     mkTd(u.MobileNumber, 'MobileNumber') +
-                    mkTd(u.TarjetaId, 'TarjetaId') +
+                    mkTd(u.TarjetaId,    'TarjetaId')    +
                     mkTd(u.nFuncionario, 'nFuncionario');
+
                 tbody.appendChild(tr);
 
                 // Fila de grupos
@@ -189,8 +213,7 @@
                 select.appendChild(placeholder);
                 allGroups.forEach(g => {
                     const opt = document.createElement('option');
-                    opt.value = g;
-                    opt.text = g;
+                    opt.value = g; opt.text = g;
                     select.appendChild(opt);
                 });
 
@@ -199,14 +222,13 @@
                 btn.className = 'btn btn-sm btn-secondary';
                 btn.textContent = 'Agregar';
                 btn.onclick = () => {
-                    const idx = parseInt(select.dataset.index, 10);
+                    const idx    = parseInt(select.dataset.index, 10);
                     const chosen = select.value;
                     if (!chosen) return;
-                    let arr = Array.isArray(usersData[idx].Grupos) ? [...usersData[idx].Grupos] : [];
-                    if (!arr.includes(chosen)) {
-                        arr.push(chosen);
-                        usersData[idx].Grupos = arr;
-                        txt.value = arr.join(';');
+                    if (!u.Grupos.includes(chosen)) {
+                        u.Grupos.push(chosen);
+                        usersData[idx].Grupos = u.Grupos;
+                        txt.value = u.Grupos.join(';');
                     }
                 };
 
@@ -215,7 +237,8 @@
                 txt.readOnly = true;
                 txt.className = 'form-control';
                 txt.dataset.index = i;
-                txt.value = Array.isArray(u.Grupos) ? u.Grupos.join(';') : '';
+                // Aquí ya u.Grupos es array, así que mostramos join(';')
+                txt.value = u.Grupos.join(';');
 
                 container.appendChild(select);
                 container.appendChild(btn);
@@ -226,6 +249,7 @@
             });
         }
 
+
         function updateUser(i, field, val) {
             usersData[i][field] = val;
         }
@@ -233,36 +257,25 @@
         async function processUsers() {
             if (!confirm('¿Procesar alta masiva?')) return;
 
-            // Leer credenciales de Exchange
-            const adminUser = document.getElementById('adminUser').value.trim();
-            const adminPassword = document.getElementById('adminPassword').value;
-            if (!adminUser || !adminPassword) {
-                alert('Debes indicar credenciales de administrador de Exchange.');
-                return;
-            }
+            
 
             try {
                 const res = await fetch('/AltaMasiva/ProcessUsers', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        usersRaw: usersData,
-                        adminUser: adminUser,
-                        adminPassword: adminPassword
+                        usersRaw: usersData
                     })
                 });
                 const data = await res.json();
-                const list = document.getElementById('detailsList');
-                list.innerHTML = '';
-                (data.messages || []).forEach(m => {
-                    const li = document.createElement('li');
-                    li.textContent = m;
-                    li.style.color = m.startsWith('Error') ? 'red' : 'green';
-                    list.appendChild(li);
-                });
-                alert(data.success
-                    ? '✅ Alta masiva completada con éxito'
-                    : '❌ Se produjeron errores. Revisa detalles.');
+			    if (data.success) {
+				    alert('Usuario creado exitosamente');
+				    windows.location.reload();
+                }
+                else
+                {
+                    alert(`Error al crear el usuario: ${data.message}`);
+			    }
             } catch (e) {
                 console.error(e);
                 alert('❌ Error procesando la alta masiva.');

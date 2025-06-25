@@ -3,17 +3,23 @@ using System.DirectoryServices.AccountManagement;
 using Microsoft.AspNetCore.Authentication;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
 
 namespace AppGestionUsuarios.Controllers
 {
     public class InicioSesionController : Controller
     {
-
         private readonly IConfiguration _configuration;
+        private readonly IDataProtector _protector;
 
-        public InicioSesionController(IConfiguration configuration)
+        public InicioSesionController(
+            IConfiguration configuration,
+            IDataProtectionProvider dataProtectionProvider)
         {
             _configuration = configuration;
+            // Creamos un protector con un propósito único
+            _protector = dataProtectionProvider.CreateProtector("CredencialesProtector");
         }
 
         [HttpGet]
@@ -22,36 +28,31 @@ namespace AppGestionUsuarios.Controllers
             return View();
         }
 
-
-        // Redirección a una página de éxito si las credenciales son correctas
-        public IActionResult MenuPrincipal()
-        {
-            return View();
-        }
-
         [HttpPost]
         public async Task<IActionResult> LoginAsync(string username, string password)
         {
-            // Validación de credenciales y grupo leyendo la configuración
+            // 1) Validar credenciales contra AD y grupo
             var validationResult = ValidateUserCredentialsAndGroup(username, password);
-
-            if (validationResult == "correcto")
+            if (validationResult != "correcto")
             {
-                var claims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.Name, username),
-                    new Claim(ClaimTypes.Role, "User")
-                };
-
-                var claimsIdentity = new ClaimsIdentity(claims, "CookieAuth");
-
-                await HttpContext.SignInAsync("CookieAuth", new ClaimsPrincipal(claimsIdentity));
-
-                return RedirectToAction("Index", "MenuPrincipal");
+                ViewBag.Message = validationResult;
+                return View();
             }
 
-            ViewBag.Message = validationResult;
-            return View();
+            // 2) Guardar en Session (cifrar la contraseña)
+            HttpContext.Session.SetString("adminUser", username);
+            HttpContext.Session.SetString("adminPassword", _protector.Protect(password));
+
+            // 3) Crear la cookie de autenticación
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Name, username),
+                new Claim(ClaimTypes.Role, "User")
+            };
+            var claimsIdentity = new ClaimsIdentity(claims, "CookieAuth");
+            await HttpContext.SignInAsync("CookieAuth", new ClaimsPrincipal(claimsIdentity));
+
+            return RedirectToAction("index", "MenuPrincipal");
         }
 
         [Authorize]
@@ -59,56 +60,44 @@ namespace AppGestionUsuarios.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Logout()
         {
-            // Destruye la cookie de autenticación
             await HttpContext.SignOutAsync("CookieAuth");
-            // Redirige al formulario de login
-            return RedirectToAction("Login", "InicioSesion");
+            return RedirectToAction("Login");
         }
 
-        // Método para validar las credenciales del usuario contra el dominio especificado
+        public IActionResult MenuPrincipal()
+        {
+            return View();
+        }
+
+        // Ya no cambia: sigue validando contra AD
         private string ValidateUserCredentialsAndGroup(string username, string password)
         {
-            var domain = _configuration["ActiveDirectory:DomainName"];
+            var domain    = _configuration["ActiveDirectory:DomainName"];
             var groupName = _configuration["ActiveDirectory:AdminGroup"];
 
             try
             {
-                using (var context = new PrincipalContext(ContextType.Domain, domain))
-                {
-                    if (!context.ValidateCredentials(username, password))
-                    {
-                        return "Credenciales inválidas.";
-                    }
+                using var context = new PrincipalContext(ContextType.Domain, domain);
+                if (!context.ValidateCredentials(username, password))
+                    return "Credenciales inválidas.";
 
-                    using (var userPrincipal = UserPrincipal.FindByIdentity(context, username))
-                    {
-                        if (userPrincipal == null)
-                        {
-                            return "Usuario no encontrado en el dominio";
-                        }
+                using var userPrincipal = UserPrincipal.FindByIdentity(context, username);
+                if (userPrincipal == null)
+                    return "Usuario no encontrado en el dominio";
 
-                        using (var groupPrincipal = GroupPrincipal.FindByIdentity(context, groupName))
-                        {
-                            if (groupPrincipal == null)
-                            {
-                                return "Error buscando el grupo de permisos";
-                            }
+                using var groupPrincipal = GroupPrincipal.FindByIdentity(context, groupName);
+                if (groupPrincipal == null)
+                    return "Error buscando el grupo de permisos";
 
-                            if (!userPrincipal.IsMemberOf(groupPrincipal))
-                            {
-                                return "El usuario no tiene los permisos necesarios";
-                            }
+                if (!userPrincipal.IsMemberOf(groupPrincipal))
+                    return "El usuario no tiene los permisos necesarios";
 
-                            return "correcto";
-                        }
-                    }
-                }
+                return "correcto";
             }
             catch (Exception ex)
             {
-                return $"Error al validar las credenciales o grupo: {ex.Message}";
+                return $"Error al validar credenciales o grupo: {ex.Message}";
             }
         }
-
     }
 }

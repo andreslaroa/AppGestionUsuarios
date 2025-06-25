@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/AppGestionUsuarios.styles.css" asp-append-version="true" />
+    <link rel="stylesheet" href="" />
     <style>
         body {
             margin: 0;
@@ -111,7 +112,7 @@
         }
 
         .sidebar-logo {
-            max-height: 130px;
+            max-height: 160px;
             width: auto;
             display: block;
 
@@ -138,7 +139,7 @@
 <body>
     <div class="app-container">
         <!-- Sidebar -->
-        <nav class="app-sidebar">
+        <nav class="app-sidebar d-flex flex-column justify-content-center align-items-center">
             <img src="~/images/EscudoAyuntamientoSalamanca.png"
                  alt="Ayuntamiento de Salamanca"
                  class="sidebar-logo" />
@@ -152,37 +153,29 @@
                 <li class="nav-item @(ViewBag.Active=="AltaMasiva"?"active":"")">
                     <a class="nav-link" asp-controller="AltaMasiva" asp-action="AltaMasiva">Alta Masiva</a>
                 </li>
-                <li class="nav-item @(ViewBag.Active=="ModificarUsuario"?"active":"")">
-                    <a class="nav-link" asp-controller="ModificarUsuario" asp-action="ModificarUsuario">Modificar Usuario</a>
-                </li>
                 <li class="nav-item @(ViewBag.Active=="HabilitarDeshabilitarUsuario"?"active":"")">
                     <a class="nav-link" asp-controller="HabilitarDeshabilitarUsuario" asp-action="HabilitarDeshabilitarUsuario">Habilitar/Deshabilitar</a>
+                </li>
+                <li class="nav-item @(ViewBag.Active=="ModificarUsuario"?"active":"")">
+                    <a class="nav-link" asp-controller="ModificarUsuario" asp-action="ModificarUsuario">Modificar Usuario</a>
                 </li>
                 <li class="nav-item @(ViewBag.Active=="BajaUsuario"?"active":"")">
                     <a class="nav-link" asp-controller="BajaUsuario" asp-action="BajaUsuario">Baja Usuario</a>
                 </li>
             </ul>
-            <div class="sidebar-footer mt-auto">
-                <form asp-controller="InicioSesion"
-                      asp-action="Logout"
-                      method="post"
-                      class="px-3 py-2">
-                    @Html.AntiForgeryToken()
-                    <button type="submit"
-                            class="btn btn-link text-white w-100 text-start">
-                        <i class="bi bi-box-arrow-right me-2"></i>
-                        Cerrar Sesión
-                    </button>
-                </form>
-            </div>
         </nav>
         <!-- Main area -->
         <div class="app-main">
             <header class="app-header">
                 <span class="navbar-brand">@ViewData["Title"]</span>
-                <div>
-                    <a href="#" class="text-muted me-3"><i class="bi bi-search"></i></a>
-                    <a href="#" class="text-muted"><i class="bi bi-question-circle"></i></a>
+                <div class="d-flex align-items-center">
+                    <form asp-controller="InicioSesion" asp-action="Logout" method="post" class="d-flex align-items-center">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn d-flex align-items-center p-0 border-0 bg-transparent">
+                            <span style="color: #dc3545; margin-right: 6px;">Cerrar Sesión</span>
+                            <img src="~/images/PowerOnIcon.png" alt="Cerrar sesión" style="height: 20px;" />
+                        </button>
+                    </form>
                 </div>
             </header>
             <section class="app-content">

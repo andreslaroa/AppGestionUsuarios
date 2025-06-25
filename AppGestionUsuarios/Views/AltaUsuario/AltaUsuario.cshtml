@@ -1,4 +1,9 @@
-﻿﻿<!DOCTYPE html>
+﻿﻿
+@{
+    ViewBag.Title = "Crear usuario";
+    Layout = "_Layout";
+}
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -156,7 +161,8 @@
                 </div>
                 <div class="field-group">
                     <label for="nTelefono">Extensión de teléfono:</label>
-                    <input type="text" id="nTelefono" name="nTelefono" oninput="checkTelephoneExists()" />
+                    @* <input type="text" id="nTelefono" name="nTelefono" oninput="checkTelephoneExists()" /> *@
+                    <input type="text" id="nTelefono" name="nTelefono"/>
                 </div>
                 <div class="field-group">
                     <label for="ddi">Número largo fijo (DDI):</label>
@@ -176,7 +182,8 @@
                 </div>
                 <div class="field-group">
                     <label for="nFuncionario">Nº Funcionario:</label>
-                    <input type="text" id="nFuncionario" name="nFuncionario" onchange="checkNumberIdExists()" />
+                    @* <input type="text" id="nFuncionario" name="nFuncionario" onchange="checkNumberIdExists()" /> *@
+                    <input type="text" id="nFuncionario" name="nFuncionario" />
                 </div>
             </div>
 
@@ -288,14 +295,6 @@
                     <select id="gruposSeleccionados" name="gruposSeleccionados" size="5"></select>
                     <button type="button" onclick="removeSelectedGroup()">Eliminar Grupo Seleccionado</button>
                 </div>
-                <div class="field-group">
-                    <label for="adminUser">Usuario administrador Exchange:</label>
-                    <input type="text" id="adminUser" name="adminUser" required />
-                </div>
-                <div class="field-group">
-                    <label for="adminPassword">Contraseña administrador Exchange:</label>
-                    <input type="password" id="adminPassword" name="adminPassword" required />
-                </div>
             </div>
 
             <!-- Paso 4: Revisión y Envío -->
@@ -364,7 +363,7 @@
 
         function validateStep(step) {
             if (step === 1) {
-                const requiredFields = ['nombre', 'apellido1', 'username', 'dni'];
+                const requiredFields = ['nombre', 'apellido1','apellido2', 'username', 'dni',];
                 return requiredFields.every(id => {
                     const field = document.getElementById(id);
                     if (!field.value.trim()) {
@@ -628,13 +627,7 @@
             const fechaCaducidadOp = document.getElementById('fechaCaducidadOp').value;
             let fechaCaducidad = document.getElementById('fechaCaducidad').value;
             const cuota = document.getElementById('cuota').value;
-            const adminUser = document.getElementById('adminUser').value.trim();
-            const adminPassword = document.getElementById('adminPassword').value.trim();
 
-            if (!adminUser || !adminPassword) {
-              alert('Por favor indica las credenciales de administrador de Exchange.');
-              return;
-            }
 
             if (fechaCaducidadOp === "no") {
                 fechaCaducidad = new Date().toISOString().split('T')[0]; // Corrección del error de sintaxis
@@ -661,7 +654,7 @@
                     body: JSON.stringify({
                         nombre, apellido1, apellido2, username, dni, nTelefono, ddi, mobileExt, mobileNumber, tarjetaId, nFuncionario,
                         ouPrincipal, ouSecundaria: ouSecundaria || null, departamento, lugarEnvio,
-                        fechaCaducidadOp, fechaCaducidad, cuota, grupos, adminPassword, adminUser   
+                        fechaCaducidadOp, fechaCaducidad, cuota, grupos  
                     })
                 });
                 const data = await response.json();
@@ -673,7 +666,7 @@
                 }
             } catch (error) {
                 console.error('Error al crear el usuario:', error);
-                alert('Ocurrió un error al crear el usuario.');
+                alert('Ocurrió un error al crear el usuario.'), error;
             }
         }
 

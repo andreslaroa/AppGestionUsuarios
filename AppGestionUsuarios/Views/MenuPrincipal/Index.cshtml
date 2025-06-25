@@ -10,7 +10,11 @@
     <ul>
         <li class="option-card">
             <a class="option-title" asp-controller="AltaUsuario" asp-action="AltaUsuario">Crear Usuario</a>
-            <p class="option-description">Permite registrar un nuevo usuario en la aplicación, asignándole rol y credenciales.</p>
+            <p class="option-description">Permite registrar un nuevo usuario en la aplicación, asignándole datos y añadiéndolo a grupos.</p>
+        </li>
+        <li class="option-card">
+            <a class="option-title" asp-controller="AltaMasiva" asp-action="AltaMasiva">Altas Masivas</a>
+            <p class="option-description">Importa un lote de usuarios desde un fichero xlsx para agilizar registros.</p>
         </li>
         <li class="option-card">
             <a class="option-title" asp-controller="HabilitarDeshabilitarUsuario" asp-action="HabilitarDeshabilitarUsuario">Habilitar Usuario</a>
@@ -18,16 +22,13 @@
         </li>
         <li class="option-card">
             <a class="option-title" asp-controller="ModificarUsuario" asp-action="ModificarUsuario">Modificar Usuario</a>
-            <p class="option-description">Edita los datos personales o permisos de un usuario ya existente.</p>
+            <p class="option-description">Edita los grupos de usuario y la unidad organizativa a la qu pertenece.</p>
         </li>
         <li class="option-card">
             <a class="option-title" asp-controller="BajaUsuario" asp-action="BajaUsuario">Baja Usuario</a>
-            <p class="option-description">Elimina o da de baja permanentemente la cuenta de un usuario.</p>
+            <p class="option-description">Baja provisional de un usuario con todos los pasos que conlleva.</p>
         </li>
-        <li class="option-card">
-            <a class="option-title" asp-controller="AltaMasiva" asp-action="AltaMasiva">Altas Masivas</a>
-            <p class="option-description">Importa un lote de usuarios desde un fichero CSV para agilizar registros.</p>
-        </li>
+        
     </ul>
 </div>
 
