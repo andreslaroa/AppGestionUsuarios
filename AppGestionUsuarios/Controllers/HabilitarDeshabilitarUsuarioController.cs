@@ -1,9 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.DirectoryServices;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Win32.SafeHandles;
 
 namespace AppGestionUsuarios.Controllers
 {
@@ -11,6 +16,30 @@ namespace AppGestionUsuarios.Controllers
     public class HabilitarDeshabilitarUsuarioController : Controller
     {
         private const string DomainPath = "LDAP://DC=aytosa,DC=inet";
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool LogonUser(
+        string lpszUsername,
+        string lpszDomain,
+        string lpszPassword,
+        int dwLogonType,
+        int dwLogonProvider,
+        out IntPtr phToken);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        static extern bool CloseHandle(IntPtr handle);
+
+        const int LOGON32_LOGON_NEW_CREDENTIALS = 9;
+        const int LOGON32_PROVIDER_DEFAULT = 0;
+
+        private readonly IDataProtector _protector;
+        private readonly IConfiguration _config;
+        public HabilitarDeshabilitarUsuarioController(IConfiguration config, IDataProtectionProvider dp)
+        {
+            _config = config;
+            _protector = dp.CreateProtector("CredencialesProtector");
+
+        }
 
         // GET: /HabilitarDeshabilitarUsuario
         [HttpGet]
@@ -54,8 +83,10 @@ namespace AppGestionUsuarios.Controllers
 
         // POST: /HabilitarDeshabilitarUsuario/ManageUserStatus
         [HttpPost]
+        [Produces("application/json")]
         public IActionResult ManageUserStatus([FromBody] Dictionary<string, string> requestData)
         {
+            // 1) Validación preliminar
             if (requestData == null
              || !requestData.ContainsKey("username")
              || !requestData.ContainsKey("action"))
@@ -63,47 +94,94 @@ namespace AppGestionUsuarios.Controllers
                 return Json(new { success = false, message = "Faltan datos: 'username' y 'action' son obligatorios." });
             }
 
-            string rawInput = requestData["username"];
-            string action = requestData["action"].ToLower();
-            string username = ExtractUsername(rawInput);
-            if (username == null)
-                return Json(new { success = false, message = "Formato de usuario inválido." });
+            // 2) Recuperar credenciales de sesión y dominio
+            string adminUsername = HttpContext.Session.GetString("adminUser");
+            var encryptedPass = HttpContext.Session.GetString("adminPassword");
+            var adminPassword = _protector.Unprotect(encryptedPass);
 
-            try
+            var domainName = _config["ActiveDirectory:DomainName"];
+            if (string.IsNullOrWhiteSpace(domainName))
             {
-                using var root = new DirectoryEntry(DomainPath);
-                using var searcher = new DirectorySearcher(root)
+                return Json(new { success = false, message = "Configuración incorrecta: falta ActiveDirectory:DomainName" });
+            }
+
+            // 3) Impersonación
+            if (!LogonUser(
+                    adminUsername,
+                    domainName,
+                    adminPassword,
+                    LOGON32_LOGON_NEW_CREDENTIALS,
+                    LOGON32_PROVIDER_DEFAULT,
+                    out var userToken))
+            {
+                var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
+                return Json(new { success = false, message = $"Imposible impersonar: {err}" });
+            }
+
+            using var safeToken = new SafeAccessTokenHandle(userToken);
+            IActionResult finalResult = Json(new { success = false, message = "No se completó la operación." });
+
+            // 4) Ejecutar bajo impersonación
+            WindowsIdentity.RunImpersonated(safeToken, () =>
+            {
+                string rawInput = requestData["username"];
+                string action = requestData["action"].ToLower();
+                string username = ExtractUsername(rawInput);
+                if (username == null)
                 {
-                    Filter = $"(&(objectClass=user)(sAMAccountName={username}))",
-                    SearchScope = SearchScope.Subtree
-                };
-                searcher.PropertiesToLoad.Add("userAccountControl");
+                    finalResult = Json(new { success = false, message = "Formato de usuario inválido." });
+                    return;
+                }
 
-                var result = searcher.FindOne();
-                if (result == null)
-                    return Json(new { success = false, message = $"Usuario '{username}' no encontrado." });
+                try
+                {
+                    using var root = new DirectoryEntry(domainName);
+                    using var searcher = new DirectorySearcher(root)
+                    {
+                        Filter = $"(&(objectClass=user)(sAMAccountName={username}))",
+                        SearchScope = SearchScope.Subtree
+                    };
+                    searcher.PropertiesToLoad.Add("userAccountControl");
 
-                using var userEntry = result.GetDirectoryEntry();
-                int uac = (int)userEntry.Properties["userAccountControl"].Value;
+                    var result = searcher.FindOne();
+                    if (result == null)
+                    {
+                        finalResult = Json(new { success = false, message = $"Usuario '{username}' no encontrado." });
+                        return;
+                    }
 
-                if (action == "enable")
-                    uac &= ~0x2;   // quitar flag DISABLED
-                else if (action == "disable")
-                    uac |= 0x2;    // añadir flag DISABLED
-                else
-                    return Json(new { success = false, message = "Acción no válida: use 'enable' o 'disable'." });
+                    using var userEntry = result.GetDirectoryEntry();
+                    int uac = (int)userEntry.Properties["userAccountControl"].Value;
 
-                userEntry.Properties["userAccountControl"].Value = uac;
-                userEntry.CommitChanges();
+                    if (action == "enable")
+                        uac &= ~0x2;   // quitar flag DISABLED
+                    else if (action == "disable")
+                        uac |= 0x2;    // añadir flag DISABLED
+                    else
+                    {
+                        finalResult = Json(new { success = false, message = "Acción no válida: use 'enable' o 'disable'." });
+                        return;
+                    }
 
-                string verb = action == "enable" ? "habilitado" : "deshabilitado";
-                return Json(new { success = true, message = $"Usuario '{username}' {verb} correctamente." });
-            }
-            catch (Exception ex)
-            {
-                return Json(new { success = false, message = $"Error al {action} usuario: {ex.Message}" });
-            }
+                    userEntry.Properties["userAccountControl"].Value = uac;
+                    userEntry.CommitChanges();
+
+                    string verb = action == "enable" ? "habilitado" : "deshabilitado";
+                    finalResult = Json(new { success = true, message = $"Usuario '{username}' {verb} correctamente." });
+                }
+                catch (Exception ex)
+                {
+                    finalResult = Json(new { success = false, message = $"Error al {requestData["action"]} usuario: {ex.Message}" });
+                }
+            });
+
+            // 5) Cerrar handle
+            CloseHandle(userToken);
+
+            // 6) Retornar siempre JSON
+            return finalResult;
         }
+
 
         // POST: /HabilitarDeshabilitarUsuario/GetUserGroups
         [HttpPost]

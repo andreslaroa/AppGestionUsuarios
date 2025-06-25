@@ -8,6 +8,10 @@ using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Graph.Users.Item.SendMail;
 using Azure.Identity;
+using Microsoft.Win32.SafeHandles;
+using System.ComponentModel;
+using System.Security.Principal;
+using Microsoft.AspNetCore.DataProtection;
 
 
 
@@ -40,11 +44,12 @@ public class BajaUsuarioController : Controller
     const int LOGON32_LOGON_NEW_CREDENTIALS = 9;
     const int LOGON32_PROVIDER_DEFAULT = 0;
 
+    private readonly IDataProtector _protector;
 
-    public BajaUsuarioController(IConfiguration config)
+    public BajaUsuarioController(IConfiguration config, IDataProtectionProvider dp)
     {
         _config = config;
-
+        _protector = dp.CreateProtector("CredencialesProtector");
         // Sección Active Directory
         var ad = _config.GetSection("ActiveDirectory");
         _ldapBase = ad["BaseLdapPrefix"] + ad["DomainComponents"];
@@ -105,161 +110,198 @@ public class BajaUsuarioController : Controller
     }
 
     [HttpPost]
+    [Produces("application/json")]
     public IActionResult BajaUsuario([FromBody] Dictionary<string, object> requestData)
     {
-        // 0) Inicializar GraphServiceClient
-        var tenantId = _config["AzureAd:TenantId"] ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
-        var clientId = _config["AzureAd:ClientId"] ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
-        var clientSecret = _config["AzureAd:ClientSecret"] ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
-        var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-        _graphClient = new GraphServiceClient(credential);
+        // 1) Recuperar credenciales de sesión y dominio
+        string adminUsername = HttpContext.Session.GetString("adminUser");
+        var encryptedPass = HttpContext.Session.GetString("adminPassword");
+        var adminPassword = _protector.Unprotect(encryptedPass);
 
-
-        var messages = new List<string>();
-        bool userDisabled = false;
-        List<string> selectedActions = new List<string>();
-
-        // 1) Validación básica
-        if (requestData == null || !requestData.ContainsKey("username"))
-            return Json(new { success = false, messages = "No se proporcionó usuario.", message = "Usuario no especificado." });
-
-        string input = requestData["username"]?.ToString();
-        string username = ExtractUsername(input);
-        if (string.IsNullOrEmpty(username))
-            return Json(new { success = false, messages = "Formato de usuario inválido.", message = "Formato de usuario inválido." });
-
-        // 1.1) Leer acciones seleccionadas
-        if (requestData.ContainsKey("selectedActions"))
+        var domainName = _config["ActiveDirectory:DomainName"];
+        if (string.IsNullOrWhiteSpace(domainName))
         {
-            try
+            return Json(new { success = false, message = "Configuración incorrecta: falta ActiveDirectory:DomainName" });
+        }
+
+        // 2) Impersonación
+        if (!LogonUser(
+                adminUsername,
+                domainName,
+                adminPassword,
+                LOGON32_LOGON_NEW_CREDENTIALS,
+                LOGON32_PROVIDER_DEFAULT,
+                out var userToken))
+        {
+            var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
+            return Json(new { success = false, message = $"Imposible impersonar: {err}" });
+        }
+
+        using var safeToken = new SafeAccessTokenHandle(userToken);
+
+        IActionResult finalResult = Json(new { success = false, message = "No se completó la baja de usuario." });
+
+        // 3) Ejecutar bajo las credenciales impersonadas
+        WindowsIdentity.RunImpersonated(safeToken, () =>
+        {
+            var messages = new List<string>();
+            bool userDisabled = false;
+            var selectedActions = new List<string>();
+
+            // 3.1) Validación básica
+            if (requestData == null || !requestData.TryGetValue("username", out var rawUser))
             {
-                var arr = (JsonElement)requestData["selectedActions"];
-                if (arr.ValueKind == JsonValueKind.Array)
+                finalResult = Json(new { success = false, messages = "No se proporcionó usuario.", message = "Usuario no especificado." });
+                return;
+            }
+
+            string username = ExtractUsername(rawUser?.ToString());
+            if (string.IsNullOrEmpty(username))
+            {
+                finalResult = Json(new { success = false, messages = "Formato de usuario inválido.", message = "Formato de usuario inválido." });
+                return;
+            }
+
+            // 3.2) Leer acciones seleccionadas
+            if (requestData.TryGetValue("selectedActions", out var rawActions))
+            {
+                try
                 {
-                    selectedActions = arr.EnumerateArray()
-                                         .Select(e => e.GetString())
-                                         .Where(s => !string.IsNullOrEmpty(s))
-                                         .ToList();
+                    var arr = (JsonElement)rawActions;
+                    if (arr.ValueKind == JsonValueKind.Array)
+                        selectedActions = arr.EnumerateArray()
+                                             .Select(e => e.GetString())
+                                             .Where(s => !string.IsNullOrEmpty(s))
+                                             .ToList();
                     messages.Add($"Acciones seleccionadas: {string.Join(", ", selectedActions)}");
-                }
-                else messages.Add("El campo 'selectedActions' no es un array.");
-            }
-            catch (Exception ex)
-            {
-                messages.Add($"Error procesando acciones: {ex.Message}");
-                return Json(new { success = false, messages = string.Join("\n", messages), message = "Error procesando acciones." });
-            }
-        }
-        else
-        {
-            messages.Add("No se seleccionaron acciones adicionales.");
-        }
-
-        try
-        {
-            // 2) Buscar y modificar usuario en AD
-            using var ctx = new PrincipalContext(ContextType.Domain, _domainName);
-            using var usr = UserPrincipal.FindByIdentity(ctx, username);
-            if (usr == null)
-                return Json(new { success = false, messages = $"Usuario '{username}' no encontrado.", message = "Usuario no encontrado en AD." });
-
-            var de = (DirectoryEntry)usr.GetUnderlyingObject();
-            string userDn = de.Properties["distinguishedName"].Value.ToString();
-            string ouOriginal = userDn.Substring(userDn.IndexOf("OU="));
-
-            // 2.1) Eliminar de grupos
-            if (de.Properties.Contains("memberOf"))
-            {
-                var grupos = de.Properties["memberOf"]
-                               .Cast<object>()
-                               .Select(dn => ExtractCNFromDN(dn.ToString()))
-                               .ToList();
-                foreach (var grp in grupos)
-                {
-                    using var ge = FindGroupByName(grp);
-                    if (ge != null && ge.Properties["member"].Contains(userDn))
-                    {
-                        ge.Properties["member"].Remove(userDn);
-                        ge.CommitChanges();
-                        messages.Add($"Eliminado de grupo '{grp}'.");
-                    }
-                }
-            }
-            else messages.Add("No pertenecía a ningún grupo.");
-
-            // 3) Eliminar cuota en servidor de cuotas
-            string quotaPath = Path.Combine(_quotaBase, username);
-            Type qmType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", _fsServer);
-            if (qmType != null)
-            {
-                dynamic qm = Activator.CreateInstance(qmType);
-                try
-                {
-                    dynamic existing = null;
-                    try { existing = qm.GetQuota(quotaPath); } catch { }
-                    if (existing != null)
-                    {
-                        messages.Add($"[DEBUG] Eliminando cuota en {quotaPath}");
-                        existing.Delete();
-                        messages.Add("Cuota FSRM eliminada.");
-                    }
-                    else messages.Add("No había cuota que eliminar.");
-                }
-                finally { Marshal.ReleaseComObject(qm); }
-            }
-            else messages.Add("FSRM no disponible, omito cuota.");
-
-            // 4) Eliminar carpeta personal
-            string userFolder = Path.Combine(_shareBase, username);
-            if (Directory.Exists(userFolder))
-            {
-                Directory.Delete(userFolder, true);
-                messages.Add($"Carpeta eliminada: {userFolder}");
-            }
-            else messages.Add("Carpeta personal no encontrada.");
-
-            // 5) Deshabilitar cuenta
-            int uac = (int)de.Properties["userAccountControl"].Value;
-            de.Properties["userAccountControl"].Value = uac | 0x2;
-            de.CommitChanges();
-            messages.Add("Usuario deshabilitado.");
-
-            // 6) Mover a OU=Bajas
-            string newOuLdap = $"{_config["ActiveDirectory:BaseLdapPrefix"]}OU={_bajasOu},OU={_areasOu},{_config["ActiveDirectory:DomainComponents"]}";
-            using var ouEntry = new DirectoryEntry(newOuLdap);
-            de.MoveTo(ouEntry);
-            de.CommitChanges();
-            messages.Add("Usuario movido a OU 'Bajas'.");
-
-            userDisabled = true;
-        }
-        catch (Exception ex)
-        {
-            messages.Add($"Error en AD: {ex.Message}");
-        }
-
-        // 7) Envío de correos si procede
-        if (userDisabled && selectedActions.Any())
-        {
-            foreach (var action in selectedActions)
-            {
-                try
-                {
-                    SendMailMessage(_graphClient, username, action).GetAwaiter().GetResult();
-                    messages.Add($"Email para '{(action)}' enviado.");
                 }
                 catch (Exception ex)
                 {
-                    messages.Add($"Error enviando email para '{(action)}': {ex.Message}");
+                    finalResult = Json(new { success = false, messages = $"Error procesando acciones: {ex.Message}", message = "Error procesando acciones." });
+                    return;
                 }
             }
-        }
+            else
+            {
+                messages.Add("No se seleccionaron acciones adicionales.");
+            }
 
-        string final = userDisabled
-            ? "Baja completada."
-            : "No se completó la baja.";
-        return Json(new { success = userDisabled, messages = string.Join("\n", messages), message = final });
+            // 3.3) Lógica de baja en AD y recursos
+            try
+            {
+                using var ctx = new PrincipalContext(ContextType.Domain, domainName);
+                using var usr = UserPrincipal.FindByIdentity(ctx, username);
+                if (usr == null)
+                {
+                    finalResult = Json(new { success = false, messages = $"Usuario '{username}' no encontrado.", message = "Usuario no encontrado en AD." });
+                    return;
+                }
+
+                var de = (DirectoryEntry)usr.GetUnderlyingObject();
+                string userDn = de.Properties["distinguishedName"].Value.ToString();
+
+                // Quitar de grupos
+                if (de.Properties.Contains("memberOf"))
+                {
+                    foreach (var dn in de.Properties["memberOf"].Cast<object>())
+                    {
+                        var grpName = ExtractCNFromDN(dn.ToString());
+                        using var ge = FindGroupByName(grpName);
+                        if (ge != null && ge.Properties["member"].Contains(userDn))
+                        {
+                            ge.Properties["member"].Remove(userDn);
+                            ge.CommitChanges();
+                            messages.Add($"Eliminado de grupo '{grpName}'.");
+                        }
+                    }
+                }
+                else messages.Add("No pertenecía a ningún grupo.");
+
+                // Eliminar cuota FSRM
+                try
+                {
+                    string quotaPath = Path.Combine(_quotaBase, username);
+                    var qmType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", _fsServer);
+                    if (qmType != null)
+                    {
+                        dynamic qm = Activator.CreateInstance(qmType);
+                        try
+                        {
+                            dynamic existing = null;
+                            try { existing = qm.GetQuota(quotaPath); } catch { }
+                            if (existing != null)
+                            {
+                                existing.Delete();
+                                messages.Add("Cuota FSRM eliminada.");
+                            }
+                            else messages.Add("No había cuota que eliminar.");
+                        }
+                        finally { Marshal.ReleaseComObject(qm); }
+                    }
+                    else messages.Add("FSRM no disponible, omito cuota.");
+                }
+                catch (Exception exFsrm)
+                {
+                    messages.Add($"Error al eliminar cuota FSRM: {exFsrm.Message}");
+                }
+                // Eliminar carpeta personal
+                string userFolder = Path.Combine(_shareBase, username);
+                if (Directory.Exists(userFolder))
+                {
+                    Directory.Delete(userFolder, true);
+                    messages.Add($"Carpeta eliminada: {userFolder}");
+                }
+                else messages.Add("Carpeta personal no encontrada.");
+
+                // Deshabilitar cuenta
+                int uac = (int)de.Properties["userAccountControl"].Value;
+                de.Properties["userAccountControl"].Value = uac | 0x2;
+                de.CommitChanges();
+                messages.Add("Usuario deshabilitado.");
+
+                // Mover a OU=Bajas
+                string newOu = $"{_config["ActiveDirectory:BaseLdapPrefix"]}OU={_bajasOu},OU={_areasOu},{_config["ActiveDirectory:DomainComponents"]}";
+                using var ouEntry = new DirectoryEntry(newOu);
+                de.MoveTo(ouEntry);
+                de.CommitChanges();
+                messages.Add("Usuario movido a OU 'Bajas'.");
+
+                userDisabled = true;
+            }
+            catch (Exception exAd)
+            {
+                messages.Add($"Error en AD: {exAd.Message}");
+            }
+
+            // 3.4) Envío de correos si procede
+            if (userDisabled && selectedActions.Any())
+            {
+                foreach (var action in selectedActions)
+                {
+                    try
+                    {
+                        SendMailMessage(_graphClient, username, action).GetAwaiter().GetResult();
+                        messages.Add($"Email para '{action}' enviado.");
+                    }
+                    catch (Exception exMail)
+                    {
+                        messages.Add($"Error enviando email para '{action}': {exMail.Message}");
+                    }
+                }
+            }
+
+            // 3.5) Preparar resultado final
+            string finalMsg = userDisabled ? "Baja completada." : "No se completó la baja.";
+            finalResult = Json(new { success = userDisabled, messages = string.Join("\n", messages), message = finalMsg });
+        });
+
+        // 4) Cerrar handle
+        CloseHandle(userToken);
+
+        // 5) Devolver resultado JSON
+        return finalResult;
     }
+
 
 
     private string ExtractUsername(string input)

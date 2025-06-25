@@ -1,10 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Win32.SafeHandles;
 
 namespace AppGestionUsuarios.Controllers
 {
@@ -14,12 +19,30 @@ namespace AppGestionUsuarios.Controllers
         // Cadena base para el LDAP
         private const string DomainPath = "LDAP://DC=aytosa,DC=inet";
 
-        private readonly IConfiguration _config;
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool LogonUser(
+        string lpszUsername,
+        string lpszDomain,
+        string lpszPassword,
+        int dwLogonType,
+        int dwLogonProvider,
+        out IntPtr phToken);
 
-        public ModificarUsuarioController(IConfiguration config)
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        static extern bool CloseHandle(IntPtr handle);
+
+        const int LOGON32_LOGON_NEW_CREDENTIALS = 9;
+        const int LOGON32_PROVIDER_DEFAULT = 0;
+
+        private readonly IDataProtector _protector;
+        private readonly IConfiguration _config;
+        public ModificarUsuarioController(IConfiguration config, IDataProtectionProvider dp)
         {
             _config = config;
+            _protector = dp.CreateProtector("CredencialesProtector");
+
         }
+
 
         // GET: /ModificarUsuario
         [HttpGet]
@@ -186,56 +209,99 @@ namespace AppGestionUsuarios.Controllers
 
         // POST: /ModificarUsuario/ModifyUserOU
         [HttpPost]
+        [Produces("application/json")]
         public JsonResult ModifyUserOU([FromBody] Dictionary<string, string> requestData)
         {
             // 1) Validación básica
             if (requestData == null
-             || !requestData.ContainsKey("username")
-             || !requestData.ContainsKey("ouPrincipal")
-             || !requestData.ContainsKey("departamento"))
+                || !requestData.ContainsKey("username")
+                || !requestData.ContainsKey("ouPrincipal")
+                || !requestData.ContainsKey("departamento"))
             {
                 return Json(new { success = false, message = "Faltan datos obligatorios." });
             }
 
-            var rawUser = requestData["username"];
-            var username = ExtractUsername(rawUser);
-            var ouPrincipal = requestData["ouPrincipal"];
-            var ouSecundaria = requestData.GetValueOrDefault("ouSecundaria");
-            var departamento = requestData["departamento"];
+            // 2) Recuperar credenciales de sesión y dominio
+            string adminUsername = HttpContext.Session.GetString("adminUser");
+            var encryptedPass = HttpContext.Session.GetString("adminPassword");
+            var adminPassword = _protector.Unprotect(encryptedPass);
 
-            if (username == null)
-                return Json(new { success = false, message = "Formato de usuario inválido." });
-
-            // 2) Construir nuevo path LDAP
-            var newPath = !string.IsNullOrEmpty(ouSecundaria)
-                ? $"LDAP://OU={ouSecundaria},OU=Usuarios,OU={ouPrincipal},{_config["ActiveDirectory:DomainBase"]}"
-                : $"LDAP://OU=Usuarios,OU={ouPrincipal},{_config["ActiveDirectory:DomainBase"]}";
-
-            try
+            var domainName = _config["ActiveDirectory:DomainName"];
+            if (string.IsNullOrWhiteSpace(domainName))
             {
-                using var ctx = new PrincipalContext(ContextType.Domain);
-                using var user = UserPrincipal.FindByIdentity(ctx, IdentityType.SamAccountName, username);
-                if (user == null)
-                    return Json(new { success = false, message = $"Usuario '{username}' no encontrado en AD." });
-
-                var de = (DirectoryEntry)user.GetUnderlyingObject();
-
-                // 3) Mover a la nueva OU
-                de.MoveTo(new DirectoryEntry(newPath));
-
-                // 4) Actualizar departamento
-                de.Properties["physicalDeliveryOfficeName"].Value = departamento;
-                de.CommitChanges();
-
-                return Json(new { success = true, message = "OU y departamento actualizados correctamente." });
+                return Json(new { success = false, message = "Configuración incorrecta: falta ActiveDirectory:DomainName" });
             }
-            catch (Exception ex)
+
+            // 3) Impersonar con LogonUser (devuelve IntPtr userToken)
+            if (!LogonUser(
+                    adminUsername,
+                    domainName,
+                    adminPassword,
+                    LOGON32_LOGON_NEW_CREDENTIALS,
+                    LOGON32_PROVIDER_DEFAULT,
+                    out var userToken))
             {
-                return Json(new { success = false, message = $"Error al modificar OU: {ex.Message}" });
+                var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
+                return Json(new { success = false, message = $"Imposible impersonar: {err}" });
             }
+
+            // 4) Envolver en SafeAccessTokenHandle para liberación automática
+            using var safeToken = new SafeAccessTokenHandle(userToken);
+
+            JsonResult finalResult = Json(new { success = false, message = "No se modificó la OU del usuario." });
+
+            // 5) Ejecutar bajo impersonación
+            WindowsIdentity.RunImpersonated(safeToken, () =>
+            {
+                var rawUser = requestData["username"];
+                var username = ExtractUsername(rawUser);
+                var ouPrincipal = requestData["ouPrincipal"];
+                var ouSecundaria = requestData.GetValueOrDefault("ouSecundaria");
+                var departamento = requestData["departamento"];
+
+                if (username == null)
+                {
+                    finalResult = Json(new { success = false, message = "Formato de usuario inválido." });
+                    return;
+                }
+
+                // 6) Construir nuevo path LDAP
+                var baseDn = _config["ActiveDirectory:DomainBase"];
+                var ldapPath = !string.IsNullOrEmpty(ouSecundaria)
+                    ? $"LDAP://OU={ouSecundaria},OU=Usuarios,OU={ouPrincipal},{baseDn}"
+                    : $"LDAP://OU=Usuarios,OU={ouPrincipal},{baseDn}";
+
+                try
+                {
+                    using var ctx = new PrincipalContext(ContextType.Domain, domainName);
+                    using var user = UserPrincipal.FindByIdentity(ctx, IdentityType.SamAccountName, username);
+                    if (user == null)
+                    {
+                        finalResult = Json(new { success = false, message = $"Usuario '{username}' no encontrado en AD." });
+                        return;
+                    }
+
+                    var de = (DirectoryEntry)user.GetUnderlyingObject();
+                    using var newOuEntry = new DirectoryEntry(ldapPath);
+
+                    // 7) Mover a la nueva OU y actualizar departamento
+                    de.MoveTo(newOuEntry);
+                    de.Properties["physicalDeliveryOfficeName"].Value = departamento;
+                    de.CommitChanges();
+
+                    finalResult = Json(new { success = true, message = "OU y departamento actualizados correctamente." });
+                }
+                catch (Exception ex)
+                {
+                    finalResult = Json(new { success = false, message = $"Error al modificar OU: {ex.Message}" });
+                }
+            });
+
+            // 8) safeToken.Dispose() liberará automáticamente el handle
+            return finalResult;
         }
 
-       
+
         /// <summary>
         /// Extrae el sAMAccountName de un string tipo "DisplayName (sam)".
         /// </summary>
@@ -411,75 +477,121 @@ namespace AppGestionUsuarios.Controllers
         }
 
         [HttpPost]
+        [Produces("application/json")]
         public IActionResult ModifyUserGroup([FromBody] Dictionary<string, string> requestData)
         {
-            if (requestData == null || !requestData.ContainsKey("username") || !requestData.ContainsKey("group") || !requestData.ContainsKey("action"))
-                return Json(new { success = false, message = "Datos insuficientes para modificar el grupo." });
-
-            string input = requestData["username"];
-            string username = ExtractUsername(input); // Extrae el nombre de usuario
-            string groupName = requestData["group"];  // El nombre limpio del grupo
-            string action = requestData["action"].ToLower();
-
-            DirectoryEntry groupEntry = null; // Declaración fuera del try
-
-            try
+            // 1) Validación de payload
+            if (requestData == null
+                || !requestData.ContainsKey("username")
+                || !requestData.ContainsKey("group")
+                || !requestData.ContainsKey("action"))
             {
-                // Buscar el grupo en el dominio
-                groupEntry = FindGroupByName(groupName);
-                if (groupEntry == null)
-                    return Json(new { success = false, message = $"Grupo '{groupName}' no encontrado en el dominio." });
+                return Json(new { success = false, message = "Datos insuficientes para modificar el grupo." });
+            }
 
-                // Buscar el usuario en el dominio
-                string ldapPath = "LDAP://DC=aytosa,DC=inet";
-                using (var root = new DirectoryEntry(ldapPath))
+            // 2) Recuperar credenciales de sesión y dominio
+            string adminUsername = HttpContext.Session.GetString("adminUser");
+            var encryptedPass = HttpContext.Session.GetString("adminPassword");
+            var adminPassword = _protector.Unprotect(encryptedPass);
+
+            var domainName = _config["ActiveDirectory:DomainName"];
+            if (string.IsNullOrWhiteSpace(domainName))
+            {
+                return Json(new { success = false, message = "Configuración incorrecta: falta ActiveDirectory:DomainName" });
+            }
+
+            // 3) Impersonación
+            if (!LogonUser(
+                    adminUsername,
+                    domainName,
+                    adminPassword,
+                    LOGON32_LOGON_NEW_CREDENTIALS,
+                    LOGON32_PROVIDER_DEFAULT,
+                    out var userToken))
+            {
+                var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
+                return Json(new { success = false, message = $"Imposible impersonar: {err}" });
+            }
+
+            using var safeToken = new SafeAccessTokenHandle(userToken);
+            IActionResult finalResult = Json(new { success = false, message = "No se modificó la membresía de grupo." });
+
+            // 4) Ejecutar la lógica bajo las credenciales impersonadas
+            WindowsIdentity.RunImpersonated(safeToken, () =>
+            {
+                var rawInput = requestData["username"];
+                var username = ExtractUsername(rawInput);
+                var groupName = requestData["group"];
+                var action = requestData["action"].ToLower();
+
+                if (username == null)
                 {
-                    using (var searcher = new DirectorySearcher(root))
+                    finalResult = Json(new { success = false, message = "Formato de usuario inválido." });
+                    return;
+                }
+
+                DirectoryEntry groupEntry = null;
+                try
+                {
+                    // 4.1) Buscar el grupo
+                    groupEntry = FindGroupByName(groupName);
+                    if (groupEntry == null)
                     {
-                        searcher.Filter = $"(&(objectClass=user)(sAMAccountName={username}))";
-                        searcher.SearchScope = SearchScope.Subtree;
+                        finalResult = Json(new { success = false, message = $"Grupo '{groupName}' no encontrado en el dominio." });
+                        return;
+                    }
 
-                        SearchResult result = searcher.FindOne();
-
+                    // 4.2) Buscar el usuario en AD
+                    const string ldapPath = "LDAP://DC=aytosa,DC=inet";
+                    using (var root = new DirectoryEntry(ldapPath))
+                    using (var searcher = new DirectorySearcher(root)
+                    {
+                        Filter = $"(&(objectClass=user)(sAMAccountName={username}))",
+                        SearchScope = SearchScope.Subtree
+                    })
+                    {
+                        var result = searcher.FindOne();
                         if (result == null)
-                            return Json(new { success = false, message = $"Usuario '{username}' no encontrado en el dominio." });
-
-                        using (DirectoryEntry userEntry = result.GetDirectoryEntry())
                         {
-                            if (action == "add")
-                            {
-                                // Añadir el usuario al grupo
-                                groupEntry.Invoke("Add", new object[] { userEntry.Path });
-                                groupEntry.CommitChanges();
-                                return Json(new { success = true, message = $"El usuario '{username}' fue añadido al grupo '{groupName}' correctamente." });
-                            }
-                            else if (action == "remove")
-                            {
-                                // Eliminar el usuario del grupo
-                                groupEntry.Invoke("Remove", new object[] { userEntry.Path });
-                                groupEntry.CommitChanges();
-                                return Json(new { success = true, message = $"El usuario '{username}' fue eliminado del grupo '{groupName}' correctamente." });
-                            }
-                            else
-                            {
-                                return Json(new { success = false, message = "Acción no válida. Use 'add' o 'remove'." });
-                            }
+                            finalResult = Json(new { success = false, message = $"Usuario '{username}' no encontrado en el dominio." });
+                            return;
+                        }
+
+                        using var userEntry = result.GetDirectoryEntry();
+
+                        // 4.3) Añadir o eliminar
+                        if (action == "add")
+                        {
+                            groupEntry.Invoke("Add", new object[] { userEntry.Path });
+                            groupEntry.CommitChanges();
+                            finalResult = Json(new { success = true, message = $"Usuario '{username}' añadido al grupo '{groupName}'." });
+                        }
+                        else if (action == "remove")
+                        {
+                            groupEntry.Invoke("Remove", new object[] { userEntry.Path });
+                            groupEntry.CommitChanges();
+                            finalResult = Json(new { success = true, message = $"Usuario '{username}' eliminado del grupo '{groupName}'." });
+                        }
+                        else
+                        {
+                            finalResult = Json(new { success = false, message = "Acción no válida: use 'add' o 'remove'." });
                         }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                return Json(new { success = false, message = $"Error al modificar el grupo: {ex.Message}" });
-            }
-            finally
-            {
-                if (groupEntry != null)
+                catch (Exception ex)
                 {
-                    groupEntry.Dispose(); // Liberar el recurso correctamente
+                    finalResult = Json(new { success = false, message = $"Error al modificar el grupo: {ex.Message}" });
                 }
-            }
+                finally
+                {
+                    groupEntry?.Dispose();
+                }
+            });
+
+            // 5) Devolver siempre JSON
+            return finalResult;
         }
+
 
         private DirectoryEntry FindGroupByName(string groupName)
         {

@@ -1839,58 +1839,66 @@ public class AltaUsuarioController : Controller
     //Nuevo enable OnPreMailBox se conecta a la directamente a la shell de exchange antes de ejecutar el comando remoto
     public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword)
     {
-        // ─── 1) Parámetros de configuración ───────────────────────────────────────
+        // 1) Parámetros de configuración
         var server = _config["Exchange:Server"]
-                      ?? throw new InvalidOperationException("Falta Exchange:Server");
+                     ?? throw new InvalidOperationException("Falta Exchange:Server");
         var dbName = _config["Exchange:Database"]
-                      ?? throw new InvalidOperationException("Falta Exchange:Database");
+                     ?? throw new InvalidOperationException("Falta Exchange:Database");
         var domain = _config["ActiveDirectory:DomainName"]
-                      ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
+                     ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
 
-        // ─── 2) Credenciales seguras ─────────────────────────────────────────────
-        var secure = new SecureString();
-        foreach (var c in adminPassword) secure.AppendChar(c);
-        var cred = new PSCredential($"{domain}\\{adminRunAs}", secure);
+        // 2) Impersonación para obtener ticket Kerberos
+        if (!LogonUser(
+                adminRunAs,
+                domain,
+                adminPassword,
+                LOGON32_LOGON_NEW_CREDENTIALS,
+                LOGON32_PROVIDER_DEFAULT,
+                out var userToken))
+        {
+            var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
+            throw new InvalidOperationException($"Imposible impersonar: {err}");
+        }
 
-        // ─── 3) Abre una Runspace a la EMS ────────────────────────────────────────
-        var initial = InitialSessionState.CreateDefault();
-        using var runspace = RunspaceFactory.CreateRunspace(initial);
-        runspace.Open();
+        using var safeToken = new SafeAccessTokenHandle(userToken);
 
-        // Crear la PowerShell asociada a la runspace
-        using var ps = PowerShell.Create();
-        ps.Runspace = runspace;
+        // 3) Ejecutar todo bajo la identidad impersonada
+        WindowsIdentity.RunImpersonated(safeToken, () =>
+        {
+            // 3.1) Configurar conexión WinRM a la EMS de Exchange
+            var uri = new Uri($"http://{server}/PowerShell/");
+            var connectionInfo = new WSManConnectionInfo(
+                uri,
+                "http://schemas.microsoft.com/powershell/Microsoft.Exchange",
+                credential: null  // usa Kerberos delegado
+            )
+            {
+                AuthenticationMechanism = AuthenticationMechanism.Negotiate,
+                OperationTimeout = 4 * 60 * 1000,  // 4 minutos
+                OpenTimeout = 1 * 60 * 1000   // 1 minuto
+            };
 
-        // 3.1) New-PSSession contra la EMS del servidor on-prem
-        ps.AddCommand("New-PSSession")
-          .AddParameter("ConfigurationName", "Microsoft.Exchange")
-          .AddParameter("ConnectionUri", new Uri($"http://{server}/PowerShell/"))
-          .AddParameter("Authentication", "Kerberos")      // O "Negotiate"
-          .AddParameter("Credential", cred);
+            // 3.2) Abrir runspace remoto
+            using var runspace = RunspaceFactory.CreateRunspace(connectionInfo);
+            runspace.Open();
 
-        var newSession = ps.Invoke<PSSession>().FirstOrDefault();
-        ThrowIfErrors(ps, "crear la sesión EMS");
+            // 3.3) Invocar Enable-Mailbox directamente en ese runspace
+            using var ps = PowerShell.Create();
+            ps.Runspace = runspace;
+            ps.AddCommand("Enable-Mailbox")
+              .AddParameter("Identity", $"{domain}\\{username}")
+              .AddParameter("Alias", username)
+              .AddParameter("Database", dbName);
 
-        // 3.2) Importar la sesión para exponer los cmdlets locales
-        ps.Commands.Clear();
-        ps.AddCommand("Import-PSSession")
-          .AddParameter("Session", newSession)
-          .AddParameter("DisableNameChecking");
-        ps.Invoke();
-        ThrowIfErrors(ps, "importar la sesión EMS");
-
-        // ─── 4) Lanza Enable-Mailbox dentro de esa sesión ─────────────────────────
-        ps.Commands.Clear();
-        ps.AddCommand("Enable-Mailbox")
-          .AddParameter("Identity", $"{domain}\\{username}")
-          .AddParameter("Alias", username)
-          .AddParameter("Database", dbName);
-        ps.Invoke();
-        ThrowIfErrors(ps, "habilitar el buzón");
-
-        // ─── 5) Limpieza ──────────────────────────────────────────────────────────
-        ps.Commands.Clear();
-        ps.AddCommand("Remove-PSSession").AddParameter("Session", newSession).Invoke();
+            ps.Invoke();
+            if (ps.Streams.Error.Count > 0)
+            {
+                var errs = string.Join(";\n", ps.Streams.Error
+                                               .ReadAll()
+                                               .Select(e => e.ToString()));
+                throw new InvalidOperationException($"Error al habilitar buzón on-prem via Kerberos: {errs}");
+            }
+        });
     }
 
     private static void ThrowIfErrors(PowerShell ps, string paso)
