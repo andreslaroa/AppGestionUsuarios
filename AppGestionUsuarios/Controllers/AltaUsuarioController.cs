@@ -1700,20 +1700,27 @@ public class AltaUsuarioController : Controller
 
     public (bool Success, string OutputOrError) SyncDeltaOnVanGogh()
     {
+        // 0) Recuperar usuario y clave de sesión
+        string adminUsername = HttpContext.Session.GetString("adminUser");
+        var encryptedPass = HttpContext.Session.GetString("adminPassword");
+        var adminPassword = _protector.Unprotect(encryptedPass);
+
         // 1) Servidor ADSync desde configuración
         var server = _config["AzureAdSync:SyncServer"]
                      ?? throw new InvalidOperationException("Falta AzureAdSync:SyncServer en config");
 
-        // 2) Construimos el script remoto
-        //    Usamos comillas simples para que se interpole bien en -Command
+        // 2) Construimos el script PowerShell completo
+        //    Creamos un SecureString y un PSCredential, luego Invoke-Command con -Credential.
         var remoteScript = $@"
-Invoke-Command -ComputerName '{server}' -ScriptBlock {{
-    Import-Module ADSync -ErrorAction Stop
-    Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
-}} -ErrorAction Stop
-";
+      $sec = ConvertTo-SecureString '{adminPassword}' -AsPlainText -Force
+      $cred = New-Object System.Management.Automation.PSCredential('{adminUsername}', $sec)
+      Invoke-Command -ComputerName '{server}' -Credential $cred -ScriptBlock {{
+          Import-Module ADSync -ErrorAction Stop
+          Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
+      }} -ErrorAction Stop
+    ";
 
-        // 3) Preparamos el proceso externo
+        // 3) Preparamos el proceso externo de PowerShell
         var psi = new ProcessStartInfo
         {
             FileName = "powershell.exe",
@@ -1730,24 +1737,24 @@ Invoke-Command -ComputerName '{server}' -ScriptBlock {{
             if (proc == null)
                 return (false, "No se pudo iniciar powershell.exe");
 
-            // 4) Capturamos stdout/stderr
+            // 4) Capturamos stdout y stderr
             string stdout = proc.StandardOutput.ReadToEnd();
             string stderr = proc.StandardError.ReadToEnd();
             proc.WaitForExit();
 
-            // 5) Interpretamos el exit code
+            // 5) Evaluamos el código de salida
             if (proc.ExitCode != 0)
             {
                 var errorText = !string.IsNullOrWhiteSpace(stderr) ? stderr : stdout;
                 return (false, errorText.Trim());
             }
 
-            // 6) Éxito
+            // 6) Éxito: devolvemos la salida
             return (true, stdout.Trim());
         }
         catch (Exception ex)
         {
-            // Fallo al lanzar el proceso
+            // 7) Cualquier fallo al invocar powershell.exe
             return (false, ex.Message);
         }
     }
