@@ -127,6 +127,7 @@ namespace AppGestionUsuarios.Controllers
                 string rawInput = requestData["username"];
                 string action = requestData["action"].ToLower();
                 string username = ExtractUsername(rawInput);
+
                 if (username == null)
                 {
                     finalResult = Json(new { success = false, message = "Formato de usuario inválido." });
@@ -135,7 +136,8 @@ namespace AppGestionUsuarios.Controllers
 
                 try
                 {
-                    using var root = new DirectoryEntry(domainName);
+                    // Usamos DomainPath, que debe ser algo como "LDAP://DC=aytosa,DC=inet"
+                    using var root = new DirectoryEntry(DomainPath);
                     using var searcher = new DirectorySearcher(root)
                     {
                         Filter = $"(&(objectClass=user)(sAMAccountName={username}))",
@@ -171,7 +173,13 @@ namespace AppGestionUsuarios.Controllers
                 }
                 catch (Exception ex)
                 {
-                    finalResult = Json(new { success = false, message = $"Error al {requestData["action"]} usuario: {ex.Message}" });
+                    // Devolvemos ex.ToString() para ver la causa real
+                    finalResult = Json(new
+                    {
+                        success = false,
+                        message = $"Error al {requestData["action"]} usuario: {ex.Message}",
+                        details = ex.ToString()
+                    });
                 }
             });
 
@@ -181,6 +189,7 @@ namespace AppGestionUsuarios.Controllers
             // 6) Retornar siempre JSON
             return finalResult;
         }
+
 
 
         // POST: /HabilitarDeshabilitarUsuario/GetUserGroups

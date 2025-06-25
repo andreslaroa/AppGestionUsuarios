@@ -16,6 +16,8 @@ using System.Management.Automation.Runspaces;
 using System.ComponentModel;
 using Microsoft.Win32.SafeHandles;
 using Microsoft.AspNetCore.DataProtection;
+using System.Runtime.Intrinsics.Arm;
+using Microsoft.PowerShell;
 using System.Diagnostics;
 
 
@@ -42,7 +44,7 @@ public class AltaUsuarioController : Controller
 
     //Esto se utiliza para obtener las credenciales de usuario
     private readonly IDataProtector _protector;
-    
+
 
     //Esto se utiliza para poder leer la información de appsettings
     private readonly IConfiguration _config;
@@ -908,7 +910,7 @@ public class AltaUsuarioController : Controller
         return Json(new { success = userCreated, message });
     }
 
-    
+
     //Método para crear el alta complta de usuario con correo electrónico
     //[HttpPost]
     //public async Task<IActionResult> AltaCompleta([FromBody] UserModelAltaUsuario user)
@@ -1036,7 +1038,7 @@ public class AltaUsuarioController : Controller
     [HttpPost]
     public async Task<IActionResult> AltaCompleta([FromBody] UserModelAltaUsuario user)
     {
-        
+
 
         string domain = _config["ActiveDirectory:DomainName"];
         string adminUsername = HttpContext.Session.GetString("adminUser");
@@ -1092,7 +1094,7 @@ public class AltaUsuarioController : Controller
                         finalResult = Json(new
                         {
                             success = false,
-                            message = "Alta completa abortada: fallo al crear el usuario en AD." ,
+                            message = "Alta completa abortada: fallo al crear el usuario en AD.",
                             log
                         });
                         return;
@@ -1156,7 +1158,7 @@ public class AltaUsuarioController : Controller
                     log.Add("=== Alta Completa abortada ===");
                 }
 
-                
+
                 // Preparar resultado final
                 var message = ok
                     ? "Alta completa realizada con éxito.\n" + string.Join("\n", log)
@@ -1866,7 +1868,7 @@ public class AltaUsuarioController : Controller
         WindowsIdentity.RunImpersonated(safeToken, () =>
         {
             // 3.1) Configurar conexión WinRM a la EMS de Exchange
-            var uri = new Uri($"http://{server}/PowerShell/");
+            var uri = new Uri($"http://{server}:5986/PowerShell/");
             var connectionInfo = new WSManConnectionInfo(
                 uri,
                 "http://schemas.microsoft.com/powershell/Microsoft.Exchange",
@@ -1929,7 +1931,7 @@ public class AltaUsuarioController : Controller
 
         // 4) Acceder a proxyAddresses
         var proxies = de.Properties["proxyAddresses"];
-                
+
         // 6) Añadir la nueva primaria
         var newProxy = $"SMTP:{samAccountName}@{newDomain}";
         if (!proxies.Cast<string>().Any(p => p.Equals(newProxy, StringComparison.OrdinalIgnoreCase)))
