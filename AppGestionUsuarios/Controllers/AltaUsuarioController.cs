@@ -16,8 +16,6 @@ using System.Management.Automation.Runspaces;
 using System.ComponentModel;
 using Microsoft.Win32.SafeHandles;
 using Microsoft.AspNetCore.DataProtection;
-using System.Runtime.Intrinsics.Arm;
-using Microsoft.PowerShell;
 using System.Diagnostics;
 
 
@@ -1700,21 +1698,22 @@ public class AltaUsuarioController : Controller
         }
     }
 
-    public (bool Success, string ErrorMessage) SyncDeltaOnVanGogh()
+    public (bool Success, string OutputOrError) SyncDeltaOnVanGogh()
     {
-        // 1) Servidor de Azure AD Connect (config)
+        // 1) Servidor ADSync desde configuración
         var server = _config["AzureAdSync:SyncServer"]
                      ?? throw new InvalidOperationException("Falta AzureAdSync:SyncServer en config");
 
-        // 2) Construyo el bloque remoto completo (comillas dobles escapadas)
+        // 2) Construimos el script remoto
+        //    Usamos comillas simples para que se interpole bien en -Command
         var remoteScript = $@"
-      Invoke-Command -ComputerName '{server}' {{
-        Import-Module ADSync -ErrorAction Stop
-        Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
-      }} -ErrorAction Stop
-    ";
+Invoke-Command -ComputerName '{server}' -ScriptBlock {{
+    Import-Module ADSync -ErrorAction Stop
+    Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
+}} -ErrorAction Stop
+";
 
-        // 3) Preparo el ProcessStartInfo para powershell.exe
+        // 3) Preparamos el proceso externo
         var psi = new ProcessStartInfo
         {
             FileName = "powershell.exe",
@@ -1727,29 +1726,28 @@ public class AltaUsuarioController : Controller
 
         try
         {
-            using var process = System.Diagnostics.Process.Start(psi);
-            if (process == null)
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null)
                 return (false, "No se pudo iniciar powershell.exe");
 
-            // 4) Leo salida y error
-            string stdout = process.StandardOutput.ReadToEnd();
-            string stderr = process.StandardError.ReadToEnd();
-            process.WaitForExit();
+            // 4) Capturamos stdout/stderr
+            string stdout = proc.StandardOutput.ReadToEnd();
+            string stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit();
 
-            // 5) Si el código de salida no es cero, lo devolvemos como error
-            if (process.ExitCode != 0)
+            // 5) Interpretamos el exit code
+            if (proc.ExitCode != 0)
             {
-                var msg = string.IsNullOrWhiteSpace(stderr)
-                    ? $"Salida inesperada (exit {process.ExitCode}): {stdout}"
-                    : stderr;
-                return (false, msg.Trim());
+                var errorText = !string.IsNullOrWhiteSpace(stderr) ? stderr : stdout;
+                return (false, errorText.Trim());
             }
 
-            // 6) Éxito, podemos devolver stdout si queremos
+            // 6) Éxito
             return (true, stdout.Trim());
         }
         catch (Exception ex)
         {
+            // Fallo al lanzar el proceso
             return (false, ex.Message);
         }
     }
