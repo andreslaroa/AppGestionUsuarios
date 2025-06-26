@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.DataProtection;
 using System.Runtime.Intrinsics.Arm;
 using Microsoft.PowerShell;
 using System.Diagnostics;
+using System.DirectoryServices.ActiveDirectory;
 
 
 
@@ -905,127 +906,7 @@ public class AltaUsuarioController : Controller
     }
 
 
-    //Método para crear el alta complta de usuario con correo electrónico
-    //[HttpPost]
-    //public async Task<IActionResult> AltaCompleta([FromBody] UserModelAltaUsuario user)
-    //{
-    //    var log = new List<string>();
-    //    bool ok = true;
-
-    //    if (user == null || string.IsNullOrEmpty(user.Username))
-    //        return Json(new { success = false, message = "No se recibieron datos válidos." });
-
-    //    if (string.IsNullOrWhiteSpace(user.adminUser) || string.IsNullOrWhiteSpace(user.adminPassword))
-    //        return Json(new { success = false, message = "Faltan credenciales de administrador Exchange." });
-
-    //    log.Add("Validación de credenciales del administrador...");
-    //    if (!ValidateCredentials(user.adminUser, user.adminPassword))
-    //        return Json(new { success = false, message = "Credenciales de administrador exchange incorrectas" });
-    //    log.Add("[OK] Credenciales validadas correctamente.");
-
-    //    log.Add("Inicializando GraphServiceClient...");
-    //    var tenantId = _config["AzureAd:TenantId"] ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
-    //    var clientId = _config["AzureAd:ClientId"] ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
-    //    var clientSecret = _config["AzureAd:ClientSecret"] ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
-    //    var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-    //    _graphClient = new GraphServiceClient(credential);
-    //    log.Add("[OK] GraphServiceClient inicializado.");
-
-    //    var samAccountName = user.Username;
-    //    var username = samAccountName;
-
-    //    try
-    //    {
-    //        log.Add("=== Alta Completa iniciado: " + DateTime.Now + " ===");
-
-    //        // Paso 1: Crear usuario en AD
-    //        log.Add("Paso 1: Intentando crear el usuario en AD...");
-    //        var createResult = CreateUser(user) as JsonResult;
-    //        dynamic createData = createResult?.Value;
-    //        if (createData == null || !(bool)createData.success)
-    //        {
-    //            log.Add("[ERROR] Fallo al crear el usuario en AD: " + (createData?.message ?? "sin mensaje"));
-    //            return Json(new
-    //            {
-    //                success = false,
-    //                message = "Alta completa abortada: fallo al crear el usuario en AD.",
-    //                log
-    //            });
-    //        }
-    //        log.Add("[OK] Usuario creado en AD correctamente.");
-
-
-    //        // Paso 2: Añadir a grupo de licencias
-    //        log.Add("Paso 2: Añadiendo al grupo de licencias...");
-    //        var grupoResult = ModifyUserGroup(samAccountName) as JsonResult;
-    //        dynamic grupoData = grupoResult?.Value;
-    //        if (grupoData == null || !(bool)grupoData.success)
-    //        {
-    //            log.Add("[ERROR] No se pudo añadir al grupo: " + (grupoData?.message ?? "sin mensaje"));
-    //            ok = false;
-    //        }
-    //        else
-    //        {
-    //            log.Add("[OK] Usuario añadido al grupo de licencias.");
-    //        }
-
-    //        // Paso 3: Sincronizar con Azure AD
-    //        log.Add("Paso 3: Lanzando sincronización Delta con Azure AD Connect...");
-    //        var (syncOk, syncErr) = SyncDeltaOnVanGogh();
-    //        if (!syncOk)
-    //        {
-    //            log.Add("[ERROR] Error en la sincronización: " + syncErr);
-    //            ok = false;
-    //            throw new InvalidOperationException(syncErr);
-    //        }
-    //        log.Add("[OK] Sincronización Delta completada.");
-
-    //        // Paso 4: Esperar a que aparezca en Azure AD
-    //        log.Add("Paso 4: Esperando aparición del usuario en Azure AD...");
-    //        var exists = await WaitForAzureUser(samAccountName);
-    //        if (exists)
-    //            log.Add("[OK] Usuario encontrado en Azure AD.");
-    //        else
-    //            log.Add("[WARN] Timeout esperando al usuario en Azure AD.");
-
-    //        // Paso 5: Crear buzón on-prem
-    //        log.Add("Paso 5: Habilitando buzón on-prem...");
-    //        EnableOnPremMailbox(username, user.adminUser, user.adminPassword);
-    //        log.Add("[OK] Buzón on-prem habilitado correctamente.");
-
-    //        // Paso 6: Actualizar proxyAddresses
-    //        log.Add("Paso 6: Actualizando proxyAddresses...");
-    //        UpdateProxyAddresses(samAccountName);
-    //        log.Add("[OK] proxyAddresses actualizadas.");
-
-    //        // Paso 7: Crear lote de migración
-    //        log.Add("Paso 7: Creando y lanzando lote de migración...");
-    //        CreateMigrationBatch(new[] { username });
-    //        log.Add("[OK] Lote de migración lanzado.");
-
-    //        log.Add("=== Alta Completa finalizada con éxito ===");
-    //    }
-    //    catch (Exception ex)
-    //    {
-    //        ok = false;
-    //        log.Add("[ERROR] " + ex.Message);
-    //        log.Add("=== Alta Completa abortada ===");
-    //    }
-
-    //    // Guardar log en disco
-    //    System.IO.File.WriteAllLines(
-    //        Path.Combine(Path.GetTempPath(), $"AltaCompleta_{samAccountName}.log"),
-    //        log);
-
-    //    var message = ok
-    //        ? "Alta completa realizada con éxito.\n" + string.Join("\n", log)
-    //        : "Se produjeron errores en la Alta Completa:\n" + string.Join("\n", log);
-
-    //    return Json(new { success = ok, message });
-    //}
-
-
-
+    
     //Función encargada de comvertir el username recibido de una vista en string y pasarlo a la función que lo busca en AD
 
 
@@ -1791,166 +1672,79 @@ public class AltaUsuarioController : Controller
         return false;
     }
 
-
-    
-
-    //Nuevo enable OnPreMailBox se conecta a la directamente a la shell de exchange antes de ejecutar el comando remoto
-    //public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword)
-    //{
-    //    // 1) Parámetros de configuración
-    //    var server = _config["Exchange:Server"]
-    //                 ?? throw new InvalidOperationException("Falta Exchange:Server");
-    //    var dbName = _config["Exchange:Database"]
-    //                 ?? throw new InvalidOperationException("Falta Exchange:Database");
-    //    var domain = _config["ActiveDirectory:DomainName"]
-    //                 ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
-
-    //    // 2) Impersonación para obtener ticket Kerberos
-    //    if (!LogonUser(
-    //            adminRunAs,
-    //            domain,
-    //            adminPassword,
-    //            LOGON32_LOGON_NEW_CREDENTIALS,
-    //            LOGON32_PROVIDER_DEFAULT,
-    //            out var userToken))
-    //    {
-    //        var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
-    //        throw new InvalidOperationException($"Imposible impersonar: {err}");
-    //    }
-
-    //    using var safeToken = new SafeAccessTokenHandle(userToken);
-
-    //    // 3) Ejecutar todo bajo la identidad impersonada
-    //    WindowsIdentity.RunImpersonated(safeToken, () =>
-    //    {
-    //        // 3.1) Configurar conexión WinRM a la EMS de Exchange
-    //        var uri = new Uri($"http://{server}:5986/PowerShell/");
-    //        var connectionInfo = new WSManConnectionInfo(
-    //            uri,
-    //            "http://schemas.microsoft.com/powershell/Microsoft.Exchange",
-    //            credential: null  // usa Kerberos delegado
-    //        )
-    //        {
-    //            AuthenticationMechanism = AuthenticationMechanism.Negotiate,
-    //            OperationTimeout = 4 * 60 * 1000,  // 4 minutos
-    //            OpenTimeout = 1 * 60 * 1000   // 1 minuto
-    //        };
-
-    //        // 3.2) Abrir runspace remoto
-    //        using var runspace = RunspaceFactory.CreateRunspace(connectionInfo);
-    //        runspace.Open();
-
-    //        // 3.3) Invocar Enable-Mailbox directamente en ese runspace
-    //        using var ps = PowerShell.Create();
-    //        ps.Runspace = runspace;
-    //        ps.AddCommand("Enable-Mailbox")
-    //          .AddParameter("Identity", $"{domain}\\{username}")
-    //          .AddParameter("Alias", username)
-    //          .AddParameter("Database", dbName);
-
-    //        ps.Invoke();
-    //        if (ps.Streams.Error.Count > 0)
-    //        {
-    //            var errs = string.Join(";\n", ps.Streams.Error
-    //                                           .ReadAll()
-    //                                           .Select(e => e.ToString()));
-    //            throw new InvalidOperationException($"Error al habilitar buzón on-prem via Kerberos: {errs}");
-    //        }
-    //    });
-    //}
-
     public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword)
     {
-        // 1) Parámetros de configuración
+        // 1) Parámetros de configuración ----------------------------------
         var server = _config["Exchange:Server"]
-                     ?? throw new InvalidOperationException("Falta Exchange:Server");
+                      ?? throw new InvalidOperationException("Falta Exchange:Server");
         var dbName = _config["Exchange:Database"]
-                     ?? throw new InvalidOperationException("Falta Exchange:Database");
+                      ?? throw new InvalidOperationException("Falta Exchange:Database");
         var domain = _config["ActiveDirectory:DomainName"]
-                     ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
+                      ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
 
-        // 2) Impersonación para conseguir ticket Kerberos delegado
-        if (!LogonUser(
-            adminRunAs,
-            domain,
-            adminPassword,
-            LOGON32_LOGON_NEW_CREDENTIALS,
-            LOGON32_PROVIDER_DEFAULT,
-            out var userToken))
-        {
-            var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
-            throw new InvalidOperationException($"Imposible impersonar: {err}");
-        }
-
-        using var safeToken = new SafeAccessTokenHandle(userToken);
-
-        // 3) Ejecutar bajo la identidad impersonada
-        WindowsIdentity.RunImpersonated(safeToken, () =>
-        {
-            // Construimos la URL para EMS on-prem (incluyendo parámetros recomendados)
-            var url = $"http://{server}/PowerShell?serializationLevel=Full;clientApplication=AppGestionUsuarios";
-
-            // Abrimos el runspace contra EMS, usando Negotiate (Kerberos/NTLM)
-            using var runspace = OpenExchangeManagementRunspace(
-                url,
-                authenticationMechanism: AuthenticationMechanism.Negotiate);
-
-            // Ejecutamos el cmdlet Enable-Mailbox
-            using var ps = PowerShell.Create();
-            ps.Runspace = runspace;
-            ps.AddCommand("Enable-Mailbox")
-              .AddParameter("Identity", $"{domain}\\{username}")
-              .AddParameter("Alias", username)
-              .AddParameter("Database", dbName);
-
-            var results = ps.Invoke();
-            if (ps.Streams.Error.Count > 0)
-            {
-                var errs = string.Join(";\n", ps.Streams.Error
-                                               .ReadAll()
-                                               .Select(e => e.ToString()));
-                throw new InvalidOperationException($"Enable-Mailbox falló: {errs}");
-            }
-        });
-    }
-
-    private static SecureString ConvertToSecureString(string password)
-    {
-        var ss = new SecureString();
-        foreach (var c in password) ss.AppendChar(c);
-        ss.MakeReadOnly();
-        return ss;
-    }
-
-    private static Runspace OpenExchangeManagementRunspace(
-    string url,
-    AuthenticationMechanism authenticationMechanism = AuthenticationMechanism.Kerberos,
-    string userName = null,
-    string password = null)
-    {
-        PSCredential shellCred = null;
-        if (!string.IsNullOrWhiteSpace(userName) &&
-            !string.IsNullOrWhiteSpace(password))
-        {
-            shellCred = new PSCredential(userName, ConvertToSecureString(password));
-        }
-
-        var shellConnection = new WSManConnectionInfo(
-            new Uri(url),
-            "http://schemas.microsoft.com/powershell/Microsoft.Exchange",
-            shellCred)
-        {
-            AuthenticationMechanism = authenticationMechanism
-        };
-
-        var runspace = RunspaceFactory.CreateRunspace(shellConnection);
+        // 2) Runspace local (misma máquina que la app) --------------------
+        using var runspace = RunspaceFactory.CreateRunspace();
         runspace.Open();
-        return runspace;
+
+        using var ps = PowerShell.Create();
+        ps.Runspace = runspace;
+
+        //-----------------------------------------------------------------
+        // COMANDO 1 – $cred con usuario/contraseña ------------------------
+        //-----------------------------------------------------------------
+        ps.AddScript($@"
+        $securePwd = ConvertTo-SecureString '{EscapeSingleQuotes(adminPassword)}' -AsPlainText -Force
+        $cred      = [System.Management.Automation.PSCredential]::new('{domain}\\{adminRunAs}', $securePwd)
+    ");
+        ps.Invoke(); ComprobarErrores(ps, "$cred"); ps.Commands.Clear();
+
+        //-----------------------------------------------------------------
+        // COMANDO 2 – New-PSSession remoto Exchange -----------------------
+        //-----------------------------------------------------------------
+        ps.AddScript($@"
+        $Session = New-PSSession -ConfigurationName Microsoft.Exchange `
+                                 -ConnectionUri http://{server}/powershell `
+                                 -Authentication Kerberos `
+                                 -Credential $cred
+    ");
+        ps.Invoke(); ComprobarErrores(ps, "New-PSSession"); ps.Commands.Clear();
+
+        //-----------------------------------------------------------------
+        // COMANDO 3 – Importar cmdlets de la sesión -----------------------
+        //-----------------------------------------------------------------
+        ps.AddScript("Import-PSSession -Session $Session -DisableNameChecking");
+        ps.Invoke(); ComprobarErrores(ps, "Import-PSSession"); ps.Commands.Clear();
+
+        //-----------------------------------------------------------------
+        // COMANDO 4 – Añadir snap-in Exchange (compatibilidad) ------------
+        //-----------------------------------------------------------------
+        ps.AddScript("Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue");
+        ps.Invoke(); ComprobarErrores(ps, "Add-PSSnapin"); ps.Commands.Clear();
+
+        //-----------------------------------------------------------------
+        // COMANDO 5 – Enable-Mailbox -------------------------------------
+        //-----------------------------------------------------------------
+        ps.AddCommand("Enable-Mailbox")
+          .AddParameter("Identity", $"{domain}\\{username}")
+          .AddParameter("Database", dbName);
+        ps.Invoke(); ComprobarErrores(ps, "Enable-Mailbox"); ps.Commands.Clear();
+
+        //-----------------------------------------------------------------
+        // COMANDO 6 – Cerrar la sesión remota ----------------------------
+        //-----------------------------------------------------------------
+        ps.AddScript("Remove-PSSession -Session $Session");
+        ps.Invoke(); ComprobarErrores(ps, "Remove-PSSession"); ps.Commands.Clear();
     }
 
+    // ------------------- MÉTODOS AUXILIARES ---------------------------
+    static void ComprobarErrores(PowerShell ps, string etapa)
+    {
+        if (ps.Streams.Error.Count == 0) return;
+        var errs = string.Join(";\n", ps.Streams.Error.ReadAll().Select(e => e.ToString()));
+        throw new InvalidOperationException($"{etapa} falló: {errs}");
+    }
 
-
-
+    static string EscapeSingleQuotes(string s) => s.Replace("'", "''");
 
 
     private static void ThrowIfErrors(PowerShell ps, string paso)
@@ -2040,65 +1834,78 @@ public class AltaUsuarioController : Controller
 
     }
 
-    /// <summary>
-    /// Crea un lote de migración híbrida en Exchange Online utilizando el módulo ExchangeOnlineManagement.
-    /// Si el módulo no está instalado, se instala en el perfil del usuario.
-    /// </summary>
-    /// //Método de migración antiguo sin usar la exchange shell
-
 
     //Nueva creación de lote de migración
-    public void CreateMigrationBatch(string[] upns)
+    public void CreateMigrationBatch(string[] aliases)
     {
-        // Config
-        var appId = _config["AzureAd:ClientId"]
-                     ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
-        var tenantId = _config["AzureAd:TenantId"]
-                     ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
-        var secret = _config["AzureAd:ClientSecret"]
-                     ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
+        if (aliases is null || aliases.Length == 0)
+            throw new ArgumentException("Lista de usuarios vacía", nameof(aliases));
 
-        var endpoint = _config["Exchange:Endpoint"] ?? "saura";
-        var tgtDomain = _config["Exchange:TargetDeliveryDomain"] ?? "aytosalamanca.mail.onmicrosoft.com";
-        var batchName = $"Migra_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+        // --- Parámetros de configuración ---------------------------------
+        var endpointName = _config["Exchange:Endpoint"] ?? "saura";
+        var targetDomain = _config["Exchange:TargetDeliveryDomain"] ?? "aytosalamanca.mail.onmicrosoft.com";
+        var onPremDomain = _config["ActiveDirectory:EmailDomain"] ?? "aytosalamanca.es";
+        string adminUser = HttpContext.Session.GetString("adminUser");
+        var encryptedPass = HttpContext.Session.GetString("adminPassword");
+        var adminPwdPlain = _protector.Unprotect(encryptedPass) ?? throw new InvalidOperationException("Falta Exchange:AdminPassword");
 
-        // 1) Runspace con módulo EMS-EXO precargado
-        var iss = InitialSessionState.CreateDefault();
-        iss.ImportPSModule(new[] { "ExchangeOnlineManagement" });
-        using var run = RunspaceFactory.CreateRunspace(iss);
-        run.Open();
+        // --- Credencial para la sesión remota ----------------------------
+        var securePwd = new System.Security.SecureString();
+        foreach (char c in adminPwdPlain) securePwd.AppendChar(c);
+        var cred = new PSCredential(adminUser, securePwd);
+
+        var mailAddresses = aliases
+        .Select(a => $"{a}@{onPremDomain}")
+        .Select(a => a.Replace("'", "''"))   // escapar comilla simple
+        .ToArray();
+
+        // ----- Runspace local + sesión remota ---------------------------
+        using var runspace = RunspaceFactory.CreateRunspace();
+        runspace.Open();
 
         using var ps = PowerShell.Create();
-        ps.Runspace = run;
+        ps.Runspace = runspace;
 
-        // 2) Conectar a EXO con App-only + Client Secret
-        ps.AddCommand("Connect-ExchangeOnline")
-          .AddParameter("AppId", appId)
-          .AddParameter("TenantId", tenantId)   // ← NO “Organization”
-          .AddParameter("ClientSecret", secret)
-          .AddParameter("ShowBanner", false);
-        ps.Invoke();
-        ThrowIfErrors(ps, "conectar a Exchange Online");
-        ps.Commands.Clear();
+        // 1) Abrir sesión a Exchange on-prem y cargar cmdlets
+        ps.AddScript($@"
+        $S  = New-PSSession -ConfigurationName Microsoft.Exchange `
+                            -ConnectionUri http://{endpointName}/PowerShell `
+                            -Authentication Kerberos `
+                            -Credential $cred
+        Import-PSSession $S -DisableNameChecking
+        Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+    ");
+        ps.Invoke(); Check(ps, "PSSession"); ps.Commands.Clear();
 
-        // 3) Crear el Migration Batch
-        ps.AddCommand("New-MigrationBatch")
-          .AddParameter("Name", batchName)
-          .AddParameter("MigrationType", "RemoteMove")
-          .AddParameter("SourceEndpoint", endpoint)
-          .AddParameter("TargetDeliveryDomain", tgtDomain)
-          .AddParameter("Users", upns)          // array directo
-          .AddParameter("AutoStart", true)
-          .AddParameter("AutoComplete", true);
-        ps.Invoke();
-        ThrowIfErrors(ps, "crear el lote de migración");
-        ps.Commands.Clear();
+        // 2) Crear el lote Remote Move con -UserList
+        var batchName = $"Migra_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+        var psArray = "@('" + string.Join("','", mailAddresses) + "')";
 
-        // 4) Desconectar sesión
-        ps.AddCommand("Disconnect-ExchangeOnline")
-          .AddParameter("Confirm", false)
-          .Invoke();
+        ps.AddScript($@"
+        $users = {psArray}
+        New-MigrationBatch -Name '{batchName}' `
+                           -SourceEndpoint '{endpointName}' `
+                           -UserList $users `
+                           -TargetDeliveryDomain '{targetDomain}' `
+                           -AutoStart -AutoComplete
+    ");
+        ps.Invoke(); Check(ps, "New-MigrationBatch"); ps.Commands.Clear();
+
+        // 3) Cerrar la sesión
+        ps.AddScript("Get-PSSession | Remove-PSSession");
+        ps.Invoke(); Check(ps, "Remove-PSSession");
     }
+
+    // ---------- Helper para errores -------------------------------------
+    static void Check(PowerShell ps, string etapa)
+    {
+        if (ps.Streams.Error.Count == 0) return;
+        var msg = string.Join(" | ", ps.Streams.Error.Select(e => e.ToString()));
+        throw new InvalidOperationException($"{etapa} falló: {msg}");
+    }
+
+
+
 
     public bool ValidateCredentials(string usuario, string password)
     {
