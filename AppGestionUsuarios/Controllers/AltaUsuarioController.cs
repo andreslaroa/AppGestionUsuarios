@@ -906,7 +906,7 @@ public class AltaUsuarioController : Controller
     }
 
 
-    
+
     //Función encargada de comvertir el username recibido de una vista en string y pasarlo a la función que lo busca en AD
 
 
@@ -1674,67 +1674,80 @@ public class AltaUsuarioController : Controller
 
     public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword)
     {
-        // 1) Parámetros de configuración ----------------------------------
+        // Parámetros de configuración
         var server = _config["Exchange:Server"]
-                      ?? throw new InvalidOperationException("Falta Exchange:Server");
+                     ?? throw new InvalidOperationException("Falta Exchange:Server");
         var dbName = _config["Exchange:Database"]
-                      ?? throw new InvalidOperationException("Falta Exchange:Database");
+                     ?? throw new InvalidOperationException("Falta Exchange:Database");
         var domain = _config["ActiveDirectory:DomainName"]
-                      ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
+                     ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
 
-        // 2) Runspace local (misma máquina que la app) --------------------
-        using var runspace = RunspaceFactory.CreateRunspace();
-        runspace.Open();
+        // 1) Logon con credenciales de administrador
+        if (!LogonUser(
+                adminRunAs,
+                domain,
+                adminPassword,
+                LOGON32_LOGON_NEW_CREDENTIALS,
+                LOGON32_PROVIDER_DEFAULT,
+                out var userToken))
+        {
+            var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
+        }
 
-        using var ps = PowerShell.Create();
-        ps.Runspace = runspace;
+        // 2) Impersonación y ejecución de PowerShell bajo ese contexto
+        // 4) Envolver TODO en impersonación
+        using var safeToken = new SafeAccessTokenHandle(userToken);
+        IActionResult finalResult = null;
+        try
+        {
+            WindowsIdentity.RunImpersonated(safeToken, () =>
+            {
+                using var runspace = RunspaceFactory.CreateRunspace();
+                runspace.Open();
 
-        //-----------------------------------------------------------------
-        // COMANDO 1 – $cred con usuario/contraseña ------------------------
-        //-----------------------------------------------------------------
-        ps.AddScript($@"
-        $securePwd = ConvertTo-SecureString '{EscapeSingleQuotes(adminPassword)}' -AsPlainText -Force
-        $cred      = [System.Management.Automation.PSCredential]::new('{domain}\\{adminRunAs}', $securePwd)
-    ");
-        ps.Invoke(); ComprobarErrores(ps, "$cred"); ps.Commands.Clear();
+                using var ps = PowerShell.Create();
+                ps.Runspace = runspace;
 
-        //-----------------------------------------------------------------
-        // COMANDO 2 – New-PSSession remoto Exchange -----------------------
-        //-----------------------------------------------------------------
-        ps.AddScript($@"
-        $Session = New-PSSession -ConfigurationName Microsoft.Exchange `
-                                 -ConnectionUri http://{server}/powershell `
-                                 -Authentication Kerberos `
-                                 -Credential $cred
-    ");
-        ps.Invoke(); ComprobarErrores(ps, "New-PSSession"); ps.Commands.Clear();
+                // COMANDO 1 – $cred con usuario/contraseña
+                ps.AddScript($@"
+Import-Module Microsoft.PowerShell.Security
+$securePwd = ConvertTo-SecureString '{EscapeSingleQuotes(adminPassword)}' -AsPlainText -Force
+$adminUser  = '{EscapeSingleQuotes(domain)}\\{EscapeSingleQuotes(adminRunAs)}'
+$cred       = New-Object System.Management.Automation.PSCredential($adminUser, $securePwd)
+");
+                ps.Invoke(); ComprobarErrores(ps, "$cred"); ps.Commands.Clear();
 
-        //-----------------------------------------------------------------
-        // COMANDO 3 – Importar cmdlets de la sesión -----------------------
-        //-----------------------------------------------------------------
-        ps.AddScript("Import-PSSession -Session $Session -DisableNameChecking");
-        ps.Invoke(); ComprobarErrores(ps, "Import-PSSession"); ps.Commands.Clear();
+                // COMANDO 2 – New-PSSession remoto Exchange
+                ps.AddScript($@"
+$Session = New-PSSession -ConfigurationName Microsoft.Exchange `
+                         -ConnectionUri http://{server}/PowerShell `
+                         -Authentication Kerberos `
+                         -Credential $cred
+Import-PSSession -Session $Session -DisableNameChecking -ErrorAction SilentlyContinue
+Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+");
+                ps.Invoke(); ComprobarErrores(ps, "New/Import/PSSnapin"); ps.Commands.Clear();
 
-        //-----------------------------------------------------------------
-        // COMANDO 4 – Añadir snap-in Exchange (compatibilidad) ------------
-        //-----------------------------------------------------------------
-        ps.AddScript("Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue");
-        ps.Invoke(); ComprobarErrores(ps, "Add-PSSnapin"); ps.Commands.Clear();
+                // COMANDO 3 – Enable-Mailbox
+                ps.AddCommand("Enable-Mailbox")
+                  .AddParameter("Identity", $"{domain}\\{username}")
+                  .AddParameter("Database", dbName);
+                ps.Invoke(); ComprobarErrores(ps, "Enable-Mailbox"); ps.Commands.Clear();
 
-        //-----------------------------------------------------------------
-        // COMANDO 5 – Enable-Mailbox -------------------------------------
-        //-----------------------------------------------------------------
-        ps.AddCommand("Enable-Mailbox")
-          .AddParameter("Identity", $"{domain}\\{username}")
-          .AddParameter("Database", dbName);
-        ps.Invoke(); ComprobarErrores(ps, "Enable-Mailbox"); ps.Commands.Clear();
+                // COMANDO 4 – Cerrar la sesión remota
+                ps.AddScript("Remove-PSSession -Session $Session");
+                ps.Invoke(); ComprobarErrores(ps, "Remove-PSSession"); ps.Commands.Clear();
 
-        //-----------------------------------------------------------------
-        // COMANDO 6 – Cerrar la sesión remota ----------------------------
-        //-----------------------------------------------------------------
-        ps.AddScript("Remove-PSSession -Session $Session");
-        ps.Invoke(); ComprobarErrores(ps, "Remove-PSSession"); ps.Commands.Clear();
+                runspace.Close();
+            });
+        }
+        catch (Exception e)
+        {
+
+        }
     }
+
+
 
     // ------------------- MÉTODOS AUXILIARES ---------------------------
     static void ComprobarErrores(PowerShell ps, string etapa)
