@@ -169,19 +169,20 @@ public class AltaMasivaController : Controller
             // TODO: dentro de esta lambda se ejecuta TODO bajo impersonación
             await WindowsIdentity.RunImpersonated(safeToken, async () =>
             {
+                
 
                 try 
-                { 
-                    //// --- inicializar GraphServiceClient ---
-                    //var tenantId = _config["AzureAd:TenantId"]
-                    //                   ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
-                    //var clientId = _config["AzureAd:ClientId"]
-                    //                   ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
-                    //var clientSecret = _config["AzureAd:ClientSecret"]
-                    //                   ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
-                    //_graphClient = new GraphServiceClient(
-                    //                       new ClientSecretCredential(tenantId, clientId, clientSecret)
-                    //                   );
+                {
+                    // --- inicializar GraphServiceClient ---
+                    var tenantId = _config["AzureAd:TenantId"]
+                                       ?? throw new InvalidOperationException("Falta AzureAd:TenantId");
+                    var clientId = _config["AzureAd:ClientId"]
+                                       ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
+                    var clientSecret = _config["AzureAd:ClientSecret"]
+                                       ?? throw new InvalidOperationException("Falta AzureAd:ClientSecret");
+                    _graphClient = new GraphServiceClient(
+                                           new ClientSecretCredential(tenantId, clientId, clientSecret)
+                                       );
 
                     // --- validación inicial ---
                     if (request.UsersRaw == null || request.UsersRaw.Count == 0)
@@ -380,45 +381,45 @@ public class AltaMasivaController : Controller
                     }
 
                     // 2) Forzar sincronización Azure AD Connect
-                    //var (syncOk, syncErr) = _altaUsuarioController.SyncDeltaOnVanGogh();
-                    //if (!syncOk)
-                    //{
-                    //    summaryMessages.Add("Error al sincronizar Azure AD Connect: " + syncErr);
-                    //    throw new InvalidOperationException(syncErr);
-                    //}
+                    var (syncOk, syncErr) = _altaUsuarioController.SyncDeltaOnVanGogh();
+                    if (!syncOk)
+                    {
+                        summaryMessages.Add("Error al sincronizar Azure AD Connect: " + syncErr);
+                        throw new InvalidOperationException(syncErr);
+                    }
 
                     // 3) Comprobar si existe el último usuario de la lista en Exchange, lo que querría decir que existen todos
-                    //var lastUser = createdUsernames.LastOrDefault();
+                    var lastUser = createdUsernames.LastOrDefault();
 
-                    //var exists = await _altaUsuarioController.WaitForAzureUser(lastUser);
-                    //if (!exists)
-                    //{
-                    //    summaryMessages.Add($"Timeout esperando al usuario '{lastUser}' en Azure AD. Abortando creación de buzón y correo.");
-                    //    return Json(new
-                    //    {
-                    //        success = false,
-                    //        message = "Aborto: el usuario no apareció en Azure AD antes del timeout.",
-                    //        messages = summaryMessages,
-                    //        created = createdUsernames
-                    //    });
-                    //}
+                    var exists = await _altaUsuarioController.WaitForAzureUser(lastUser);
+                    if (!exists)
+                    {
+                        summaryMessages.Add($"Timeout esperando al usuario '{lastUser}' en Azure AD. Abortando creación de buzón y correo.");
+                        //return Json(new
+                        //{
+                        //    success = false,
+                        //    message = "Aborto: el usuario no apareció en Azure AD antes del timeout.",
+                        //    messages = summaryMessages,
+                        //    created = createdUsernames
+                        //});
+                    }
 
                     // 4) Crear buzón on prem
-                    //foreach (var user in usersForLicenses)
-                    //{
-                    //    try
-                    //    {
+                    foreach (var user in usersForLicenses)
+                    {
+                        try
+                        {
 
-                    //        _altaUsuarioController.EnableOnPremMailbox(user, adminUsername, adminPassword);
-                    //        summaryMessages.Add($"Buzón creado para '{user}'.");
-                    //    }
-                    //    catch (Exception ex)
-                    //    {
-                    //        summaryMessages.Add($"Error creando buzón para '{user}': {ex.Message}");
-                    //        createdUsernames.Remove(user);
-                    //        overallSuccess = false;
-                    //    }
-                    //}
+                            _altaUsuarioController.EnableOnPremMailbox(user, adminUsername, adminPassword);
+                            summaryMessages.Add($"Buzón creado para '{user}'.");
+                        }
+                        catch (Exception ex)
+                        {
+                            summaryMessages.Add($"Error creando buzón para '{user}': {ex.Message}");
+                            createdUsernames.Remove(user);
+                            overallSuccess = false;
+                        }
+                    }
 
                     // 5) Actualizar proxyaddresses en AD
                     foreach (var user in usersForLicenses)
@@ -438,17 +439,17 @@ public class AltaMasivaController : Controller
 
                     //Crear batch de migración
 
-                    //try
-                    //{
-                    //    string[] listaUsuarios = createdUsernames.ToArray();
-                    //    _altaUsuarioController.CreateMigrationBatch(listaUsuarios);
-                    //    summaryMessages.Add("Batch de migración creado con éxito.");
-                    //}
-                    //catch (Exception ex)
-                    //{
-                    //    summaryMessages.Add($"Error creando batch de migración: {ex.Message}");
-                    //    overallSuccess = false;
-                    //}
+                    try
+                    {
+                        string[] listaUsuarios = createdUsernames.ToArray();
+                        _altaUsuarioController.CreateMigrationBatch(listaUsuarios);
+                        summaryMessages.Add("Batch de migración creado con éxito.");
+                    }
+                    catch (Exception ex)
+                    {
+                        summaryMessages.Add($"Error creando batch de migración: {ex.Message}");
+                        overallSuccess = false;
+                    }
 
                     // Capturar errores de RunImpersonated o de inicialización
                     overallSuccess = true;
@@ -473,7 +474,10 @@ public class AltaMasivaController : Controller
                         log = summaryMessages
                     });
                 }
+
+                finalResult = Json(new { success = true, message = "…" });
             });
+            return finalResult;
 
         }
         catch (Exception exOuter)

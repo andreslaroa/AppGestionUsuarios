@@ -1710,22 +1710,22 @@ public class AltaUsuarioController : Controller
 
                 // COMANDO 1 – $cred con usuario/contraseña
                 ps.AddScript($@"
-Import-Module Microsoft.PowerShell.Security
-$securePwd = ConvertTo-SecureString '{EscapeSingleQuotes(adminPassword)}' -AsPlainText -Force
-$adminUser  = '{EscapeSingleQuotes(domain)}\\{EscapeSingleQuotes(adminRunAs)}'
-$cred       = New-Object System.Management.Automation.PSCredential($adminUser, $securePwd)
-");
+                Import-Module Microsoft.PowerShell.Security
+                $securePwd = ConvertTo-SecureString '{EscapeSingleQuotes(adminPassword)}' -AsPlainText -Force
+                $adminUser  = '{EscapeSingleQuotes(domain)}\\{EscapeSingleQuotes(adminRunAs)}'
+                $cred       = New-Object System.Management.Automation.PSCredential($adminUser, $securePwd)
+                ");
                 ps.Invoke(); ComprobarErrores(ps, "$cred"); ps.Commands.Clear();
 
                 // COMANDO 2 – New-PSSession remoto Exchange
                 ps.AddScript($@"
-$Session = New-PSSession -ConfigurationName Microsoft.Exchange `
-                         -ConnectionUri http://{server}/PowerShell `
-                         -Authentication Kerberos `
-                         -Credential $cred
-Import-PSSession -Session $Session -DisableNameChecking -ErrorAction SilentlyContinue
-Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
-");
+                $Session = New-PSSession -ConfigurationName Microsoft.Exchange `
+                                         -ConnectionUri http://{server}/PowerShell `
+                                         -Authentication Kerberos `
+                                         -Credential $cred
+                Import-PSSession -Session $Session -DisableNameChecking -ErrorAction SilentlyContinue
+                Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+                ");
                 ps.Invoke(); ComprobarErrores(ps, "New/Import/PSSnapin"); ps.Commands.Clear();
 
                 // COMANDO 3 – Enable-Mailbox
