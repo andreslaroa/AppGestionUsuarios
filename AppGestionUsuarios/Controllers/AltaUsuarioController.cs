@@ -794,48 +794,94 @@ public class AltaUsuarioController : Controller
                             }
 
                             // 3) Configuración de cuota FSRM en C:\Home\<user>
+                            static string Esc(string s) => s?.Replace("'", "''") ?? "";
+
                             try
                             {
-                                string quota = user.Cuota ?? "HOME-1GB";
-                                string template = quota;
-                                string quotaFolder = Path.Combine(quotaPathBase, user.Username);
+                                string domain = _config["ActiveDirectory:DomainName"];
+                                string adminUsername = HttpContext.Session.GetString("adminUser");
+                                var encryptedPass = HttpContext.Session.GetString("adminPassword");
+                                string adminPassword = _protector.Unprotect(encryptedPass);
 
-                                errors.Add($"Configurando cuota en {quotaFolder} con plantilla {template} sobre {serverName}");
+                                // ─── Crea y abre el Runspace ───────────────────────────────────────
+                                using var runspace = RunspaceFactory.CreateRunspace();
+                                runspace.Open();
 
-                                // Instanciamos FSRM remoto
-                                var fsrmType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", serverName);
-                                if (fsrmType == null)
-                                    throw new Exception($"No instanciable FsrmQuotaManager en {serverName}.");
+                                using var ps = PowerShell.Create();
+                                ps.Runspace = runspace;
 
-                                dynamic qm = Activator.CreateInstance(fsrmType);
-                                try
+                                // ─── Construcción de parámetros ──────────────────────────────────
+                                string template = string.IsNullOrWhiteSpace(user.Cuota) ? "HOME-1GB" : user.Cuota.Trim();
+                                string quotaFolder = Path.Combine(quotaPathBase.TrimEnd('\\'), user.Username.Trim());
+                                string fsrmServer = _config["FsConfig:ServerName"];
+
+                                errors.Add($"[FSRM] Configurando cuota '{template}' en '{quotaFolder}' sobre {fsrmServer}");
+
+                                // ─── Incrusta el script completo ──────────────────────────────────
+                                ps.AddScript($@"
+                                # 1) Credenciales
+                                $securePwd = ConvertTo-SecureString '{Esc(adminPassword)}' -AsPlainText -Force
+                                $cred      = New-Object System.Management.Automation.PSCredential('{Esc(domain)}\{Esc(adminUsername)}',$securePwd)
+
+                                # 2) Ejecuta remótamente y con verbose
+                                Invoke-Command -ComputerName '{Esc(fsrmServer)}' `
+                                                -Credential    $cred `
+                                                -Authentication Kerberos `
+                                                -ArgumentList  '{Esc(quotaFolder)}','{Esc(template)}' `
+                                                -ScriptBlock {{
+                                    param($QuotaPath, $Template)
+
+                                    $VerbosePreference = 'Continue'
+
+                                    Write-Verbose ""⏱  Inicio: $(Get-Date -Format HH:mm:ss)""
+                                    Write-Verbose ""Path      = $QuotaPath""
+                                    Write-Verbose ""Template  = $Template""
+
+                                    Import-Module FileServerResourceManager -ErrorAction Stop
+
+                                    if (-not (Test-Path $QuotaPath)) {{
+                                        Write-Verbose ""Carpeta no existe; se crea → $QuotaPath""
+                                        New-Item -ItemType Directory -Path $QuotaPath | Out-Null
+                                    }}
+
+                                    $existing = Get-FsrmQuota -Path $QuotaPath -ErrorAction SilentlyContinue
+                                    if ($existing) {{
+                                        Write-Verbose 'Cuota encontrada; actualizando…'
+                                        Set-FsrmQuota -Path $QuotaPath -Template $Template
+                                    }} else {{
+                                        Write-Verbose 'Cuota inexistente; creando…'
+                                        New-FsrmQuota -Path $QuotaPath -Template $Template
+                                    }}
+
+                                    Write-Verbose ""✅  Operación completada.""
+                                }} -Verbose
+                                ");
+
+                                // ─── Invoca y captura streams ─────────────────────────────────────
+                                var results = ps.Invoke();
+
+                                // Errores de PowerShell
+                                if (ps.HadErrors)
                                 {
-                                    dynamic existing = null;
-                                    try { existing = qm.GetQuota(quotaFolder); } catch { /* no existe */ }
+                                    foreach (var err in ps.Streams.Error)
+                                        errors.Add("[PS ERROR] " + err.Exception.Message);
+                                    throw new Exception("Error remoting FSRM (ver log de PowerShell).");
+                                }
 
-                                    if (existing != null)
-                                    {
-                                        errors.Add("Cuota existente, actualizando…");
-                                        existing.ApplyTemplate(template);
-                                        existing.Commit();
-                                        errors.Add("Cuota actualizada.");
-                                    }
-                                    else
-                                    {
-                                        dynamic q = qm.CreateQuota(quotaFolder);
-                                        q.ApplyTemplate(template);
-                                        q.Commit();
-                                        errors.Add("Cuota creada.");
-                                    }
-                                }
-                                finally
-                                {
-                                    Marshal.ReleaseComObject(qm);
-                                }
+                                // Trazas verbose (opcional)
+                                foreach (var v in ps.Streams.Verbose)
+                                    errors.Add("[VERBOSE] " + v.Message);
+
+                                // Resultado final (null porque script no devuelve objeto, pero podría retirar)
+                                // foreach (var r in results)
+                                //     errors.Add("[RESULT] " + r.ToString());
+
+                                // No es necesario Close() ni Dispose() explícito; los using se encargan.
                             }
                             catch (Exception ex)
                             {
                                 errors.Add($"Error configurando cuota FSRM: {ex.Message}");
+                                // Propaga o maneja según tu arquitectura
                             }
                         }
                         else
