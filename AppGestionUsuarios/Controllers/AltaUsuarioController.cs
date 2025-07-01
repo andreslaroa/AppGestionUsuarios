@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using System.DirectoryServices;
 using Microsoft.AspNetCore.Authorization;
 using System.Globalization;
@@ -818,65 +818,76 @@ public class AltaUsuarioController : Controller
                                 errors.Add($"[FSRM] Configurando cuota '{template}' en '{quotaFolder}' sobre {fsrmServer}");
 
                                 // ─── Incrusta el script completo ──────────────────────────────────
+                                // Helper de escape
+                                static string Escape(string s) => s?.Replace("'", "''") ?? "";
+
                                 ps.AddScript($@"
-                                # 1) Credenciales
-                                $securePwd = ConvertTo-SecureString '{Esc(adminPassword)}' -AsPlainText -Force
-                                $cred      = New-Object System.Management.Automation.PSCredential('{Esc(domain)}\{Esc(adminUsername)}',$securePwd)
+                                # ————————————————————————————————
+                                # 1) Credenciales (literal)
+                                # ————————————————————————————————
+                                $securePwd = ConvertTo-SecureString '{Escape(adminPassword)}' -AsPlainText -Force
+                                $adminUser = '{Escape(domain)}\{Escape(adminUsername)}'
+                                $cred      = New-Object System.Management.Automation.PSCredential($adminUser, $securePwd)
 
-                                # 2) Ejecuta remótamente y con verbose
-                                Invoke-Command -ComputerName '{Esc(fsrmServer)}' `
-                                                -Credential    $cred `
-                                                -Authentication Kerberos `
-                                                -ArgumentList  '{Esc(quotaFolder)}','{Esc(template)}' `
-                                                -ScriptBlock {{
-                                    param($QuotaPath, $Template)
+                                # ————————————————————————————————
+                                # 2) Prueba de conectividad
+                                # ————————————————————————————————
+                                Write-Verbose 'Probando conexión con {Escape(fsrmServer)}…'
+                                try {{
+                                    Invoke-Command -ComputerName '{Escape(fsrmServer)}' -Credential $cred -Authentication Kerberos -ScriptBlock {{
+                                        'WSMan OK on ' + $env:COMPUTERNAME
+                                    }} -ErrorAction Stop | Write-Verbose
+                                }} catch {{
+                                    Write-Error 'Fallo WSMan: ' + $_.Exception.Message
+                                    throw
+                                }}
 
-                                    $VerbosePreference = 'Continue'
+                                # ————————————————————————————————
+                                # 3) Valores (hardcode para prueba)
+                                # ————————————————————————————————
+                                $Quota      = 'G:\HOME\jdoed'
+                                $TemplateNew= 'HOME-50MB'
+                                Write-Verbose ""Variables en remoto: Quota='$Quota' Template='$TemplateNew'""
 
-                                    Write-Verbose ""⏱  Inicio: $(Get-Date -Format HH:mm:ss)""
-                                    Write-Verbose ""Path      = $QuotaPath""
-                                    Write-Verbose ""Template  = $Template""
-
+                                # ————————————————————————————————
+                                # 4) Intento de creación
+                                # ————————————————————————————————
+                                try {{
                                     Import-Module FileServerResourceManager -ErrorAction Stop
+                                    Write-Verbose 'Módulo FSRM cargado.'
 
-                                    if (-not (Test-Path $QuotaPath)) {{
-                                        Write-Verbose ""Carpeta no existe; se crea → $QuotaPath""
-                                        New-Item -ItemType Directory -Path $QuotaPath | Out-Null
-                                    }}
+                                    # (opcional) limpia la carpeta de prueba
+                                    # if (Test-FsrmQuota -Path $Quota -ErrorAction SilentlyContinue) {{ Remove-FsrmQuota -Path $Quota -Force }}
 
-                                    $existing = Get-FsrmQuota -Path $QuotaPath -ErrorAction SilentlyContinue
-                                    if ($existing) {{
-                                        Write-Verbose 'Cuota encontrada; actualizando…'
-                                        Set-FsrmQuota -Path $QuotaPath -Template $Template
-                                    }} else {{
-                                        Write-Verbose 'Cuota inexistente; creando…'
-                                        New-FsrmQuota -Path $QuotaPath -Template $Template
-                                    }}
+                                    Write-Verbose ""Creando cuota: path=$Quota, template=$TemplateNew""
+                                    New-FsrmQuota -Path $Quota -Template $TemplateNew -Verbose
 
-                                    Write-Verbose ""✅  Operación completada.""
-                                }} -Verbose
+                                    Write-Output 'OK: QuotaCreated'
+                                }} catch {{
+                                    Write-Error '❌ Error creando cuota: ' + $_.Exception.Message
+                                    Write-Output 'ERROR:' + $_.Exception.Message
+                                }}
                                 ");
 
-                                // ─── Invoca y captura streams ─────────────────────────────────────
+                                // ejecución
                                 var results = ps.Invoke();
 
-                                // Errores de PowerShell
+                                //  —— captura errores cliente ——
                                 if (ps.HadErrors)
                                 {
-                                    foreach (var err in ps.Streams.Error)
-                                        errors.Add("[PS ERROR] " + err.Exception.Message);
-                                    throw new Exception("Error remoting FSRM (ver log de PowerShell).");
+                                    foreach (var e in ps.Streams.Error)
+                                        errors.Add("[CLIENT ERROR] " + e.Exception.Message);
+                                    throw new Exception("Fallo al invocar remoting (ver logs).");
                                 }
 
-                                // Trazas verbose (opcional)
+                                // —— captura verbose remoto ——
                                 foreach (var v in ps.Streams.Verbose)
                                     errors.Add("[VERBOSE] " + v.Message);
 
-                                // Resultado final (null porque script no devuelve objeto, pero podría retirar)
-                                // foreach (var r in results)
-                                //     errors.Add("[RESULT] " + r.ToString());
+                                // —— salida del script remoto ——
+                                foreach (var r in results)
+                                    errors.Add("[REMOTE] " + r.ToString());
 
-                                // No es necesario Close() ni Dispose() explícito; los using se encargan.
                             }
                             catch (Exception ex)
                             {
