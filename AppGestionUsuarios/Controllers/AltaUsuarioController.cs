@@ -1,25 +1,27 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.DirectoryServices;
+﻿using Azure.Identity;
 using Microsoft.AspNetCore.Authorization;
-using System.Globalization;
-using System.Text;
-using System.Management.Automation;
-using System.DirectoryServices.AccountManagement;
-using System.Security.AccessControl;
-using System.Security.Principal;
-using System.Runtime.InteropServices;
-using Microsoft.Graph.Models;
-using Microsoft.Graph;
-using Azure.Identity;
-using System.Security;
-using System.Management.Automation.Runspaces;
-using System.ComponentModel;
-using Microsoft.Win32.SafeHandles;
 using Microsoft.AspNetCore.DataProtection;
-using System.Runtime.Intrinsics.Arm;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Graph;
+using Microsoft.Graph.Models;
 using Microsoft.PowerShell;
+using Microsoft.Win32.SafeHandles;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.DirectoryServices;
+using System.DirectoryServices.AccountManagement;
 using System.DirectoryServices.ActiveDirectory;
+using System.Globalization;
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.Arm;
+using System.Security;
+using System.Security.AccessControl;
+using System.Security.Policy;
+using System.Security.Principal;
+using System.Text;
+using System.Threading;
 
 
 
@@ -109,7 +111,7 @@ public class AltaUsuarioController : Controller
             ViewBag.GruposPorDefecto = gruposPorDefecto;
 
             var cuotas = _config
-                .GetSection("QuotaSettings:Templates")
+                .GetSection("QuotaTemplate:Templates")
                 .Get<List<string>>()
                 ?? new List<string> { "HOME-500MB", "HOME-1GB", "HOME-2GB" };
 
@@ -400,13 +402,13 @@ public class AltaUsuarioController : Controller
             {
                 ldapPath = $"LDAP://OU=Usuarios, OU={user.OUSecundaria},OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
                 ouPath = $"LDAP://OU={user.OUSecundaria},OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
-                errors.Add($"Usando OU secundaria: Path = {ouPath}");
+                //errors.Add($"Usando OU secundaria: Path = {ouPath}");
             }
             else
             {
                 ldapPath = $"LDAP://OU=Usuarios,OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
                 ouPath = $"LDAP://OU={user.OUPrincipal},{_config["ActiveDirectory:DomainBase"]}";
-                errors.Add($"Usando OU principal: Path = {ouPath}");
+                //errors.Add($"Usando OU principal: Path = {ouPath}");
             }
 
             string departamento = null;
@@ -419,7 +421,7 @@ public class AltaUsuarioController : Controller
                 {
                     if (ouEntryForAttributes == null)
                     {
-                        errors.Add("No se pudo conectar a la OU para obtener los atributos.");
+                        //errors.Add("No se pudo conectar a la OU para obtener los atributos.");
                     }
                     else
                     {
@@ -428,11 +430,11 @@ public class AltaUsuarioController : Controller
                         if (string.IsNullOrEmpty(departamento))
                         {
                             departamento = "";
-                            errors.Add("Atributo 'st' no definido, usando valor predeterminado: 'sin departamento'.");
+                            //errors.Add("Atributo 'st' no definido, usando valor predeterminado: 'sin departamento'.");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'st' encontrado: '{departamento}'.");
+                            //errors.Add($"Atributo 'st' encontrado: '{departamento}'.");
                         }
 
 
@@ -441,11 +443,11 @@ public class AltaUsuarioController : Controller
                         if (string.IsNullOrEmpty(area))
                         {
                             area = "Sin area";
-                            errors.Add("Atributo 'description' no definido, usando valor predeterminado: 'Sin Área'.");
+                            //errors.Add("Atributo 'description' no definido, usando valor predeterminado: 'Sin Área'.");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'description' encontrado: '{area}'.");
+                            //errors.Add($"Atributo 'description' encontrado: '{area}'.");
                         }
 
                         // Obtener el grupo de usuarios asociado al departamento concreto
@@ -453,11 +455,11 @@ public class AltaUsuarioController : Controller
                         if (string.IsNullOrEmpty(grupoDepartamento))
                         {
                             grupoDepartamento = "";
-                            errors.Add($"El atributo 'street' no está definido en la OU (Path: {ouPath}).");
+                            //errors.Add($"El atributo 'street' no está definido en la OU (Path: {ouPath}).");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'street' encontrado: '{grupoDepartamento}' (Path: {ouPath}).");
+                            //errors.Add($"Atributo 'street' encontrado: '{grupoDepartamento}' (Path: {ouPath}).");
                         }
 
                         // Obtener el lugar de envío
@@ -465,25 +467,25 @@ public class AltaUsuarioController : Controller
                         if (string.IsNullOrEmpty(lugarEnvio))
                         {
                             lugarEnvio = "";
-                            errors.Add($"El atributo 'l' no está definido en la OU (Path: {ouPath}).");
+                            //errors.Add($"El atributo 'l' no está definido en la OU (Path: {ouPath}).");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'l' encontrado: '{lugarEnvio}' (Path: {ouPath}).");
+                            //errors.Add($"Atributo 'l' encontrado: '{lugarEnvio}' (Path: {ouPath}).");
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                errors.Add($"Error al obtener los atributos de la OU: {ex.Message}");
+                //errors.Add($"Error al obtener los atributos de la OU: {ex.Message}");
             }
 
             using (DirectoryEntry ouEntry = new DirectoryEntry(ldapPath))
             {
                 if (ouEntry == null)
                 {
-                    errors.Add("No se pudo conectar a la OU especificada para crear el usuario.");
+                    //errors.Add("No se pudo conectar a la OU especificada para crear el usuario.");
                     return Json(new { success = false, message = "No se pudo conectar a la OU para crear el usuario." });
                 }
 
@@ -493,7 +495,7 @@ public class AltaUsuarioController : Controller
                 {
                     // Crear el usuario
                     newUser = ouEntry.Children.Add($"CN={displayName}", "user");
-                    errors.Add($"Usuario creado en la OU: CN={ldapPath}");
+                    //errors.Add($"Usuario creado en la OU: CN={ldapPath}");
 
                     // Establecer atributos básicos del usuario
                     try
@@ -505,11 +507,11 @@ public class AltaUsuarioController : Controller
                         newUser.Properties[_config["ADAttributes:DisplayNameAttr"]].Value = displayName;
                         newUser.Properties[_config["ADAttributes:DepartmentAttr"]].Value = departamento;
                         newUser.Properties[_config["ADAttributes:AreaAttr"]].Value = area;
-                        errors.Add("Atributos básicos del usuario establecidos correctamente.");
+                        //errors.Add("Atributos básicos del usuario establecidos correctamente.");
                     }
                     catch (Exception ex)
                     {
-                        errors.Add($"Error al establecer los atributos básicos del usuario: {ex.Message}");
+                        //errors.Add($"Error al establecer los atributos básicos del usuario: {ex.Message}");
                     }
 
                     // Asignar otros campos
@@ -518,81 +520,81 @@ public class AltaUsuarioController : Controller
                         if (!string.IsNullOrEmpty(user.NFuncionario))
                         {
                             newUser.Properties[_config["ADAttributes:NFuncionarioAttr"]].Value = user.NFuncionario;
-                            errors.Add($"Atributo 'NFuncionarioAttr' (NFuncionario) establecido: {user.NFuncionario}");
+                            //errors.Add($"Atributo 'NFuncionarioAttr' (NFuncionario) establecido: {user.NFuncionario}");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'NFuncionarioAttr' se recibió como null o vacio");
+                            //errors.Add($"Atributo 'NFuncionarioAttr' se recibió como null o vacio");
 
                         }
                         //NTelefono se refiere a la extensión del número fijo
                         if (!string.IsNullOrEmpty(user.NTelefono))
                         {
                             newUser.Properties[_config["ADAttributes:TelephoneNumberAttr"]].Value = user.NTelefono;
-                            errors.Add($"Atributo 'TelephoneNumberAttr' establecido: {user.NTelefono}");
+                            //errors.Add($"Atributo 'TelephoneNumberAttr' establecido: {user.NTelefono}");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'TelephoneNumberAttr' se recibió como null o vacio");
+                            //errors.Add($"Atributo 'TelephoneNumberAttr' se recibió como null o vacio");
 
                         }
                         //Se refiere al número fijo completo
                         if (!string.IsNullOrEmpty(user.NumeroLargoFijo))
                         {
                             newUser.Properties[_config["ADAttributes:OtherTelephoneAttr"]].Value = user.NumeroLargoFijo;
-                            errors.Add($"Atributo 'OtherTelephoneAttr' establecido: {user.NumeroLargoFijo}");
+                            //errors.Add($"Atributo 'OtherTelephoneAttr' establecido: {user.NumeroLargoFijo}");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'OtherTelephoneAttr' se recibió como null o vacio");
+                            //errors.Add($"Atributo 'OtherTelephoneAttr' se recibió como null o vacio");
 
                         }
                         if (!string.IsNullOrEmpty(user.ExtensionMovil))
                         {
                             newUser.Properties[_config["ADAttributes:MobileExtensionAttr"]].Value = user.ExtensionMovil;
-                            errors.Add($"Atributo 'MobileExtensionAttr' establecido: {user.ExtensionMovil}");
+                            //errors.Add($"Atributo 'MobileExtensionAttr' establecido: {user.ExtensionMovil}");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'MobileextensionAttr' se recibió como null o vacio");
+                            //errors.Add($"Atributo 'MobileextensionAttr' se recibió como null o vacio");
 
                         }
                         if (!string.IsNullOrEmpty(user.NumeroLargoMovil))
                         {
                             newUser.Properties[_config["ADAttributes:LargeMobileNumberAttr"]].Value = user.NumeroLargoMovil;
-                            errors.Add($"Atributo 'LargeMobileNumberAttr' establecido: {user.NumeroLargoMovil}");
+                            //errors.Add($"Atributo 'LargeMobileNumberAttr' establecido: {user.NumeroLargoMovil}");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'MobileextensionAttr' se recibió como null o vacio");
+                            //errors.Add($"Atributo 'MobileextensionAttr' se recibió como null o vacio");
 
                         }
                         if (!string.IsNullOrEmpty(user.TarjetaIdentificativa))
                         {
                             newUser.Properties[_config["ADAttributes:IDCardAttr"]].Value = user.TarjetaIdentificativa;
-                            errors.Add($"Atributo 'IDCardAttr' establecido: {user.TarjetaIdentificativa}");
+                            //errors.Add($"Atributo 'IDCardAttr' establecido: {user.TarjetaIdentificativa}");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'IDCardAttr' se recibió como null o vacio");
+                            //errors.Add($"Atributo 'IDCardAttr' se recibió como null o vacio");
 
                         }
                         if (!string.IsNullOrEmpty(user.DNI))
                         {
                             newUser.Properties[_config["ADAttributes:DNIAttr"]].Value = user.DNI;
-                            errors.Add($"Atributo 'DNIAttr' establecido: {user.DNI}");
+                            //errors.Add($"Atributo 'DNIAttr' establecido: {user.DNI}");
                         }
                         else
                         {
-                            errors.Add($"Atributo 'DNIAttr' se recibió como null o vacio");
+                            //errors.Add($"Atributo 'DNIAttr' se recibió como null o vacio");
 
                         }
                         newUser.Properties[_config["ADAttributes:LocationAttr"]].Value = user.LugarEnvio;
-                        errors.Add("Atributos opcionales del usuario establecidos correctamente.");
+                        //errors.Add("Atributos opcionales del usuario establecidos correctamente.");
                     }
                     catch (Exception ex)
                     {
-                        errors.Add($"Error al establecer los atributos opcionales del usuario: {ex.Message}");
+                        //errors.Add($"Error al establecer los atributos opcionales del usuario: {ex.Message}");
                     }
 
                     // Establecer la fecha de caducidad si aplica
@@ -602,18 +604,18 @@ public class AltaUsuarioController : Controller
                         {
                             if (user.FechaCaducidad <= DateTime.Now)
                             {
-                                errors.Add("La fecha de caducidad debe ser una fecha futura.");
+                                //errors.Add("La fecha de caducidad debe ser una fecha futura.");
                             }
                             else
                             {
                                 long accountExpires = user.FechaCaducidad.ToFileTime();
                                 newUser.Properties[_config["ADAttributes:AccountExpiresAttr"]].Value = accountExpires.ToString();
-                                errors.Add($"Fecha de caducidad establecida: {user.FechaCaducidad}");
+                                //errors.Add($"Fecha de caducidad establecida: {user.FechaCaducidad}");
                             }
                         }
                         catch (Exception ex)
                         {
-                            errors.Add($"Error al establecer la fecha de caducidad: {ex.Message}");
+                            //errors.Add($"Error al establecer la fecha de caducidad: {ex.Message}");
                         }
                     }
 
@@ -622,11 +624,11 @@ public class AltaUsuarioController : Controller
                     {
                         userCreated = true;
                         newUser.CommitChanges();
-                        errors.Add("Cambios iniciales del usuario guardados correctamente.");
+                        //errors.Add("Cambios iniciales del usuario guardados correctamente.");
                     }
                     catch (Exception ex)
                     {
-                        errors.Add($"Error al guardar los cambios iniciales del usuario: {ex.Message}");
+                        //errors.Add($"Error al guardar los cambios iniciales del usuario: {ex.Message}");
                         throw; // Si falla aquí, no podemos continuar
                     }
 
@@ -638,17 +640,17 @@ public class AltaUsuarioController : Controller
                         newUser.Properties[_config["ADAttributes:ChangePassNextLoginAttr"]].Value = 0;
                         newUser.CommitChanges();
                         userCreated = true; // Marcamos que el usuario se creó exitosamente
-                        errors.Add("Contraseña configurada y cuenta activada correctamente.");
+                        //errors.Add("Contraseña configurada y cuenta activada correctamente.");
                     }
                     catch (Exception ex)
                     {
-                        errors.Add($"Error al configurar la contraseña o activar la cuenta: {ex.Message}");
+                        //errors.Add($"Error al configurar la contraseña o activar la cuenta: {ex.Message}");
                     }
 
                     // Añadir al usuario al grupo del departamento (obligatorio) basado en el atributo "street"
                     if (!string.IsNullOrEmpty(grupoDepartamento))
                     {
-                        errors.Add($"Intentando añadir al usuario al grupo del departamento: '{grupoDepartamento}'");
+                        //errors.Add($"Intentando añadir al usuario al grupo del departamento: '{grupoDepartamento}'");
                         DirectoryEntry groupEntry = FindGroupByName(grupoDepartamento);
                         if (groupEntry != null)
                         {
@@ -657,11 +659,11 @@ public class AltaUsuarioController : Controller
                                 groupEntry.Invoke("Add", new object[] { newUser.Path });
                                 groupEntry.CommitChanges();
                                 addedToDepartmentGroup = true;
-                                errors.Add($"Usuario añadido exitosamente al grupo del departamento '{grupoDepartamento}'.");
+                                //errors.Add($"Usuario añadido exitosamente al grupo del departamento '{grupoDepartamento}'.");
                             }
                             catch (Exception ex)
                             {
-                                errors.Add($"Error al añadir al grupo del departamento '{grupoDepartamento}': {ex.Message}");
+                                //errors.Add($"Error al añadir al grupo del departamento '{grupoDepartamento}': {ex.Message}");
                             }
                             finally
                             {
@@ -670,18 +672,18 @@ public class AltaUsuarioController : Controller
                         }
                         else
                         {
-                            errors.Add($"El grupo del departamento '{grupoDepartamento}' no existe en el Directorio Activo.");
+                            //errors.Add($"El grupo del departamento '{grupoDepartamento}' no existe en el Directorio Activo.");
                         }
                     }
                     else
                     {
-                        errors.Add("No se pudo añadir al grupo del departamento porque el atributo 'street' no está definido.");
+                        //errors.Add("No se pudo añadir al grupo del departamento porque el atributo 'street' no está definido.");
                     }
 
                     // Añadir al usuario a los grupos seleccionados (los que vienen del formulario)
                     if (user.Grupos != null && user.Grupos.Any())
                     {
-                        errors.Add("Añadiendo usuario a los grupos seleccionados...");
+                        //errors.Add("Añadiendo usuario a los grupos seleccionados...");
                         foreach (string grupo in user.Grupos)
                         {
                             DirectoryEntry groupEntry = FindGroupByName(grupo);
@@ -691,11 +693,11 @@ public class AltaUsuarioController : Controller
                                 {
                                     groupEntry.Invoke("Add", new object[] { newUser.Path });
                                     groupEntry.CommitChanges();
-                                    errors.Add($"Usuario añadido exitosamente al grupo '{grupo}'.");
+                                    //errors.Add($"Usuario añadido exitosamente al grupo '{grupo}'.");
                                 }
                                 catch (Exception ex)
                                 {
-                                    errors.Add($"Error al añadir al grupo '{grupo}': {ex.Message}");
+                                    //errors.Add($"Error al añadir al grupo '{grupo}': {ex.Message}");
                                 }
                                 finally
                                 {
@@ -704,31 +706,31 @@ public class AltaUsuarioController : Controller
                             }
                             else
                             {
-                                errors.Add($"Grupo '{grupo}' no encontrado en el dominio.");
+                                //errors.Add($"Grupo '{grupo}' no encontrado en el dominio.");
                             }
                         }
                     }
                     else
                     {
-                        errors.Add("No se seleccionaron grupos adicionales para el usuario.");
+                        //errors.Add("No se seleccionaron grupos adicionales para el usuario.");
                     }
 
                     // Guardar los cambios finales del usuario en Active Directory
                     try
                     {
                         newUser.CommitChanges();
-                        errors.Add("Cambios finales del usuario guardados correctamente.");
+                        //errors.Add("Cambios finales del usuario guardados correctamente.");
                     }
                     catch (Exception ex)
                     {
-                        errors.Add($"Error al guardar los cambios finales del usuario: {ex.Message}");
+                        //errors.Add($"Error al guardar los cambios finales del usuario: {ex.Message}");
                     }
 
                     // Configuración de la carpeta personal y cuota
                     if (userCreated && user.OUPrincipal != "OAGER")
                     {
                         string folderPath = Path.Combine(folderPathBase, user.Username);
-                        errors.Add($"Verificando existencia de la carpeta: {folderPath}");
+                        //errors.Add($"Verificando existencia de la carpeta: {folderPath}");
 
                         if (!Directory.Exists(folderPath))
                         {
@@ -736,7 +738,7 @@ public class AltaUsuarioController : Controller
                             {
                                 // 1) Crear la carpeta vía UNC
                                 Directory.CreateDirectory(folderPath);
-                                errors.Add($"Carpeta creada: {folderPath}");
+                                //errors.Add($"Carpeta creada: {folderPath}");
 
 
                                 string adminFileSystem = _config["ActiveDirectory:FileSystemAdministrator"];
@@ -786,108 +788,125 @@ public class AltaUsuarioController : Controller
                                     AccessControlType.Allow));
                                 di.SetAccessControl(updatedDs);
 
-                                errors.Add("Permisos NTFS en Leonardo configurados correctamente.");
+                                //errors.Add("Permisos NTFS en Leonardo configurados correctamente.");
                             }
                             catch (Exception ex)
                             {
-                                errors.Add($"Error creando carpeta o permisos NTFS: {ex.Message}");
-                            }
-
-                            // 3) Configuración de cuota FSRM en C:\Home\<user>
-                            static string Esc(string s) => s?.Replace("'", "''") ?? "";
-
-                            try
-                            {
-                                string domain = _config["ActiveDirectory:DomainName"];
-                                string adminUsername = HttpContext.Session.GetString("adminUser");
-                                var encryptedPass = HttpContext.Session.GetString("adminPassword");
-                                string adminPassword = _protector.Unprotect(encryptedPass);
-
-                                // ─── Crea y abre el Runspace ───────────────────────────────────────
-                                using var runspace = RunspaceFactory.CreateRunspace();
-                                runspace.Open();
-
-                                using var ps = PowerShell.Create();
-                                ps.Runspace = runspace;
-
-                                // ─── Construcción de parámetros ──────────────────────────────────
-                                string template = string.IsNullOrWhiteSpace(user.Cuota) ? "HOME-1GB" : user.Cuota.Trim();
-                                string quotaFolder = Path.Combine(quotaPathBase.TrimEnd('\\'), user.Username.Trim());
-                                string fsrmServer = _config["FsConfig:ServerName"];
-
-                                errors.Add($"[FSRM] Configurando cuota '{template}' en '{quotaFolder}' sobre {fsrmServer}");
-
-                                // ─── Incrusta el script completo ──────────────────────────────────
-                                ps.AddScript($@"
-                                # 1) Credenciales
-                                $securePwd = ConvertTo-SecureString '{Esc(adminPassword)}' -AsPlainText -Force
-                                $cred      = New-Object System.Management.Automation.PSCredential('{Esc(domain)}\{Esc(adminUsername)}',$securePwd)
-
-                                # 2) Ejecuta remótamente y con verbose
-                                Invoke-Command -ComputerName '{Esc(fsrmServer)}' `
-                                                -Credential    $cred `
-                                                -Authentication Kerberos `
-                                                -ArgumentList  '{Esc(quotaFolder)}','{Esc(template)}' `
-                                                -ScriptBlock {{
-                                    param($QuotaPath, $Template)
-
-                                    $VerbosePreference = 'Continue'
-
-                                    Write-Verbose ""⏱  Inicio: $(Get-Date -Format HH:mm:ss)""
-                                    Write-Verbose ""Path      = $QuotaPath""
-                                    Write-Verbose ""Template  = $Template""
-
-                                    Import-Module FileServerResourceManager -ErrorAction Stop
-
-                                    if (-not (Test-Path $QuotaPath)) {{
-                                        Write-Verbose ""Carpeta no existe; se crea → $QuotaPath""
-                                        New-Item -ItemType Directory -Path $QuotaPath | Out-Null
-                                    }}
-
-                                    $existing = Get-FsrmQuota -Path $QuotaPath -ErrorAction SilentlyContinue
-                                    if ($existing) {{
-                                        Write-Verbose 'Cuota encontrada; actualizando…'
-                                        Set-FsrmQuota -Path $QuotaPath -Template $Template
-                                    }} else {{
-                                        Write-Verbose 'Cuota inexistente; creando…'
-                                        New-FsrmQuota -Path $QuotaPath -Template $Template
-                                    }}
-
-                                    Write-Verbose ""✅  Operación completada.""
-                                }} -Verbose
-                                ");
-
-                                // ─── Invoca y captura streams ─────────────────────────────────────
-                                var results = ps.Invoke();
-
-                                // Errores de PowerShell
-                                if (ps.HadErrors)
-                                {
-                                    foreach (var err in ps.Streams.Error)
-                                        errors.Add("[PS ERROR] " + err.Exception.Message);
-                                    throw new Exception("Error remoting FSRM (ver log de PowerShell).");
-                                }
-
-                                // Trazas verbose (opcional)
-                                foreach (var v in ps.Streams.Verbose)
-                                    errors.Add("[VERBOSE] " + v.Message);
-
-                                // Resultado final (null porque script no devuelve objeto, pero podría retirar)
-                                // foreach (var r in results)
-                                //     errors.Add("[RESULT] " + r.ToString());
-
-                                // No es necesario Close() ni Dispose() explícito; los using se encargan.
-                            }
-                            catch (Exception ex)
-                            {
-                                errors.Add($"Error configurando cuota FSRM: {ex.Message}");
-                                // Propaga o maneja según tu arquitectura
+                                //errors.Add($"Error creando carpeta o permisos NTFS: {ex.Message}");
                             }
                         }
                         else
                         {
                             errors.Add($"La carpeta {folderPath} ya existe, omitiendo creación y cuota.");
                         }
+
+                        // 3) Configuración de cuota FSRM en C:\Home\<user>
+                        static string Esc(string s) => s?.Replace("'", "''") ?? "";
+
+                        try
+                        {
+                            // Helper para escapar comillas en literales PowerShell
+                            static string EscapePS(string s) => s?.Replace("'", "''") ?? "";
+
+                            try
+                            {
+                                // Helper para escapar comillas en literales PowerShell
+                                static string EscapPS(string s) => s?.Replace("'", "''") ?? "";
+
+                                try
+                                {
+                                    // ─── Datos de conexión y credenciales ─────────────────────────────────
+                                    string domain = _config["ActiveDirectory:DomainName"];
+                                    string adminUsername = HttpContext.Session.GetString("adminUser");
+                                    var encryptedPass = HttpContext.Session.GetString("adminPassword");
+                                    string adminPassword = _protector.Unprotect(encryptedPass);
+
+                                    // ─── Parámetros de cuota ─────────────────────────────────────────────
+                                    string fsrmServer = _config["FsConfig:ServerName"];
+                                    string quotaFolder = Path.Combine(quotaPathBase.TrimEnd('\\'), user.Username.Trim());
+                                    string template = string.IsNullOrWhiteSpace(user.Cuota) ? "HOME-50MB" : user.Cuota.Trim();
+
+                                    errors.Add($"[FSRM] Eliminar/Create cuota '{template}' en '{quotaFolder}' sobre {fsrmServer}");
+
+                                    // ─── Abre runspace y crea instancia PowerShell ───────────────────────
+                                    using var runspace = RunspaceFactory.CreateRunspace();
+                                    runspace.Open();
+                                    using var ps = PowerShell.Create();
+                                    ps.Runspace = runspace;
+                                    //Comentario por aquí:
+
+                                    // ─── Incrusta todo el bloque PowerShell ──────────────────────────────
+                                    ps.AddScript($@"
+                                        # 1) Credenciales
+                                        $securePwd    = ConvertTo-SecureString '{EscapPS(adminPassword)}' -AsPlainText -Force
+                                        $adminAccount = '{EscapPS(domain)}\{EscapPS(adminUsername)}'
+                                        $cred         = New-Object System.Management.Automation.PSCredential($adminAccount, $securePwd)
+
+                                        # 2) Variables de cuota
+                                        $server        = '{EscapPS(fsrmServer)}'
+                                        $QuotaPath     = '{EscapPS(quotaFolder)}'
+                                        $QuotaTemplate = '{EscapPS(template)}'
+
+                                        # 3) Invocación remota con verbose y manejo básico
+                                        Invoke-Command -ComputerName $server `
+                                                       -Credential    $cred `
+                                                       -Authentication Kerberos `
+                                                       -ArgumentList  $QuotaPath, $QuotaTemplate `
+                                                       -ScriptBlock {{
+                                            param($Path, $Tpl)
+                                            $VerbosePreference = 'Continue'
+
+                                            Write-Verbose ""🚀 Iniciando en $env:COMPUTERNAME: Path=$Path  Template=$Tpl""
+                                            Import-Module FileServerResourceManager -ErrorAction Stop
+                                            Write-Verbose 'Módulo FSRM cargado.'
+
+                                            if (-not (Test-Path $Path)) {{
+                                                Write-Verbose ""Creando carpeta → $Path""
+                                                New-Item -ItemType Directory -Path $Path | Out-Null
+                                            }}
+
+                                            Write-Verbose ""Aplicando cuota ($Tpl) sobre $Path""
+                                            New-FsrmQuota -Path $Path -Template $Tpl -Verbose
+
+                                            Write - Output 'OK: QuotaCreated'
+                                            }} -Verbose
+                                        ");
+
+                                    // ─── Ejecuta y captura resultados/errores ────────────────────────────
+                                    var results = ps.Invoke();
+
+                                    if (ps.HadErrors)
+                                    {
+                                        foreach (var err in ps.Streams.Error)
+                                            errors.Add("[PS ERROR] " + err.Exception.Message);
+                                        throw new Exception("Error remoto FSRM (revisa logs).");
+                                    }
+
+                                    foreach (var v in ps.Streams.Verbose)
+                                        errors.Add("[VERBOSE] " + v.Message);
+
+                                    foreach (var r in results)
+                                        errors.Add("[REMOTE] " + r.ToString());
+                                }
+                                catch (Exception ex)
+                                {
+                                    errors.Add($"Error configurando cuota FSRM: {ex.Message}");
+                                    // según tu arquitectura: relanzar o continuar
+                                }
+
+                            }
+                            catch (Exception ex)
+                            {
+                                errors.Add($"Error configurando cuota FSRM: {ex.Message}");
+                                // según tu arquitectura: relanzar o continuar
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            errors.Add($"Error configurando cuota FSRM: {ex.Message}");
+                            // Propaga o maneja según tu arquitectura
+                        }
+
                     }
                     else if (user.OUPrincipal == "OAGER")
                     {
@@ -1020,8 +1039,10 @@ public class AltaUsuarioController : Controller
                         });
                         return;
                     }
-                    log.Add("[OK] Usuario creado en AD correctamente.");
-
+                    else
+                    {
+                        //log.Add(createData?.message ?? "sin mensaje");
+                    }
                     // Paso 2: Añadir a grupo de licencias
                     log.Add("Paso 2: Añadiendo al grupo de licencias...");
                     var grupoResult = ModifyUserGroup(samAccountName) as JsonResult;
@@ -1055,22 +1076,23 @@ public class AltaUsuarioController : Controller
                     else
                         log.Add("[WARN] Timeout esperando al usuario en Azure AD.");
 
-                    // Paso 5: Crear buzón on-prem
-                    log.Add("Paso 5: Habilitando buzón on-prem...");
-                    EnableOnPremMailbox(samAccountName, adminUsername, adminPassword);
-                    log.Add("[OK] Buzón on-prem habilitado correctamente.");
+                    //// Paso 5: Crear buzón on-prem
+                    //log.Add("Paso 5: Habilitando buzón on-prem...");
+                    //EnableOnPremMailbox(samAccountName, adminUsername, adminPassword, log);
+                    //log.Add("[OK] Buzón on-prem habilitado correctamente.");
+
 
                     // Paso 6: Actualizar proxyAddresses
                     log.Add("Paso 6: Actualizando proxyAddresses...");
                     UpdateProxyAddresses(samAccountName);
                     log.Add("[OK] proxyAddresses actualizadas.");
 
-                    // Paso 7: Crear lote de migración
-                    log.Add("Paso 7: Creando y lanzando lote de migración...");
-                    CreateMigrationBatch(new[] { samAccountName });
-                    log.Add("[OK] Lote de migración lanzado.");
+                    ////Paso 7: Crear lote de migración
+                    //log.Add("Paso 7: Creando y lanzando lote de migración...");
+                    //CreateMigrationBatch(new[] { samAccountName }, adminUsername, adminPassword, log);
+                    //log.Add("[OK] Lote de migración lanzado.");
 
-                    log.Add("=== Alta Completa finalizada con éxito ===");
+                    //log.Add("=== Alta Completa finalizada con éxito ===");
                 }
                 catch (Exception ex)
                 {
@@ -1635,13 +1657,13 @@ public class AltaUsuarioController : Controller
         // 2) Construimos el script PowerShell completo
         //    Creamos un SecureString y un PSCredential, luego Invoke-Command con -Credential.
         var remoteScript = $@"
-      $sec = ConvertTo-SecureString '{adminPassword}' -AsPlainText -Force
-      $cred = New-Object System.Management.Automation.PSCredential('{adminUsername}', $sec)
-      Invoke-Command -ComputerName '{server}' -Credential $cred -ScriptBlock {{
-          Import-Module ADSync -ErrorAction Stop
-          Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
-      }} -ErrorAction Stop
-    ";
+          $sec = ConvertTo-SecureString '{adminPassword}' -AsPlainText -Force
+          $cred = New-Object System.Management.Automation.PSCredential('{adminUsername}', $sec)
+          Invoke-Command -ComputerName '{server}' -Credential $cred -ScriptBlock {{
+              Import-Module ADSync -ErrorAction Stop
+              Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
+          }} -ErrorAction Stop
+        ";
 
         // 3) Preparamos el proceso externo de PowerShell
         var psi = new ProcessStartInfo
@@ -1718,9 +1740,8 @@ public class AltaUsuarioController : Controller
         return false;
     }
 
-    public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword)
+    public void EnableOnPremMailbox(string username, string adminRunAs, string adminPassword, IList<string> log)
     {
-        // Parámetros de configuración
         var server = _config["Exchange:Server"]
                      ?? throw new InvalidOperationException("Falta Exchange:Server");
         var dbName = _config["Exchange:Database"]
@@ -1728,70 +1749,87 @@ public class AltaUsuarioController : Controller
         var domain = _config["ActiveDirectory:DomainName"]
                      ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
 
-        // 1) Logon con credenciales de administrador
-        if (!LogonUser(
-                adminRunAs,
-                domain,
-                adminPassword,
-                LOGON32_LOGON_NEW_CREDENTIALS,
-                LOGON32_PROVIDER_DEFAULT,
-                out var userToken))
+        if (!LogonUser(adminRunAs, domain, adminPassword, LOGON32_LOGON_NEW_CREDENTIALS, LOGON32_PROVIDER_DEFAULT, out var userToken))
         {
             var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
+            throw new InvalidOperationException("LogonUser falló: " + err);
         }
 
-        // 2) Impersonación y ejecución de PowerShell bajo ese contexto
-        // 4) Envolver TODO en impersonación
         using var safeToken = new SafeAccessTokenHandle(userToken);
-        IActionResult finalResult = null;
         try
         {
             WindowsIdentity.RunImpersonated(safeToken, () =>
             {
                 using var runspace = RunspaceFactory.CreateRunspace();
                 runspace.Open();
-
                 using var ps = PowerShell.Create();
                 ps.Runspace = runspace;
 
-                // COMANDO 1 – $cred con usuario/contraseña
+                static string Esc(string s) => s?.Replace("'", "''") ?? "";
+
+                // 1. Crear PSCredential
+                log.Add("  ▶ Generando PSCredential…");
                 ps.AddScript($@"
-                Import-Module Microsoft.PowerShell.Security
-                $securePwd = ConvertTo-SecureString '{EscapeSingleQuotes(adminPassword)}' -AsPlainText -Force
-                $adminUser  = '{EscapeSingleQuotes(domain)}\\{EscapeSingleQuotes(adminRunAs)}'
-                $cred       = New-Object System.Management.Automation.PSCredential($adminUser, $securePwd)
+                $securePwd = ConvertTo-SecureString 'Temporal2025' -AsPlainText -Force
+                $adminUser = 'adm_larar'
+                $global:cred = New-Object System.Management.Automation.PSCredential($adminUser, $securePwd)
                 ");
-                ps.Invoke(); ComprobarErrores(ps, "$cred"); ps.Commands.Clear();
+                ps.Invoke();
+                DumpStreams(ps, log, "Credencial");
+                ps.Commands.Clear();
 
-                // COMANDO 2 – New-PSSession remoto Exchange
+                // 2. Crear sesión remota
+                log.Add("  ▶ Creando sesión remota Exchange…");
                 ps.AddScript($@"
-                $Session = New-PSSession -ConfigurationName Microsoft.Exchange `
-                                         -ConnectionUri http://{server}/PowerShell `
-                                         -Authentication Kerberos `
-                                         -Credential $cred
-                Import-PSSession -Session $Session -DisableNameChecking -ErrorAction SilentlyContinue
-                Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+                $global:Session = New-PSSession -ConfigurationName Microsoft.Exchange `
+                    -ConnectionUri 'http://{server}/PowerShell' `
+                    -Authentication Kerberos `
+                    -Credential $global:cred 
                 ");
-                ps.Invoke(); ComprobarErrores(ps, "New/Import/PSSnapin"); ps.Commands.Clear();
+                ps.Invoke();
+                DumpStreams(ps, log, "New-PSSession");
+                ps.Commands.Clear();
 
-                // COMANDO 3 – Enable-Mailbox
-                ps.AddCommand("Enable-Mailbox")
-                  .AddParameter("Identity", $"{domain}\\{username}")
-                  .AddParameter("Database", dbName);
-                ps.Invoke(); ComprobarErrores(ps, "Enable-Mailbox"); ps.Commands.Clear();
+                // 3. Importar la sesión
+                log.Add("  ▶ Importando sesión remota Exchange…");
+                ps.AddScript("Import-PSSession -Session $global:Session -DisableNameChecking");
+                ps.Invoke();
+                DumpStreams(ps, log, "Import-PSSession");
+                ps.Commands.Clear();
 
-                // COMANDO 4 – Cerrar la sesión remota
-                ps.AddScript("Remove-PSSession -Session $Session");
-                ps.Invoke(); ComprobarErrores(ps, "Remove-PSSession"); ps.Commands.Clear();
+                // 4. Enable-Mailbox
+                log.Add($"  ▶ Ejecutando Enable-Mailbox {domain}\\{username} en DB {dbName}…");
+                ps.AddScript($@"Enable-Mailbox -Identity '{Esc(username)}' -Database '{Esc(dbName)}'");
+                ps.Invoke();
+                DumpStreams(ps, log, "Enable-Mailbox");
+                ps.Commands.Clear();
 
-                runspace.Close();
+                // 5. Cerrar la sesión
+                log.Add("  ▶ Cerrando sesión remota…");
+                ps.AddScript("Remove-PSSession -Session $global:Session");
+                ps.Invoke();
+                DumpStreams(ps, log, "Remove-PSSession");
+                ps.Commands.Clear();
             });
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
+            log.Add($"[ERROR] Excepción en EnableOnPremMailbox: {ex.Message}");
+            throw;
+        }
 
+        void DumpStreams(PowerShell pw, IList<string> logList, string step)
+        {
+            foreach (var v in pw.Streams.Verbose)
+                logList.Add($"[VERBOSE:{step}] {v.Message}");
+            foreach (var e in pw.Streams.Error)
+                logList.Add($"[PS-ERROR:{step}] {e.Exception.Message}");
+            if (pw.HadErrors)
+                throw new InvalidOperationException($"PowerShell reportó errores en '{step}'");
         }
     }
+
+
 
 
 
@@ -1895,65 +1933,128 @@ public class AltaUsuarioController : Controller
 
 
     //Nueva creación de lote de migración
-    public void CreateMigrationBatch(string[] aliases)
+    public void CreateMigrationBatch(
+    string[] aliases,
+    string adminRunAs,
+    string adminPassword,
+    IList<string> log)
     {
-        if (aliases is null || aliases.Length == 0)
+        // Helper para duplicar comillas simples en literales PS
+        static string Esc(string s) => s?.Replace("'", "''") ?? "";
+
+        // 0) Validaciones básicas
+        if (aliases == null || aliases.Length == 0)
             throw new ArgumentException("Lista de usuarios vacía", nameof(aliases));
 
-        // --- Parámetros de configuración ---------------------------------
-        var endpointName = _config["Exchange:Endpoint"] ?? "saura";
-        var targetDomain = _config["Exchange:TargetDeliveryDomain"] ?? "aytosalamanca.mail.onmicrosoft.com";
-        var onPremDomain = _config["ActiveDirectory:EmailDomain"] ?? "aytosalamanca.es";
-        string adminUser = HttpContext.Session.GetString("adminUser");
-        var encryptedPass = HttpContext.Session.GetString("adminPassword");
-        var adminPwdPlain = _protector.Unprotect(encryptedPass) ?? throw new InvalidOperationException("Falta Exchange:AdminPassword");
+        var server = _config["Exchange:Server"]
+                             ?? throw new InvalidOperationException("Falta Exchange:Server");
+        var domain = _config["ActiveDirectory:DomainName"]
+                             ?? throw new InvalidOperationException("Falta ActiveDirectory:DomainName");
+        var endpointName = _config["Exchange:Endpoint"]
+                             ?? throw new InvalidOperationException("Falta Exchange:Endpoint");
+        var targetDomain = _config["Exchange:TargetDeliveryDomain"]
+                             ?? throw new InvalidOperationException("Falta Exchange:TargetDeliveryDomain");
+        var certificatePath = _config["Exchange:CertificatePath"]
+                             ?? throw new InvalidOperationException("Falta Exchange:CertificatePath");
+        var certificatePass = _config["Exchange:CertificatePassword"]
+                             ?? throw new InvalidOperationException("Falta Exchange:CertificatePassword");
+        var appId = _config["AzureAd:ClientId"]
+                             ?? throw new InvalidOperationException("Falta AzureAd:ClientId");
+        var csvPath = _config["Exchange:CSVPath"]
+                             ?? throw new InvalidOperationException("Falta Exchange:CSVPath");
 
-        // --- Credencial para la sesión remota ----------------------------
-        var securePwd = new System.Security.SecureString();
-        foreach (char c in adminPwdPlain) securePwd.AppendChar(c);
-        var cred = new PSCredential(adminUser, securePwd);
+        log.Add("▶ Paso 1: LogonUser y contexto impersonalizado");
+        if (!LogonUser(adminRunAs, domain, adminPassword,
+                       LOGON32_LOGON_NEW_CREDENTIALS,
+                       LOGON32_PROVIDER_DEFAULT,
+                       out var userToken))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
 
-        var mailAddresses = aliases
-        .Select(a => $"{a}@{onPremDomain}")
-        .Select(a => a.Replace("'", "''"))   // escapar comilla simple
-        .ToArray();
+        using var safeToken = new SafeAccessTokenHandle(userToken);
+        WindowsIdentity.RunImpersonated(safeToken, () =>
+        {
+            // Preparar lista de mailboxes para CSV
+            var mailboxArray = string.Join(",", aliases
+                .Select(a => $"'{Esc(a + "@" + _config["ActiveDirectory:EmailDomain"])}'"));
 
-        // ----- Runspace local + sesión remota ---------------------------
-        using var runspace = RunspaceFactory.CreateRunspace();
-        runspace.Open();
+            // Nombre de batch
+            var batchName = $"Migra_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
 
-        using var ps = PowerShell.Create();
-        ps.Runspace = runspace;
+            using var runspace = RunspaceFactory.CreateRunspace();
+            runspace.Open();
+            using var ps = PowerShell.Create();
+            ps.Runspace = runspace;
 
-        // 1) Abrir sesión a Exchange on-prem y cargar cmdlets
-        ps.AddScript($@"
-        $S  = New-PSSession -ConfigurationName Microsoft.Exchange `
-                            -ConnectionUri http://{endpointName}/PowerShell `
-                            -Authentication Kerberos `
-                            -Credential $cred
-        Import-PSSession $S -DisableNameChecking
-        Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
-    ");
-        ps.Invoke(); Check(ps, "PSSession"); ps.Commands.Clear();
+            // Cada bloque va con DumpStreams para volcar verbose y errores
+            try
+            {
+                // 1) Conectar ExchangeOnline
+                log.Add("▶ Paso 2: Connect-ExchangeOnline");
+                ps.AddScript($@"
+                Import-Module ExchangeOnlineManagement
+                $certPwd = ConvertTo-SecureString '{Esc(certificatePass)}' -AsPlainText -Force
+                Connect-ExchangeOnline `
+                  -CertificateFilePath '{Esc(certificatePath)}' `
+                  -CertificatePassword $certPwd `
+                  -AppId '{Esc(appId)}' `
+                  -Organization '{Esc(domain)}' `
+                  -UseRPSSession $true `
+                  -ErrorAction Stop
+                ");
+                ps.Invoke(); DumpStreams(ps, log, "Connect-EXO");
+                ps.Commands.Clear();
 
-        // 2) Crear el lote Remote Move con -UserList
-        var batchName = $"Migra_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-        var psArray = "@('" + string.Join("','", mailAddresses) + "')";
+                // 2) Generar CSV dinámico
+                log.Add("▶ Paso 3: Export-Csv para MigrationBatch");
+                ps.AddScript($@"
+                $mailboxes = @({mailboxArray})
+                $csvPath   = '{Esc(csvPath)}'
+                $mailboxes |
+                  ForEach-Object {{ [PSCustomObject]@{{ EmailAddress = $_ }} }} |
+                  Export-Csv -Path $csvPath -NoTypeInformation -Force
+                Write-Output $csvPath
+                ");
+                ps.Invoke(); DumpStreams(ps, log, "Export-Csv");
+                ps.Commands.Clear();
 
-        ps.AddScript($@"
-        $users = {psArray}
-        New-MigrationBatch -Name '{batchName}' `
-                           -SourceEndpoint '{endpointName}' `
-                           -UserList $users `
-                           -TargetDeliveryDomain '{targetDomain}' `
-                           -AutoStart -AutoComplete
-    ");
-        ps.Invoke(); Check(ps, "New-MigrationBatch"); ps.Commands.Clear();
+                // 3) Crear MigrationBatch
+                log.Add("▶ Paso 4: New-MigrationBatch");
+                ps.AddScript($@"
+                New-MigrationBatch `
+                  -Name '{Esc(batchName)}' `
+                  -SourceEndpoint '{Esc(endpointName)}' `
+                  -CSVData (Get-Content '{Esc(csvPath)}' -Raw) `
+                  -TargetDeliveryDomain '{Esc(targetDomain)}' `
+                  -AutoStart -Verbose
+                ");
+                ps.Invoke(); DumpStreams(ps, log, "New-MigrationBatch");
+                ps.Commands.Clear();
 
-        // 3) Cerrar la sesión
-        ps.AddScript("Get-PSSession | Remove-PSSession");
-        ps.Invoke(); Check(ps, "Remove-PSSession");
+                // 4) Desconectar
+                log.Add("▶ Paso 5: Disconnect-ExchangeOnline");
+                ps.AddScript("Disconnect-ExchangeOnline -Confirm:$false");
+                ps.Invoke(); DumpStreams(ps, log, "Disconnect-EXO");
+            }
+            finally
+            {
+                runspace.Close();
+            }
+        });
     }
+
+    // Volcado de Verbose y Error streams
+    private void DumpStreams(PowerShell ps, IList<string> log, string step)
+    {
+        foreach (var v in ps.Streams.Verbose)
+            log.Add($"[VERBOSE:{step}] {v.Message}");
+        foreach (var e in ps.Streams.Error)
+            log.Add($"[ERROR:{step}] {e.Exception.Message}");
+        if (ps.HadErrors)
+            throw new InvalidOperationException($"PowerShell falló en {step}");
+    }
+
 
     // ---------- Helper para errores -------------------------------------
     static void Check(PowerShell ps, string etapa)

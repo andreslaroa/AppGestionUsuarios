@@ -1,4 +1,3 @@
-
 ﻿@{
     ViewBag.Title = "Modificar Usuario";
 }
@@ -16,7 +15,6 @@
         body {
             font-family: Arial, sans-serif;
             background-color: #f5f5f5;
-
             margin: 0;
             padding: 20px;
         }
@@ -32,7 +30,6 @@
 
         label {
             display: block;
-
             margin-bottom: 10px;
             font-weight: bold;
         }
@@ -90,7 +87,7 @@
 
             <button type="button" onclick="loadUserGroups()">Cargar grupos de usuario</button>
 
-            
+
 
             <!-- Lista de grupos actuales -->
             <label for="currentGroups">Grupos Actuales:</label>
@@ -111,10 +108,10 @@
             <button type="button" onclick="addUserToGroup()">Añadir Grupo</button>
 
             <h3>Modificar OU del Usuario</h3>
-             <div class="field-group">
-                    <label for="ouPrincipal">OU Principal:</label>
-                    <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamento(); fetchLugarEnvio();" required>
-                        <option value="">Seleccione una OU Principal</option>
+            <div class="field-group">
+                <label for="ouPrincipal">OU Principal:</label>
+                <select id="ouPrincipal" name="ouPrincipal" onchange="fetchOUSecundarias(); fetchDepartamento(); fetchLugarEnvio();" required>
+                    <option value="">Seleccione una OU Principal</option>
                     @if (ViewBag.OUPrincipales != null)
 
                     {
@@ -122,26 +119,26 @@
                         foreach (var ou in ViewBag.OUPrincipales as List<string>)
 
                         {
-                                                <option value="@ou">@ou</option>
+                            <option value="@ou">@ou</option>
                         }
 
                     }
-                    </select>
-                </div>
-                <div class="field-group">
-                    <label for="ouSecundaria">OU Secundaria:</label>
-                    <select id="ouSecundaria" name="ouSecundaria" onchange="fetchDepartamento(); fetchLugarEnvio();">
-                        <option value="">Seleccione una OU Secundaria (opcional)</option>
-                    </select>
-                </div>
-                <div class="field-group">
-                    <label for="departamento">Departamento:</label>
-                    <input type="text" id="departamento" name="departamento" readonly required />
-                </div>
-                <div class="field-group">
-                    <label for="lugarEnvio">Lugar de Envío:</label>
-                    <input type="text" id="lugarEnvio" name="lugarEnvio" readonly />
-                </div>
+                </select>
+            </div>
+            <div class="field-group">
+                <label for="ouSecundaria">OU Secundaria:</label>
+                <select id="ouSecundaria" name="ouSecundaria" onchange="fetchDepartamento(); fetchLugarEnvio();">
+                    <option value="">Seleccione una OU Secundaria (opcional)</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label for="departamento">Departamento:</label>
+                <input type="text" id="departamento" name="departamento" readonly required />
+            </div>
+            <div class="field-group">
+                <label for="lugarEnvio">Lugar de Envío:</label>
+                <input type="text" id="lugarEnvio" name="lugarEnvio" readonly />
+            </div>
 
             <button type="button" onclick="modifyUserOU()">Guardar Cambios</button>
 
@@ -151,276 +148,276 @@
 
 
         <script>
-            function selectUser() {
-                const dropdown = document.getElementById('userDropdown');
-                const selectedUser = dropdown.value;
+                function selectUser() {
+                    const dropdown = document.getElementById('userDropdown');
+                    const selectedUser = dropdown.value;
 
-                if (!selectedUser) {
-                    alert('Seleccione un usuario de la lista.');
+                    if (!selectedUser) {
+                        alert('Seleccione un usuario de la lista.');
+                        return;
+                    }
+
+                    document.getElementById('selectedUser').value = selectedUser;
+                }
+
+                  async function loadUserGroups() {
+                  // 1) Obtén el valor seleccionado (formato "Nombre (samAccountName)")
+                  const input = document.getElementById("selectedUser").value;
+                  if (!input) {
+                    alert("Por favor, selecciona primero un usuario.");
+                    return;
+                  }
+
+                  try {
+                    // 2) Llamada POST a GetUserGroups
+                    const resp = await fetch('/ModificarUsuario/GetUserGroups', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ username: input })
+                    });
+                    const data = await resp.json();
+
+                    // 3) Si hay error, avisar
+                    if (!data.success) {
+                      alert(data.message);
+                      return;
+                    }
+
+                    // 4) Volcar la lista de grupos en el <select>
+                    const groupSelect = document.getElementById("currentGroups");
+                    groupSelect.innerHTML = "";  // limpiar opciones previas
+                    data.groups.forEach(g => {
+                      const opt = document.createElement("option");
+                      opt.value = g;
+                      opt.textContent = g;
+                      groupSelect.appendChild(opt);
+                    });
+
+                  } catch (err) {
+                    console.error(err);
+                    alert("Error al cargar los grupos del usuario.");
+                  }
+                }
+
+                function fetchOUSecundarias() {
+                const ouPrincipal = document.getElementById('ouPrincipal').value;
+                const ouSecundaria = document.getElementById('ouSecundaria');
+                ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria (opcional)</option>';
+
+                if (ouPrincipal) {
+                    fetch('/AltaUsuario/GetOUSecundarias', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ouPrincipal })
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.length === 0) {
+                                ouSecundaria.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
+                            } else {
+                                data.forEach(ou => {
+                                    const option = document.createElement('option');
+                                    option.value = ou;
+                                    option.textContent = ou;
+                                    ouSecundaria.appendChild(option);
+                                });
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error al obtener las OUs secundarias:', error);
+                            alert('Error al obtener las OUs secundarias.');
+                        });
+                }
+            }
+
+            function fetchDepartamento() {
+                const ouPrincipal = document.getElementById('ouPrincipal').value;
+                const ouSecundaria = document.getElementById('ouSecundaria').value;
+                const departamentoField = document.getElementById('departamento');
+
+                if (!ouPrincipal) {
+                    departamentoField.value = '';
                     return;
                 }
 
-                document.getElementById('selectedUser').value = selectedUser;
-            }
-
-              async function loadUserGroups() {
-              // 1) Obtén el valor seleccionado (formato "Nombre (samAccountName)")
-              const input = document.getElementById("selectedUser").value;
-              if (!input) {
-                alert("Por favor, selecciona primero un usuario.");
-                return;
-              }
-
-              try {
-                // 2) Llamada POST a GetUserGroups
-                const resp = await fetch('/ModificarUsuario/GetUserGroups', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ username: input })
-                });
-                const data = await resp.json();
-
-                // 3) Si hay error, avisar
-                if (!data.success) {
-                  alert(data.message);
-                  return;
-                }
-
-                // 4) Volcar la lista de grupos en el <select>
-                const groupSelect = document.getElementById("currentGroups");
-                groupSelect.innerHTML = "";  // limpiar opciones previas
-                data.groups.forEach(g => {
-                  const opt = document.createElement("option");
-                  opt.value = g;
-                  opt.textContent = g;
-                  groupSelect.appendChild(opt);
-                });
-
-              } catch (err) {
-                console.error(err);
-                alert("Error al cargar los grupos del usuario.");
-              }
-            }
-
-            function fetchOUSecundarias() {
-            const ouPrincipal = document.getElementById('ouPrincipal').value;
-            const ouSecundaria = document.getElementById('ouSecundaria');
-            ouSecundaria.innerHTML = '<option value="">Seleccione una OU Secundaria (opcional)</option>';
-
-            if (ouPrincipal) {
-                fetch('/AltaUsuario/GetOUSecundarias', {
+                fetch('/AltaUsuario/GetDepartamento', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ouPrincipal })
+                    body: JSON.stringify({ ouPrincipal, ouSecundaria })
                 })
                     .then(response => response.json())
                     .then(data => {
-                        if (data.length === 0) {
-                            ouSecundaria.innerHTML = '<option value="">No hay OU secundarias disponibles</option>';
-                        } else {
-                            data.forEach(ou => {
-                                const option = document.createElement('option');
-                                option.value = ou;
-                                option.textContent = ou;
-                                ouSecundaria.appendChild(option);
-                            });
-                        }
+                        departamentoField.value = data.success ? data.departamento : '';
+                        if (!data.success) alert(data.message);
                     })
                     .catch(error => {
-                        console.error('Error al obtener las OUs secundarias:', error);
-                        alert('Error al obtener las OUs secundarias.');
+                        console.error('Error al obtener el departamento:', error);
+                        alert('Error al obtener el departamento.');
+                        departamentoField.value = '';
                     });
             }
-        }
 
-        function fetchDepartamento() {
-            const ouPrincipal = document.getElementById('ouPrincipal').value;
-            const ouSecundaria = document.getElementById('ouSecundaria').value;
-            const departamentoField = document.getElementById('departamento');
+            function fetchLugarEnvio() {
+                const ouPrincipal = document.getElementById('ouPrincipal').value;
+                const ouSecundaria = document.getElementById('ouSecundaria').value;
+                const lugarEnvioField = document.getElementById('lugarEnvio');
 
-            if (!ouPrincipal) {
-                departamentoField.value = '';
-                return;
-            }
-
-            fetch('/AltaUsuario/GetDepartamento', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ouPrincipal, ouSecundaria })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    departamentoField.value = data.success ? data.departamento : '';
-                    if (!data.success) alert(data.message);
-                })
-                .catch(error => {
-                    console.error('Error al obtener el departamento:', error);
-                    alert('Error al obtener el departamento.');
-                    departamentoField.value = '';
-                });
-        }
-
-        function fetchLugarEnvio() {
-            const ouPrincipal = document.getElementById('ouPrincipal').value;
-            const ouSecundaria = document.getElementById('ouSecundaria').value;
-            const lugarEnvioField = document.getElementById('lugarEnvio');
-
-            if (!ouPrincipal) {
-                lugarEnvioField.value = '';
-                return;
-            }
-
-            fetch('/AltaUsuario/GetLugarEnvio', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ouPrincipal, ouSecundaria })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    lugarEnvioField.value = data.success ? data.lugarEnvio : '';
-                    if (!data.success) alert(data.message);
-                })
-                .catch(error => {
-                    console.error('Error al obtener el lugar de envío:', error);
-                    alert('Error al obtener el lugar de envío.');
+                if (!ouPrincipal) {
                     lugarEnvioField.value = '';
-                });
-        }
-
-            async function modifyUserOU() {
-                const username     = document.getElementById("selectedUser").value;
-                const ouPrincipal  = document.getElementById("ouPrincipal").value;
-                const ouSecundaria = document.getElementById("ouSecundaria").value;  // opcional
-                // CORRECCIÓN: id en minúsculas
-                const departamento  = document.getElementById("departamento").value;
-                const lugarEnvio   = document.getElementById("lugarEnvio").value;
-
-                // Ya no pedimos ouSecundaria
-                if (!username || !ouPrincipal || !departamento || !lugarEnvio) {
-                    alert("Usuario, OU Principal, Departamento y Lugar de envío son obligatorios.");
                     return;
                 }
 
-                // Construimos el payload
-                const payload = { username, ouPrincipal, departamento, lugarEnvio };
-                // Solo añadimos ouSecundaria si viene rellena
-                if (ouSecundaria.trim() !== "") {
-                    payload.ouSecundaria = ouSecundaria;
-                }
-
-                try {
-                    const resp = await fetch('/ModificarUsuario/ModifyUserOU', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
+                fetch('/AltaUsuario/GetLugarEnvio', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ouPrincipal, ouSecundaria })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        lugarEnvioField.value = data.success ? data.lugarEnvio : '';
+                        if (!data.success) alert(data.message);
+                    })
+                    .catch(error => {
+                        console.error('Error al obtener el lugar de envío:', error);
+                        alert('Error al obtener el lugar de envío.');
+                        lugarEnvioField.value = '';
                     });
-                    const data = await resp.json();
-                    alert(data.message);
-                }
-                catch (err) {
-                    console.error(err);
-                    alert("Error al modificar la OU. Mira la consola para más detalles.");
-                }
             }
 
+                async function modifyUserOU() {
+                    const username     = document.getElementById("selectedUser").value;
+                    const ouPrincipal  = document.getElementById("ouPrincipal").value;
+                    const ouSecundaria = document.getElementById("ouSecundaria").value;  // opcional
+                    // CORRECCIÓN: id en minúsculas
+                    const departamento  = document.getElementById("departamento").value;
+                    const lugarEnvio   = document.getElementById("lugarEnvio").value;
 
-            // Cargar la información del usuario, incluyendo los grupos actuales
-            async function loadUserInfo() {
-                const selectedUser = document.getElementById("selectedUser").value;
-                if (!selectedUser) {
-                    alert("Seleccione y confirme un usuario antes de cargar la información.");
-                    return;
-                }
+                    // Ya no pedimos ouSecundaria
+                    if (!username || !ouPrincipal || !departamento || !lugarEnvio) {
+                        alert("Usuario, OU Principal, Departamento y Lugar de envío son obligatorios.");
+                        return;
+                    }
 
-                try {
-                    const response = await fetch('/ModificarUsuario/GetUserDetails', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: selectedUser })
-                    });
+                    // Construimos el payload
+                    const payload = { username, ouPrincipal, departamento, lugarEnvio };
+                    // Solo añadimos ouSecundaria si viene rellena
+                    if (ouSecundaria.trim() !== "") {
+                        payload.ouSecundaria = ouSecundaria;
+                    }
 
-                    const data = await response.json();
-                    if (data.success) {
-                        document.getElementById("newOUPrincipal").value = data.ouPrincipal;
-                        fetchOUSecundarias();
-                        fetchDepartamentos();
-
-                        document.getElementById("newDepartamento").value = data.departamento;
-                        fetchLugarEnvio();
-
-                        document.getElementById("newLugarEnvio").value = data.lugarEnvio;
-
-                        // Cargar los grupos actuales del usuario
-                        const groupList = document.getElementById("currentGroups");
-                        groupList.innerHTML = ""; // Limpiar antes de agregar nuevos valores
-                        data.groups.forEach(group => {
-                            const option = document.createElement("option");
-                            option.value = group;
-                            option.textContent = group;
-                            groupList.appendChild(option);
+                    try {
+                        const resp = await fetch('/ModificarUsuario/ModifyUserOU', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
                         });
-
-                    } else {
+                        const data = await resp.json();
                         alert(data.message);
                     }
-                } catch (error) {
-                    alert("Error al obtener información del usuario.");
-                }
-            }
-
-            // Añadir un usuario a un grupo seleccionado
-            async function addUserToGroup() {
-                const username = document.getElementById("selectedUser").value;
-                const group = document.getElementById("availableGroups").value;
-
-                if (!username || !group) {
-                    alert("Seleccione un usuario y un grupo.");
-                    return;
+                    catch (err) {
+                        console.error(err);
+                        alert("Error al modificar la OU. Mira la consola para más detalles.");
+                    }
                 }
 
-                try {
-                    const response = await fetch('/ModificarUsuario/ModifyUserGroup', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username, group, action: 'add' })
-                    });
 
-                    const data = await response.json();
-                    alert(data.message);
-                    loadUserGroups();  // Recargar la lista de grupos
-                } catch (error) {
-                    alert("Error al modificar el grupo.");
+                // Cargar la información del usuario, incluyendo los grupos actuales
+                async function loadUserInfo() {
+                    const selectedUser = document.getElementById("selectedUser").value;
+                    if (!selectedUser) {
+                        alert("Seleccione y confirme un usuario antes de cargar la información.");
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch('/ModificarUsuario/GetUserDetails', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: selectedUser })
+                        });
+
+                        const data = await response.json();
+                        if (data.success) {
+                            document.getElementById("newOUPrincipal").value = data.ouPrincipal;
+                            fetchOUSecundarias();
+                            fetchDepartamentos();
+
+                            document.getElementById("newDepartamento").value = data.departamento;
+                            fetchLugarEnvio();
+
+                            document.getElementById("newLugarEnvio").value = data.lugarEnvio;
+
+                            // Cargar los grupos actuales del usuario
+                            const groupList = document.getElementById("currentGroups");
+                            groupList.innerHTML = ""; // Limpiar antes de agregar nuevos valores
+                            data.groups.forEach(group => {
+                                const option = document.createElement("option");
+                                option.value = group;
+                                option.textContent = group;
+                                groupList.appendChild(option);
+                            });
+
+                        } else {
+                            alert(data.message);
+                        }
+                    } catch (error) {
+                        alert("Error al obtener información del usuario.");
+                    }
                 }
-            }
 
-            // Eliminar un grupo al que pertenece el usuario
-            async function removeUserFromGroup() {
-                const username = document.getElementById("selectedUser").value;
-                const groupList = document.getElementById("currentGroups");
-                const selectedGroup = groupList.value;
+                // Añadir un usuario a un grupo seleccionado
+                async function addUserToGroup() {
+                    const username = document.getElementById("selectedUser").value;
+                    const group = document.getElementById("availableGroups").value;
 
-                if (!username || !selectedGroup) {
-                    alert("Seleccione un usuario y un grupo para eliminar.");
-                    return;
+                    if (!username || !group) {
+                        alert("Seleccione un usuario y un grupo.");
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch('/ModificarUsuario/ModifyUserGroup', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username, group, action: 'add' })
+                        });
+
+                        const data = await response.json();
+                        alert(data.message);
+                        loadUserGroups();  // Recargar la lista de grupos
+                    } catch (error) {
+                        alert("Error al modificar el grupo.");
+                    }
                 }
 
-                if (!confirm(`¿Está seguro de que desea eliminar al usuario del grupo ${selectedGroup}?`)) {
-                    return;
-                }
+                // Eliminar un grupo al que pertenece el usuario
+                async function removeUserFromGroup() {
+                    const username = document.getElementById("selectedUser").value;
+                    const groupList = document.getElementById("currentGroups");
+                    const selectedGroup = groupList.value;
 
-                try {
-                    const response = await fetch('/ModificarUsuario/ModifyUserGroup', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: document.getElementById("selectedUser").value, group: selectedGroup, action: 'remove' })
-                    });
-                    const data = await response.json();
-                    alert(data.message);
-                    loadUserGroups();  // Refrescar la lista de grupos
-                } catch (error) {
-                    alert("Error al eliminar el grupo.");
+                    if (!username || !selectedGroup) {
+                        alert("Seleccione un usuario y un grupo para eliminar.");
+                        return;
+                    }
+
+                    if (!confirm(`¿Está seguro de que desea eliminar al usuario del grupo ${selectedGroup}?`)) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch('/ModificarUsuario/ModifyUserGroup', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: document.getElementById("selectedUser").value, group: selectedGroup, action: 'remove' })
+                        });
+                        const data = await response.json();
+                        alert(data.message);
+                        loadUserGroups();  // Refrescar la lista de grupos
+                    } catch (error) {
+                        alert("Error al eliminar el grupo.");
+                    }
                 }
-            }
 
 
         </script>

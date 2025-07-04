@@ -62,7 +62,7 @@ public class AltaMasivaController : Controller
         public string Message { get; set; }
     }
 
-    
+
     public class ProcessUsersRequest
     {
         public List<Dictionary<string, object>> UsersRaw { get; set; }
@@ -169,9 +169,9 @@ public class AltaMasivaController : Controller
             // TODO: dentro de esta lambda se ejecuta TODO bajo impersonación
             await WindowsIdentity.RunImpersonated(safeToken, async () =>
             {
-                
 
-                try 
+
+                try
                 {
                     // --- inicializar GraphServiceClient ---
                     var tenantId = _config["AzureAd:TenantId"]
@@ -359,7 +359,7 @@ public class AltaMasivaController : Controller
                         }
                     }
 
-                    
+
                     summaryMessages.Add("▶ Asignando licencias de Exchange a usuarios creados...");
                     // 3) Asignar licencias (iteramos sobre una copia)
                     var usersForLicenses = createdUsernames.ToList();
@@ -410,7 +410,7 @@ public class AltaMasivaController : Controller
                         try
                         {
 
-                            _altaUsuarioController.EnableOnPremMailbox(user, adminUsername, adminPassword);
+                            _altaUsuarioController.EnableOnPremMailbox(user, adminUsername, adminPassword, summaryMessages);
                             summaryMessages.Add($"Buzón creado para '{user}'.");
                         }
                         catch (Exception ex)
@@ -442,7 +442,7 @@ public class AltaMasivaController : Controller
                     try
                     {
                         string[] listaUsuarios = createdUsernames.ToArray();
-                        _altaUsuarioController.CreateMigrationBatch(listaUsuarios);
+                        _altaUsuarioController.CreateMigrationBatch(listaUsuarios, adminUsername, adminPassword, summaryMessages);
                         summaryMessages.Add("Batch de migración creado con éxito.");
                     }
                     catch (Exception ex)
@@ -459,8 +459,8 @@ public class AltaMasivaController : Controller
                         message = $"Éxito en altas masivas: " + summaryMessages,
                         log = summaryMessages
                     });
-                    
-                
+
+
                 }
                 catch (Exception exInner)
                 {
@@ -502,7 +502,7 @@ public class AltaMasivaController : Controller
     }
 
 
-    
+
     /// Divide la cadena cruda de grupos separada por ';' y devuelve la lista limpia.
     /// Si la cadena está vacía, devuelve lista vacía.
     /// </summary>
@@ -523,7 +523,7 @@ public class AltaMasivaController : Controller
     private async Task<string> GetOUPath(string ouName, string parentOU)
     {
         string domainPath = _config["ActiveDirectory:DomainComponents"];
-            try
+        try
         {
             using (var rootEntry = new DirectoryEntry($"LDAP://{domainPath}"))
             {

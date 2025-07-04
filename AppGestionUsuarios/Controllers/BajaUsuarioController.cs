@@ -1,17 +1,19 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Azure.Identity;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
-using System.DirectoryServices;
-using System.DirectoryServices.AccountManagement;
-using System.Runtime.InteropServices;
-using System.Text.Json;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Graph.Users.Item.SendMail;
-using Azure.Identity;
 using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
+using System.DirectoryServices;
+using System.DirectoryServices.AccountManagement;
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
-using Microsoft.AspNetCore.DataProtection;
+using System.Text.Json;
 
 
 
@@ -218,31 +220,84 @@ public class BajaUsuarioController : Controller
                 else messages.Add("No pertenecía a ningún grupo.");
 
                 // Eliminar cuota FSRM
+                // Helper para duplicar comillas simples en literales PowerShell
+                static string EscapePS(string s) => s?.Replace("'", "''") ?? "";
+
                 try
                 {
-                    string quotaPath = Path.Combine(_quotaBase, username);
-                    var qmType = Type.GetTypeFromProgID("Fsrm.FsrmQuotaManager", _fsServer);
-                    if (qmType != null)
+                    // ─── Datos de conexión y credenciales ─────────────────────────────────
+                    string domain = _config["ActiveDirectory:DomainName"];
+                    string adminUsername = HttpContext.Session.GetString("adminUser");
+                    string encryptedPass = HttpContext.Session.GetString("adminPassword");
+                    string adminPassword = _protector.Unprotect(encryptedPass);
+                    string quotaPathBase = _config["FsConfig:QuotaPathBase"];
+
+                    // ─── Parámetros de cuota a eliminar ────────────────────────────────────
+                    string fsrmServer = _config["FsConfig:ServerName"];
+                    string quotaFolder = Path.Combine(quotaPathBase.TrimEnd('\\'), username.Trim());
+
+                    messages.Add($"[FSRM] Eliminando cuota en '{quotaFolder}' sobre {fsrmServer}");
+
+                    // ─── Abrir Runspace y PowerShell ──────────────────────────────────────
+                    using var runspace = RunspaceFactory.CreateRunspace();
+                    runspace.Open();
+                    using var ps = PowerShell.Create();
+                    ps.Runspace = runspace;
+
+                    // ─── Script PowerShell para eliminación remota ───────────────────────
+                    ps.AddScript($@"
+                    # 1) Credenciales
+                    $securePwd    = ConvertTo-SecureString '{EscapePS(adminPassword)}' -AsPlainText -Force
+                    $adminAccount = '{EscapePS(domain)}\{EscapePS(adminUsername)}'
+                    $cred         = New-Object System.Management.Automation.PSCredential($adminAccount, $securePwd)
+
+                    # 2) Ruta de cuota
+                    $server    = '{EscapePS(fsrmServer)}'
+                    $QuotaPath = '{EscapePS(quotaFolder)}'
+
+                    # 3) Invocación remota
+                    Invoke-Command -ComputerName $server `
+                                   -Credential    $cred `
+                                   -Authentication Kerberos `
+                                   -ArgumentList  $QuotaPath `
+                                   -ScriptBlock {{
+                        param($Path)
+                        $VerbosePreference = 'Continue'
+
+                        Import-Module FileServerResourceManager -ErrorAction Stop
+                        Write-Verbose 'Módulo FSRM cargado.'
+
+                        # Obtenemos la cuota
+                        $existing = Get-FsrmQuota -Path $Path -ErrorAction SilentlyContinue
+                        if ($existing) {{
+                            Write-Verbose ""Eliminando cuota → $Path""
+                            Remove-FsrmQuota -Path $Path -Verbose
+                            Write-Output 'OK: QuotaDeleted'
+                        }} else {{
+                            Write-Output 'NO_QUOTA: no existía cuota para ' + $Path
+                        }}
+                    }} -Verbose
+");
+
+                    // ─── Ejecutar y capturar errores / verbose / resultado ───────────────
+                    var results = ps.Invoke();
+
+                    if (ps.HadErrors)
                     {
-                        dynamic qm = Activator.CreateInstance(qmType);
-                        try
-                        {
-                            dynamic existing = null;
-                            try { existing = qm.GetQuota(quotaPath); } catch { }
-                            if (existing != null)
-                            {
-                                existing.Delete();
-                                messages.Add("Cuota FSRM eliminada.");
-                            }
-                            else messages.Add("No había cuota que eliminar.");
-                        }
-                        finally { Marshal.ReleaseComObject(qm); }
+                        foreach (var err in ps.Streams.Error)
+                            messages.Add("[PS ERROR] " + err.Exception.Message);
+                        throw new Exception("Error remoto al eliminar cuota FSRM (revisa logs).");
                     }
-                    else messages.Add("FSRM no disponible, omito cuota.");
+
+                    foreach (var v in ps.Streams.Verbose)
+                        messages.Add("[VERBOSE] " + v.Message);
+
+                    foreach (var r in results)
+                        messages.Add("[REMOTE] " + r.ToString());
                 }
-                catch (Exception exFsrm)
+                catch (Exception ex)
                 {
-                    messages.Add($"Error al eliminar cuota FSRM: {exFsrm.Message}");
+                    messages.Add($"Error eliminando cuota FSRM: {ex.Message}");
                 }
                 // Eliminar carpeta personal
                 string userFolder = Path.Combine(_shareBase, username);
@@ -360,12 +415,12 @@ public class BajaUsuarioController : Controller
         return null;
     }
 
-    
-    
+
+
     private async Task SendMailMessage(GraphServiceClient graphClient, string username, string action)
     {
-       var fromEmail = _config.GetSection("SmtpSettings")["FromEmail"]
-                        ?? throw new InvalidOperationException("Falta SmtpSettings:FromEmail en config");
+        var fromEmail = _config.GetSection("SmtpSettings")["FromEmail"]
+                         ?? throw new InvalidOperationException("Falta SmtpSettings:FromEmail en config");
 
         // 2) Construimos el mensaje igual que antes
         var body = new SendMailPostRequestBody
